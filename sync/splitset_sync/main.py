@@ -4,7 +4,8 @@
                       [--no-streams] [--dry-run] [--trigger cron|manual|local]
     splitset-sync connect --email E [--athlete-id i123456] [--api-key K] [--oldest YYYY-MM-DD]
     splitset-sync dump --email E [--oldest] [--newest] [--out DIR]
-    splitset-sync link --user ID|EMAIL          (arrives with the training plan, M8)
+    splitset-sync link [--user ID|EMAIL] [--since YYYY-MM-DD | --days N]
+    splitset-sync backfill-garmin --email E PATH [--dry-run]
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any
 from . import db
 from .config import Settings, env
 from .intervals_client import IntervalsAuthError, IntervalsClient, IntervalsError, normalise_athlete_id
+from .garmin_export import backfill, find_root, parse_export
 from .linking import link_plan_sessions, link_workouts
 from .normalise import normalise_activity
 from .streams import derive_details
@@ -262,6 +264,30 @@ def cmd_link(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- garmin export
+
+def cmd_backfill_garmin(args: argparse.Namespace) -> int:
+    settings = Settings.load()
+    root = find_root(args.path)
+    days = parse_export(root)
+    if not days:
+        log.warning("nothing usable found under %s", root)
+        return 1
+    first, last = next(iter(days)), next(reversed(days))
+    per_col = {c: sum(1 for v in days.values() if v.get(c) is not None) for c in ("resting_hr", "hrv", "respiration", "vo2max")}
+    log.info("parsed %d days (%s to %s): %s", len(days), first, last, ", ".join(f"{k} {n}" for k, n in per_col.items()))
+    if args.dry_run:
+        return 0
+    with db.connect(settings.db_url) as conn:
+        uid = db.user_id_for_email(conn, args.email)
+        if uid is None:
+            raise SystemExit(f"No auth user with email {args.email}")
+        written, new = backfill(conn, uid, days)
+        conn.commit()
+    log.info("wellness: %d days written, %d were new; existing intervals.icu values kept", written, new)
+    return 0
+
+
 # ---------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
@@ -298,6 +324,12 @@ def build_parser() -> argparse.ArgumentParser:
     link.add_argument("--since", help="YYYY-MM-DD; default is --days ago")
     link.add_argument("--days", type=int, default=30)
     link.set_defaults(func=cmd_link)
+
+    gar = sub.add_parser("backfill-garmin", help="fill wellness history from a Garmin account export")
+    gar.add_argument("--email", required=True)
+    gar.add_argument("path", help="the unzipped export's DI_CONNECT folder (or its parent)")
+    gar.add_argument("--dry-run", action="store_true", help="parse and report, write nothing")
+    gar.set_defaults(func=cmd_backfill_garmin)
     return p
 
 

@@ -11,6 +11,8 @@ uv run splitset-sync run --dry-run        # show what would be fetched, write no
 uv run splitset-sync run                  # incremental sync for every active connection
 uv run splitset-sync run --user conor@example.com --full --max-streams 50
 uv run splitset-sync connect --email conor@example.com --athlete-id i123456 --api-key ...
+uv run splitset-sync link --user conor@example.com --days 30
+uv run splitset-sync backfill-garmin --email conor@example.com "C:/path/to/DI_CONNECT" --dry-run
 ```
 
 Needs `SUPABASE_DB_URL` (the Supabase session-pooler connection string) in the environment
@@ -25,7 +27,8 @@ or in a `.env` at the repo root. See `.env.example`.
 3. Wellness for the same window, merged column by column so a Garmin export backfill survives.
 4. Streams for activities that have no detail row yet, newest first, capped by `--max-streams`.
    Activities without streams get a `has_streams=false` row so they are never refetched.
-5. A `sync_runs` row with the counts. One user's failure never stops the others.
+5. Plan sessions and app workouts are linked to the activities that fulfilled them (see `linking.py`).
+6. A `sync_runs` row with the counts. One user's failure never stops the others.
 
 Auth failures (401/403) count up on the connection; after three in a row it is marked
 `auth_failed` and skipped until the user reconnects in the app.

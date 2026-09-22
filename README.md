@@ -41,7 +41,7 @@ Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaitin
 - [~] **M7** Lifting logger: routines, active workout with rest timer, history, PRs (code complete; on-device check pending)
 - [~] **M8** Training plan calendar linked to real activities (schema, auto-link and UI complete; auto-link verified on real data)
 - [~] **M9** Runs, wellness and trends in the app (charts, route trace, exercise progress; runtime check pending)
-- [ ] **M10** Garmin export backfill for wellness history before intervals.icu
+- [~] **M10** Garmin export backfill for wellness history before intervals.icu (parser and command ready; needs an export to run on)
 
 ## Setup
 
@@ -74,6 +74,8 @@ cd sync
 uv sync
 uv run pytest
 uv run splitset-sync run --dry-run
+uv run splitset-sync link --days 30                 # re-run plan/workout linking only
+uv run splitset-sync backfill-garmin --email you@example.com "C:/path/to/DI_CONNECT" --dry-run
 ```
 
 ### App
