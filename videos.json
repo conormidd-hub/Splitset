@@ -1,0 +1,18 @@
+{
+  "about": "Runna's warm-up and cool-down routines on YouTube, embedded on a session. 'for' is which runs a warm-up suits: hard covers tempo, intervals, marathon pace and races; easy covers everything else. The page cycles through the matching ones day by day. IDs checked against YouTube's oembed API on 16 Sep 2026.",
+  "credit": "Warm-up and cool-down routines from Runna's YouTube channel.",
+  "channel": "https://www.youtube.com/@Runna",
+  "videos": [
+    {"id": "Sh7wNePzoAs", "title": "Coach Ben's steady run warm-up", "kind": "warmup", "for": "easy"},
+    {"id": "MLGtsTFP2Es", "title": "Coach Gen's steady run warm-up", "kind": "warmup", "for": "easy"},
+    {"id": "8NjJS-cJXzA", "title": "Coach Steph's steady run warm-up", "kind": "warmup", "for": "easy"},
+    {"id": "xZ-3ltuIXm0", "title": "Coach Steph's easy run warm-up", "kind": "warmup", "for": "easy"},
+    {"id": "IWb9SL9Rx_E", "title": "Runna's 5 minute warm-up", "kind": "warmup", "for": "easy"},
+    {"id": "ks-gCdO0G94", "title": "Coach Ben's hard run warm-up", "kind": "warmup", "for": "hard"},
+    {"id": "ke2JTDJa3G8", "title": "Coach Gen's hard run warm-up", "kind": "warmup", "for": "hard"},
+    {"id": "V79JfAeXa6w", "title": "Coach Steph's hard run warm-up", "kind": "warmup", "for": "hard"},
+    {"id": "T2MDtNq62sI", "title": "Coach Ben's cool-down", "kind": "cooldown", "for": "all"},
+    {"id": "Qbhc1YyIzrQ", "title": "Coach Steph's cool-down", "kind": "cooldown", "for": "all"},
+    {"id": "BCIVeuEK0Rw", "title": "Runna's 5 minute cool-down", "kind": "cooldown", "for": "all"}
+  ]
+}

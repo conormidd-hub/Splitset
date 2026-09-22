@@ -1,0 +1,5 @@
+{
+ "about": "Web push settings. The public key is meant to be public: the page hands it to the browser when subscribing. Its private half lives in the VAPID_PRIVATE_KEY secret on GitHub, and only send_push.py uses it. Generate your own pair with tools/vapid-keygen.html - do not reuse anyone else's.",
+ "publicKey": "",
+ "subject": "mailto:you@example.com"
+}

@@ -1,0 +1,308 @@
+{
+ "about": "Your training plan. Edit it in the app - what you change is saved to Cloudflare KV and shared across your devices. This file is only the starting point, and the version below is how the app knows when to offer you an updated copy.",
+ "seedId": "starter.v1",
+ "versions": [
+  "starter.v1"
+ ],
+ "title": "Example block",
+ "settings": {
+  "commuteKm": 10,
+  "qualityWindow": [
+   1.2,
+   8.5
+  ],
+  "wfhDays": [
+   3
+  ]
+ },
+ "races": [
+  {
+   "date": "2026-10-18",
+   "name": "Half marathon",
+   "km": 21.1
+  }
+ ],
+ "phases": [
+  {
+   "start": "2026-09-21",
+   "end": "2026-10-11",
+   "name": "Build"
+  },
+  {
+   "start": "2026-10-12",
+   "end": "2026-10-18",
+   "name": "Race week"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "example",
+   "start": "2026-09-21",
+   "end": "2026-10-18",
+   "kind": "race",
+   "name": "Half marathon",
+   "race": "2026-10-18",
+   "m": 21097.5,
+   "note": "An example block so the app has something to draw. Replace it with yours."
+  }
+ ],
+ "paces": {
+  "marathon": "4:35",
+  "half": "4:20",
+  "threshold": "4:12",
+  "interval": "3:57",
+  "easy": "HR 135-150, conversational",
+  "basis": "example values - set these to your own"
+ },
+ "sessions": [
+  {
+   "id": "s001",
+   "date": "2026-09-22",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 8,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s002",
+   "date": "2026-09-23",
+   "type": "strength",
+   "title": "Gym",
+   "minutes": 45,
+   "workout": "day1"
+  },
+  {
+   "id": "s003",
+   "date": "2026-09-24",
+   "type": "tempo",
+   "title": "Tempo",
+   "steps": [
+    {
+     "km": 2,
+     "kind": "easy"
+    },
+    {
+     "km": 4,
+     "kind": "tempo",
+     "pace": "4:10-4:15"
+    },
+    {
+     "km": 2,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s004",
+   "date": "2026-09-26",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 8,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s005",
+   "date": "2026-09-27",
+   "type": "long",
+   "title": "Long run",
+   "km": 16,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s006",
+   "date": "2026-09-29",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 8,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s007",
+   "date": "2026-09-30",
+   "type": "strength",
+   "title": "Gym",
+   "minutes": 45,
+   "workout": "day2"
+  },
+  {
+   "id": "s008",
+   "date": "2026-10-01",
+   "type": "intervals",
+   "title": "1 km repeats",
+   "steps": [
+    {
+     "km": 2,
+     "kind": "easy"
+    },
+    {
+     "rep": 5,
+     "km": 1,
+     "kind": "interval",
+     "pace": "3:55-4:00",
+     "recKm": 0.4,
+     "recNote": "jog"
+    },
+    {
+     "km": 2,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s009",
+   "date": "2026-10-03",
+   "type": "easy",
+   "title": "Easy run + strides",
+   "steps": [
+    {
+     "km": 2,
+     "kind": "easy"
+    },
+    {
+     "rep": 4,
+     "km": 0.1,
+     "kind": "strides",
+     "pace": "fast & relaxed",
+     "recKm": 0.2
+    },
+    {
+     "km": 5,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s010",
+   "date": "2026-10-04",
+   "type": "long",
+   "title": "Long run with race pace",
+   "steps": [
+    {
+     "km": 6,
+     "kind": "easy"
+    },
+    {
+     "rep": 2,
+     "km": 3,
+     "kind": "hmp",
+     "pace": "4:20-4:25",
+     "recKm": 1
+    },
+    {
+     "km": 6,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s011",
+   "date": "2026-10-06",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 8,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s012",
+   "date": "2026-10-07",
+   "type": "strength",
+   "title": "Gym",
+   "minutes": 45,
+   "workout": "day1"
+  },
+  {
+   "id": "s013",
+   "date": "2026-10-08",
+   "type": "tempo",
+   "title": "Tempo",
+   "steps": [
+    {
+     "km": 2,
+     "kind": "easy"
+    },
+    {
+     "km": 5,
+     "kind": "tempo",
+     "pace": "4:10-4:15"
+    },
+    {
+     "km": 2,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s014",
+   "date": "2026-10-10",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 8,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s015",
+   "date": "2026-10-11",
+   "type": "long",
+   "title": "Long run - race rehearsal",
+   "km": 18,
+   "rehearsal": true,
+   "notes": "Race shoes, race breakfast, race fuelling. A rehearsal, not a test."
+  },
+  {
+   "id": "s016",
+   "date": "2026-10-13",
+   "type": "easy",
+   "title": "Easy run",
+   "km": 6,
+   "notes": "HR 135-150, conversational"
+  },
+  {
+   "id": "s017",
+   "date": "2026-10-14",
+   "type": "strength",
+   "title": "Mobility only",
+   "minutes": 20,
+   "workout": "taper",
+   "notes": "Race week - no loading."
+  },
+  {
+   "id": "s018",
+   "date": "2026-10-15",
+   "type": "easy",
+   "title": "Easy run + strides",
+   "steps": [
+    {
+     "km": 2,
+     "kind": "easy"
+    },
+    {
+     "rep": 4,
+     "km": 0.1,
+     "kind": "strides",
+     "pace": "relaxed",
+     "recKm": 0.2
+    },
+    {
+     "km": 3,
+     "kind": "easy"
+    }
+   ]
+  },
+  {
+   "id": "s019",
+   "date": "2026-10-17",
+   "type": "easy",
+   "title": "Shake-out",
+   "km": 3,
+   "notes": "Feet up afterwards. No alcohol."
+  },
+  {
+   "id": "s020",
+   "date": "2026-10-18",
+   "type": "race",
+   "title": "Half marathon",
+   "km": 21.1,
+   "notes": "Start controlled, assess at 5 km and 10 km, and only unload after that."
+  }
+ ]
+}

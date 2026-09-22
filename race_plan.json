@@ -1,0 +1,71 @@
+{
+ "about": "Race-day plan: the course, the drink stations and what you carry. Gels are placed on the clock you have rehearsed, then nudged to land just before a station. The pacing comes from the race session in your plan, so editing that changes the splits. Set `date` to match that session's date or the card will not appear. Delete this file if you do not want a race-day card.",
+ "date": "2026-10-18",
+ "name": "Half marathon",
+ "startTime": "07:00",
+ "start": "Where the start line is",
+ "finish": "Where the finish is",
+ "source": "Check these against the event guide when it is published",
+ "courseNotes": [
+  "Anything worth knowing: a climb, an exposed stretch, a tight first kilometre."
+ ],
+ "stations": [
+  {
+   "km": 5,
+   "note": "water"
+  },
+  {
+   "km": 10,
+   "note": "water"
+  },
+  {
+   "km": 15,
+   "note": "water"
+  },
+  {
+   "km": 19,
+   "note": "water"
+  }
+ ],
+ "fuel": {
+  "gel": "Your gel here",
+  "carbsEach": 40,
+  "everyMin": 30,
+  "firstMin": 35,
+  "caffeine": {
+   "name": "Your caffeine gel",
+   "mgEach": 100,
+   "at": [
+    2
+   ],
+   "note": "Which gels are the caffeinated ones, counting from the first."
+  },
+  "note": "Practise this exact rate on every long run over about two hours."
+ },
+ "timeline": [
+  {
+   "at": "-3:00",
+   "what": "Breakfast you have rehearsed."
+  },
+  {
+   "at": "-0:45",
+   "what": "Arrive, bag drop, toilets."
+  },
+  {
+   "at": "-0:20",
+   "what": "Easy jog and strides."
+  },
+  {
+   "at": "-0:05",
+   "what": "Into the pen."
+  }
+ ],
+ "kit": [
+  "Race shoes",
+  "Bib and pins",
+  "Gels",
+  "Watch charged",
+  "Anti-chafe",
+  "Warm layer for the start"
+ ]
+}

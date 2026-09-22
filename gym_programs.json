@@ -1,0 +1,453 @@
+{
+ "exercises": {
+  "spin": {
+   "name": "Easy spin or brisk walk",
+   "group": "Warm-up",
+   "how": "Stationary bike, rower or brisk walk. Just enough to get warm – you should be able to talk.",
+   "art": {
+    "slug": "cycling"
+   }
+  },
+  "glute-bridge": {
+   "name": "Glute bridge",
+   "group": "Warm-up",
+   "how": "Feet flat, drive through the heels, squeeze the glutes at the top for a second.",
+   "art": {
+    "slug": "glute-bridge"
+   }
+  },
+  "lateral-walk": {
+   "name": "Banded lateral walk",
+   "group": "Warm-up",
+   "how": "Band around the knees or ankles, soft knees, small steps sideways. Keep tension on the band.",
+   "art": {
+    "slug": "banded-lateral-walk"
+   }
+  },
+  "leg-swings": {
+   "name": "Leg swings",
+   "group": "Warm-up",
+   "how": "Hold something for balance. Front-to-back then side-to-side, relaxed and growing in range.",
+   "art": {
+    "slug": "leg-swings-stretch"
+   }
+  },
+  "calf-raise-flat": {
+   "name": "Double-leg calf raise (flat floor)",
+   "group": "Warm-up",
+   "how": "On flat ground, not a step. Slow up and down, mid-range, to warm the tendon without dropping the heel.",
+   "art": {
+    "slug": "standing-calf-raise"
+   }
+  },
+  "sl-bent-knee-raise": {
+   "name": "Bent-knee calf raise",
+   "group": "Physio",
+   "how": "Single leg. In a squat position with the knee bent, raise up and lower slowly.",
+   "art": {
+    "slug": "seated-calf-raise",
+    "similar": "Seated version – yours is single leg in a squat position, same bent knee."
+   }
+  },
+  "bstance-rdl": {
+   "name": "B-stance RDL",
+   "group": "Physio",
+   "how": "Staggered stance, weight mostly through the working leg, hinge at the hips with a flat back. Physio's note: front foot – on toes.",
+   "art": {
+    "slug": "single-leg-romanian-deadlift",
+    "similar": "Shows a true single-leg RDL – in a B-stance the other foot stays down as a kickstand."
+   }
+  },
+  "pogo-double": {
+   "name": "Double-leg pogos",
+   "group": "Physio",
+   "how": "Stiff ankles, quick contacts, small bounces. Stop if the Achilles complains.",
+   "art": {
+    "slug": "jump-rope",
+    "similar": "Same quick, springy bounce – no rope."
+   }
+  },
+  "pogo-single": {
+   "name": "Single-leg pogos",
+   "group": "Physio",
+   "how": "One leg at a time, quick springy contacts. Quality over height.",
+   "art": {
+    "slug": "jump-rope",
+    "similar": "Same quick, springy bounce on one leg – no rope."
+   }
+  },
+  "hip-flexor": {
+   "name": "Hip flexor stretch",
+   "group": "Cool-down",
+   "how": "Half-kneeling, tuck the pelvis and shift forward until you feel the front of the hip.",
+   "art": {
+    "slug": "kneeling-hip-flexor-stretch"
+   }
+  },
+  "figure-4": {
+   "name": "Figure-4 glute stretch",
+   "group": "Cool-down",
+   "how": "On your back, ankle over the opposite knee, pull the thigh gently towards you."
+  },
+  "hamstring": {
+   "name": "Hamstring stretch",
+   "group": "Cool-down",
+   "how": "Leg up on a low bench, hinge forward from the hips with a long back.",
+   "art": {
+    "slug": "hamstring-stretch"
+   }
+  },
+  "foam-roll": {
+   "name": "Foam roll quads and glutes",
+   "group": "Cool-down",
+   "how": "Slow passes on the quads and glutes. Don't roll directly on the Achilles."
+  }
+ },
+ "workouts": {
+  "day1": {
+   "name": "Day 1",
+   "blurb": "Calf strength, hinge, plyos",
+   "note": "A general runner's strength template, not a prescription. If you are carrying an injury, get a programme from a physio and put that here instead. Build the weight up slowly and stop anything that hurts.",
+   "blocks": [
+    {
+     "title": "Warm-up",
+     "items": [
+      {
+       "id": "w-spin",
+       "ex": "spin",
+       "secs": 300
+      },
+      {
+       "superset": true,
+       "id": "ss-warm",
+       "name": "Warm-up circuit",
+       "rest": 30,
+       "gap": 10,
+       "items": [
+        {
+         "id": "w-bridge",
+         "ex": "glute-bridge",
+         "sets": 2,
+         "reps": 12
+        },
+        {
+         "id": "w-lateral",
+         "ex": "lateral-walk",
+         "sets": 2,
+         "reps": "10 each way"
+        },
+        {
+         "id": "w-swings",
+         "ex": "leg-swings",
+         "sets": 2,
+         "reps": "10 each way",
+         "sides": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "items": [
+      {
+       "id": "d1-calf",
+       "ex": "calf-raise-flat",
+       "sets": 3,
+       "reps": 12,
+       "rest": 60
+      },
+      {
+       "id": "d1-bent",
+       "ex": "sl-bent-knee-raise",
+       "sets": 3,
+       "reps": 10,
+       "sides": true,
+       "rest": 60
+      },
+      {
+       "id": "d1-rdl",
+       "ex": "bstance-rdl",
+       "sets": 3,
+       "reps": 8,
+       "sides": true,
+       "rest": 90
+      }
+     ]
+    },
+    {
+     "title": "Plyometrics",
+     "items": [
+      {
+       "id": "d1-pogo",
+       "ex": "pogo-double",
+       "sets": 3,
+       "reps": 20,
+       "rest": 60
+      }
+     ]
+    },
+    {
+     "title": "Cool-down",
+     "items": [
+      {
+       "superset": true,
+       "id": "ss-stretch-d1",
+       "name": "Stretches",
+       "rest": 0,
+       "gap": 10,
+       "items": [
+        {
+         "id": "c-hip-d1",
+         "ex": "hip-flexor",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-ham-d1",
+         "ex": "hamstring",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-fig4-d1",
+         "ex": "figure-4",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        }
+       ]
+      },
+      {
+       "id": "c-roll-d1",
+       "ex": "foam-roll",
+       "secs": 180
+      }
+     ]
+    }
+   ]
+  },
+  "day2": {
+   "name": "Day 2",
+   "blurb": "Single-leg strength and stability",
+   "note": "A general runner's strength template, not a prescription. If you are carrying an injury, get a programme from a physio and put that here instead. Build the weight up slowly and stop anything that hurts.",
+   "blocks": [
+    {
+     "title": "Warm-up",
+     "items": [
+      {
+       "id": "w-spin",
+       "ex": "spin",
+       "secs": 300
+      },
+      {
+       "superset": true,
+       "id": "ss-warm",
+       "name": "Warm-up circuit",
+       "rest": 30,
+       "gap": 10,
+       "items": [
+        {
+         "id": "w-bridge",
+         "ex": "glute-bridge",
+         "sets": 2,
+         "reps": 12
+        },
+        {
+         "id": "w-lateral",
+         "ex": "lateral-walk",
+         "sets": 2,
+         "reps": "10 each way"
+        },
+        {
+         "id": "w-swings",
+         "ex": "leg-swings",
+         "sets": 2,
+         "reps": "10 each way",
+         "sides": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Main",
+     "items": [
+      {
+       "id": "d2-bent",
+       "ex": "sl-bent-knee-raise",
+       "sets": 3,
+       "reps": 12,
+       "sides": true,
+       "rest": 60
+      },
+      {
+       "id": "d2-rdl",
+       "ex": "bstance-rdl",
+       "sets": 3,
+       "reps": 10,
+       "sides": true,
+       "rest": 90
+      },
+      {
+       "id": "d2-calf",
+       "ex": "calf-raise-flat",
+       "sets": 3,
+       "reps": 15,
+       "rest": 60
+      }
+     ]
+    },
+    {
+     "title": "Plyometrics",
+     "items": [
+      {
+       "id": "d2-pogo",
+       "ex": "pogo-single",
+       "sets": 3,
+       "reps": 12,
+       "sides": true,
+       "rest": 60
+      }
+     ]
+    },
+    {
+     "title": "Cool-down",
+     "items": [
+      {
+       "superset": true,
+       "id": "ss-stretch-d2",
+       "name": "Stretches",
+       "rest": 0,
+       "gap": 10,
+       "items": [
+        {
+         "id": "c-hip-d2",
+         "ex": "hip-flexor",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-ham-d2",
+         "ex": "hamstring",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-fig4-d2",
+         "ex": "figure-4",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        }
+       ]
+      },
+      {
+       "id": "c-roll-d2",
+       "ex": "foam-roll",
+       "secs": 180
+      }
+     ]
+    }
+   ]
+  },
+  "taper": {
+   "name": "Race week",
+   "blurb": "Mobility only",
+   "note": "No loading in race week.",
+   "blocks": [
+    {
+     "title": "Warm-up",
+     "items": [
+      {
+       "id": "w-spin",
+       "ex": "spin",
+       "secs": 300
+      },
+      {
+       "superset": true,
+       "id": "ss-warm",
+       "name": "Warm-up circuit",
+       "rest": 30,
+       "gap": 10,
+       "items": [
+        {
+         "id": "w-bridge",
+         "ex": "glute-bridge",
+         "sets": 2,
+         "reps": 12
+        },
+        {
+         "id": "w-lateral",
+         "ex": "lateral-walk",
+         "sets": 2,
+         "reps": "10 each way"
+        },
+        {
+         "id": "w-swings",
+         "ex": "leg-swings",
+         "sets": 2,
+         "reps": "10 each way",
+         "sides": true
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "Cool-down",
+     "items": [
+      {
+       "superset": true,
+       "id": "ss-stretch-tp",
+       "name": "Stretches",
+       "rest": 0,
+       "gap": 10,
+       "items": [
+        {
+         "id": "c-hip-tp",
+         "ex": "hip-flexor",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-ham-tp",
+         "ex": "hamstring",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        },
+        {
+         "id": "c-fig4-tp",
+         "ex": "figure-4",
+         "sets": 1,
+         "hold": 30,
+         "sides": true,
+         "switchSecs": 5
+        }
+       ]
+      },
+      {
+       "id": "c-roll-tp",
+       "ex": "foam-roll",
+       "secs": 180
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

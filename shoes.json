@@ -1,0 +1,34 @@
+{
+ "about": "Your shoe rotation. status: active | backup | retiring | retired | avoid. fit scores each shoe 0-3 for each kind of run and drives the suggestions. maxKm is when it should be retired. offsetKm adds distance run before you started tracking. Add and edit pairs in the app; this file is the starting point.",
+ "kinds": {
+  "race": "Race",
+  "mp": "Race rehearsal",
+  "workout": "Tempo or intervals",
+  "long": "Long run",
+  "trail": "Trail run",
+  "easy": "Easy run",
+  "recovery": "Recovery or shake-out"
+ },
+ "shoes": [
+  {
+   "id": "daily",
+   "name": "Daily trainer",
+   "model": "Replace with your own",
+   "role": "Daily trainer",
+   "status": "active",
+   "maxKm": 650,
+   "since": "2026-09-20",
+   "offsetKm": 0,
+   "fit": {
+    "race": 0,
+    "mp": 1,
+    "workout": 2,
+    "long": 3,
+    "easy": 3,
+    "recovery": 2,
+    "trail": 1
+   },
+   "note": "An example so the Shoes page has something in it. Edit or delete it, then add yours."
+  }
+ ]
+}
