@@ -1,0 +1,11 @@
+# Store everything with LF; check out with LF too, so scripts, workflows and lockfiles
+# behave the same on Windows, macOS, CI runners and phones.
+* text=auto eol=lf
+
+# binaries
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
