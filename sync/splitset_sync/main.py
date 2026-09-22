@@ -23,6 +23,7 @@ from typing import Any
 from . import db
 from .config import Settings, env
 from .intervals_client import IntervalsAuthError, IntervalsClient, IntervalsError, normalise_athlete_id
+from .linking import link_plan_sessions, link_workouts
 from .normalise import normalise_activity
 from .streams import derive_details
 from .wellness import normalise_wellness
@@ -140,13 +141,19 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
                     conn.commit()
                 counts["streams_pending"] = max(0, pending_total - counts["streams_fetched"])
 
+        # ---- plan and workout links
+        if not dry:
+            since = date.fromisoformat(oldest)
+            counts["plan_links"] = link_plan_sessions(conn, uid, since) + link_workouts(conn, uid, since)
+            conn.commit()
+
         if not dry:
             db.record_success(conn, uid)
             db.finish_sync_run(conn, run_id, "ok", counts)
             conn.commit()
-        ulog.info("done: activities %d/%d, wellness %d days, streams %d fetched/%d pending",
+        ulog.info("done: activities %d/%d, wellness %d days, streams %d fetched/%d pending, links %d",
                   counts["activities_upserted"], counts["activities_fetched"], counts["wellness_days"],
-                  counts["streams_fetched"], counts["streams_pending"])
+                  counts["streams_fetched"], counts["streams_pending"], counts["plan_links"])
         return True
 
     except IntervalsAuthError as e:
@@ -238,7 +245,20 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
 
 def cmd_link(args: argparse.Namespace) -> int:
-    log.info("plan linking arrives with the training plan milestone (M8); nothing to do yet")
+    """Run only the plan/workout linking, for every active connection or one user."""
+    settings = Settings.load()
+    since = date.fromisoformat(args.since) if args.since else date.today() - timedelta(days=args.days)
+    with db.connect(settings.db_url) as conn:
+        users = db.active_connections(conn, args.user)
+        if not users:
+            log.warning("no active connections%s", f" matching {args.user!r}" if args.user else "")
+            return 0
+        for c in users:
+            uid = c["user_id"]
+            plan = link_plan_sessions(conn, uid, since)
+            work = link_workouts(conn, uid, since)
+            conn.commit()
+            log.info("[%s] linked %d plan session(s) and %d workout(s) since %s", c.get("email") or uid, plan, work, since)
     return 0
 
 
@@ -273,8 +293,10 @@ def build_parser() -> argparse.ArgumentParser:
     dump.add_argument("--out", default="dump")
     dump.set_defaults(func=cmd_dump)
 
-    link = sub.add_parser("link", help="link plan sessions to activities (M8)")
-    link.add_argument("--user")
+    link = sub.add_parser("link", help="link plan sessions and app workouts to activities")
+    link.add_argument("--user", help="only this user id or email")
+    link.add_argument("--since", help="YYYY-MM-DD; default is --days ago")
+    link.add_argument("--days", type=int, default=30)
     link.set_defaults(func=cmd_link)
     return p
 

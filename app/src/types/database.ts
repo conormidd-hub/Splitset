@@ -296,6 +296,104 @@ export type Database = {
           },
         ]
       }
+      plan_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          position: number
+          type: string
+          subtype: string | null
+          title: string
+          target_distance_m: number | null
+          target_seconds: number | null
+          routine_id: string | null
+          notes: string | null
+          status: string
+          activity_id: string | null
+          workout_id: string | null
+          linked_by: string | null
+          steps: Json | null
+          external_event_id: string | null
+          external_hash: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          position?: number
+          type: string
+          subtype?: string | null
+          title: string
+          target_distance_m?: number | null
+          target_seconds?: number | null
+          routine_id?: string | null
+          notes?: string | null
+          status?: string
+          activity_id?: string | null
+          workout_id?: string | null
+          linked_by?: string | null
+          steps?: Json | null
+          external_event_id?: string | null
+          external_hash?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          position?: number
+          type?: string
+          subtype?: string | null
+          title?: string
+          target_distance_m?: number | null
+          target_seconds?: number | null
+          routine_id?: string | null
+          notes?: string | null
+          status?: string
+          activity_id?: string | null
+          workout_id?: string | null
+          linked_by?: string | null
+          steps?: Json | null
+          external_event_id?: string | null
+          external_hash?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_sessions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_sessions_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "routines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_sessions_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           id: string
