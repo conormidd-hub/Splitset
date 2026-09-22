@@ -3,11 +3,13 @@ import { View } from 'react-native';
 
 import { isRun, typeLabel, useActivity } from '@/api/activities';
 import { useUnits } from '@/api/profile';
+import { LineChart } from '@/components/charts/LineChart';
+import { RouteSvg } from '@/components/map/RouteSvg';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
-import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
+import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { longDate, shortTime } from '@/lib/dates';
 import { formatDistance, formatDuration, formatElevation, formatHr, formatNumber, formatPace, secPerKm } from '@/lib/units';
@@ -36,6 +38,19 @@ export default function ActivityDetail() {
   const details = a.activity_details;
   const splits = (details?.splits as Split[] | null) ?? [];
   const efforts = (details?.best_efforts as Record<string, number> | null) ?? null;
+  const raw = details?.samples as { t: number[]; d: number[]; hr: (number | null)[] | null; alt: (number | null)[] | null } | null;
+  const samples = raw && raw.t.length > 2 ? (() => {
+    const hr = raw.t.map((t, i) => ({ x: t * 1000, y: raw.hr ? raw.hr[i] : null }));
+    const pace = raw.t.map((t, i) => {
+      if (i === 0) return { x: 0, y: null };
+      const dd = raw.d[i] - raw.d[i - 1];
+      const dt = t - raw.t[i - 1];
+      const secPerKmHere = dd > 0 ? dt / (dd / 1000) : null;
+      const shown = secPerKmHere == null || secPerKmHere > 900 ? null : (units === 'imperial' ? secPerKmHere * 1.609344 : secPerKmHere) / 60;
+      return { x: t * 1000, y: shown };
+    });
+    return { hr, pace };
+  })() : null;
   const zoneTimes = a.hr_zone_times ?? [];
   const zoneTotal = zoneTimes.reduce((s, v) => s + v, 0);
   const zoneColours = [palette.mut, palette.blue, palette.aqua, palette.amber, palette.orange, palette.neg, palette.neg];
@@ -126,8 +141,24 @@ export default function ActivityDetail() {
           </Card>
         ) : null}
 
+        {samples ? (
+          <Card title="Heart rate and pace" subtitle="Every 10 seconds">
+            <LineChart
+              height={180}
+              series={[
+                { name: 'bpm', color: palette.neg, points: samples.hr },
+                { name: units === 'imperial' ? 'min/mi' : 'min/km', color: palette.accent, points: samples.pace, dashed: true },
+              ]}
+              xFormat={(ms) => `${Math.round(ms / 60000)}m`}
+              yFormat={(v) => `${Math.round(v)}`}
+            />
+          </Card>
+        ) : null}
+
         {details?.polyline ? (
-          <EmptyState title="Route map" body="The map view arrives with milestone 9. The route is already stored for this run." />
+          <Card title="Route">
+            <RouteSvg encoded={details.polyline} />
+          </Card>
         ) : null}
       </Screen>
     </>

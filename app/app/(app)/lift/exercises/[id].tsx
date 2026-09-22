@@ -1,8 +1,9 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
-import { useExerciseHistory, useExercises, useRecords } from '@/api/lifting';
+import { epley, useExerciseHistory, useExercises, useRecords } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
+import { LineChart } from '@/components/charts/LineChart';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
@@ -11,10 +12,12 @@ import { EmptyState, Loading } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { relativeDay } from '@/lib/dates';
 import { formatWeight, kgToDisplay } from '@/lib/units';
+import { useTheme } from '@/theme/ThemeProvider';
 
 export default function ExerciseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const units = useUnits();
+  const { palette } = useTheme();
   const exercises = useExercises();
   const records = useRecords();
   const history = useExerciseHistory(id, 30);
@@ -42,6 +45,22 @@ export default function ExerciseDetail() {
             <StatTile label="Sets logged" value={`${record?.completed_sets ?? 0}`} />
           </Grid>
         </Card>
+
+        {history.data && history.data.length > 1 ? (
+          <Card title="Progress" subtitle={`Best set and estimated 1RM per session, ${unit}`}>
+            <LineChart
+              height={180}
+              series={[
+                { name: 'best set', color: palette.accent, points: [...history.data].reverse().map((h) => ({ x: Date.parse(h.startedAt), y: h.bestWeight == null ? null : kgToDisplay(h.bestWeight, units) })) },
+                { name: 'est. 1RM', color: palette.ink2, dashed: true, points: [...history.data].reverse().map((h) => {
+                  const best = Math.max(...h.sets.map((s) => epley(s.weight_kg, s.reps) ?? 0));
+                  return { x: Date.parse(h.startedAt), y: best > 0 ? kgToDisplay(Math.round(best * 10) / 10, units) : null };
+                }) },
+              ]}
+              yFormat={(v) => `${Math.round(v)}`}
+            />
+          </Card>
+        ) : null}
 
         <Card title="History" subtitle="Newest first">
           {history.isLoading ? <Loading /> : null}

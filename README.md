@@ -40,7 +40,7 @@ Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaitin
 - [~] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today (code complete; runtime check needs the app keys)
 - [~] **M7** Lifting logger: routines, active workout with rest timer, history, PRs (code complete; on-device check pending)
 - [~] **M8** Training plan calendar linked to real activities (schema, auto-link and UI complete; auto-link verified on real data)
-- [ ] **M9** Runs, wellness and trends in the app
+- [~] **M9** Runs, wellness and trends in the app (charts, route trace, exercise progress; runtime check pending)
 - [ ] **M10** Garmin export backfill for wellness history before intervals.icu
 
 ## Setup
