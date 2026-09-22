@@ -4,6 +4,7 @@ import { View } from 'react-native';
 
 import { isRun, useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
+import { planTypeLabel, usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { latest, rollingMean, useWellness } from '@/api/wellness';
 import { Button } from '@/components/ui/Button';
@@ -13,7 +14,7 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
-import { isoDate, longDate, relativeDay, shortTime, weekStartIso } from '@/lib/dates';
+import { isoDate, longDate, relativeDay, shortTime, todayIso, weekStartIso } from '@/lib/dates';
 import { formatDistance, formatDuration, formatDurationShort, formatPace, secPerKm } from '@/lib/units';
 
 function greeting(): string {
@@ -28,6 +29,8 @@ export default function Today() {
   const syncRuns = useSyncRuns(1);
   const recent = useRecentActivities(14);
   const wellness = useWellness(60);
+  const today = todayIso();
+  const plan = usePlanRange(today, today);
 
   const refreshing = recent.isFetching || wellness.isFetching;
   const refresh = () => {
@@ -96,6 +99,23 @@ export default function Today() {
       {conn?.status === 'auth_failed' ? (
         <Card tone="neg" title="intervals.icu sync is failing" subtitle={conn.last_error ?? 'The API key was rejected.'} onPress={() => router.push('/settings/connect')} />
       ) : null}
+
+      <Card title="Today's plan" right={<Button title="Plan" variant="ghost" small onPress={() => router.push('/plan')} />}>
+        {plan.data?.length ? (
+          plan.data.map((s, i) => (
+            <ListRow
+              key={s.id}
+              first={i === 0}
+              title={s.title}
+              subtitle={[planTypeLabel(s.type), s.subtype, s.target_distance_m ? formatDistance(s.target_distance_m, units, 1) : null].filter(Boolean).join(' · ')}
+              badge={<Badge label={s.status} tone={s.status === 'done' ? 'pos' : s.status === 'skipped' ? 'neg' : 'mut'} />}
+              onPress={() => router.push(`/plan/${s.id}`)}
+            />
+          ))
+        ) : (
+          <T tone="mut">Nothing planned today.{plan.isSuccess ? ' Rest day, or add a session from the Plan tab.' : ''}</T>
+        )}
+      </Card>
 
       <Card title="Readiness" subtitle={ready.rhr ? relativeDay(ready.rhr.date) : 'No wellness data yet'}>
         <Grid>

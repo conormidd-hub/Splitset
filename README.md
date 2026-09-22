@@ -29,7 +29,7 @@ Garmin watch ──► intervals.icu ──► sync/ (Python, GitHub Actions cro
 
 ## Status
 
-Milestones, in order. Ticked when done.
+Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaiting a runtime check.
 
 - [x] **M0** Scaffold: toolchain, repo layout, Supabase project, `profiles` table
 - [x] **M1** Running schema: connections (Vault-protected keys), activities, activity details, wellness, sync runs
@@ -37,9 +37,9 @@ Milestones, in order. Ticked when done.
 - [ ] **M3** Sync job runs twice daily on GitHub Actions
 - [ ] **M4** Grafana dashboard on a read-only reporting schema
 - [x] **M5** Lifting schema: exercises, routines, workouts, sets, records
-- [ ] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today
-- [ ] **M7** Lifting logger: routines, active workout with rest timer, history, PRs
-- [ ] **M8** Training plan calendar linked to real activities
+- [~] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today (code complete; runtime check needs the app keys)
+- [~] **M7** Lifting logger: routines, active workout with rest timer, history, PRs (code complete; on-device check pending)
+- [~] **M8** Training plan calendar linked to real activities (schema, auto-link and UI complete; auto-link verified on real data)
 - [ ] **M9** Runs, wellness and trends in the app
 - [ ] **M10** Garmin export backfill for wellness history before intervals.icu
 

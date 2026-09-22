@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { usePreviousSets } from '@/api/lifting';
+import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +12,8 @@ import { NumberInput } from '@/components/ui/NumberInput';
 import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
+import { todayIso } from '@/lib/dates';
+import { useUserId } from '@/lib/session';
 import { confirm } from '@/lib/confirm';
 import { adjustRest, formatClock, startRest, stopRest, useRestRemaining } from '@/lib/restTimer';
 import { displayToKg, kgToDisplay, type Units } from '@/lib/units';
@@ -35,6 +38,7 @@ function useElapsed(startedAt: string | undefined): string {
 export default function ActiveWorkoutScreen() {
   const { palette } = useTheme();
   const units = useUnits();
+  const uid = useUserId();
   const workout = useActiveWorkout((s) => s.workout);
   const lastError = useActiveWorkout((s) => s.lastError);
   const outboxLength = useActiveWorkout((s) => s.outbox.length);
@@ -60,7 +64,10 @@ export default function ActiveWorkoutScreen() {
     await stopRest();
     const id = await finish();
     setFinishing(false);
-    if (id) router.replace(`/lift/history/${id}`);
+    if (id) {
+      linkWorkoutToPlan(uid, id, todayIso()).catch(() => {});
+      router.replace(`/lift/history/${id}`);
+    }
   };
 
   const onDiscard = async () => {
