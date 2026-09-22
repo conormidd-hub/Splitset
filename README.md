@@ -36,7 +36,7 @@ Milestones, in order. Ticked when done.
 - [x] **M2** Sync job runs from a laptop and backfills history
 - [ ] **M3** Sync job runs twice daily on GitHub Actions
 - [ ] **M4** Grafana dashboard on a read-only reporting schema
-- [ ] **M5** Lifting schema: exercises, routines, workouts, sets, records
+- [x] **M5** Lifting schema: exercises, routines, workouts, sets, records
 - [ ] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today
 - [ ] **M7** Lifting logger: routines, active workout with rest timer, history, PRs
 - [ ] **M8** Training plan calendar linked to real activities
