@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["sync/**", ".github/workflows/ci.yml"]
+  pull_request:
+    paths: ["sync/**", ".github/workflows/ci.yml"]
+
+jobs:
+  sync-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - run: uv sync --frozen
+      - run: uv run pytest

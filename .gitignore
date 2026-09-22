@@ -1,0 +1,31 @@
+# secrets - never commit these
+.env
+.env.*
+!.env.example
+
+# python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+
+# node / expo
+node_modules/
+.expo/
+dist/
+web-build/
+app/ios/
+app/android/
+npm-debug.log*
+yarn-error.log*
+
+# supabase cli
+supabase/.temp/
+supabase/.branches/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

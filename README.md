@@ -1,0 +1,85 @@
+# Splitset
+
+One personal database for running and lifting.
+
+Garmin → intervals.icu → a Python sync job → **Supabase (Postgres)** → Grafana for analysis,
+plus an **Expo app** (iOS, Android, web) that logs lifting Strong-style and shows runs,
+wellness and a training plan from the same tables.
+
+Built for one person first, on free tiers, with accounts and row-level security from day one
+so friends can later sign up in the app, paste their own intervals.icu credentials, and get a
+private copy of everything on the same project.
+
+## How it fits together
+
+```
+Garmin watch ──► intervals.icu ──► sync/ (Python, GitHub Actions cron) ──► Supabase Postgres
+                                                                              │        │
+                                                          Grafana Cloud ◄─────┘        └──► Expo app
+                                                          (reporting views)                 (iOS / Android / web)
+```
+
+| Folder | Job |
+|---|---|
+| `supabase/` | Supabase CLI project: SQL migrations and seed data. The schema lives here. |
+| `sync/` | `splitset-sync`, the Python job that pulls activities, wellness and per-activity detail from intervals.icu into Postgres for every connected user. |
+| `app/` | The Expo app. |
+| `grafana/` | Dashboard JSON and datasource notes. |
+| `reference/` | A friend's running dashboard that this project was modelled on. Left exactly as received; see credits. |
+
+## Status
+
+Milestones, in order. Ticked when done.
+
+- [x] **M0** Scaffold: toolchain, repo layout, Supabase project, `profiles` table
+- [x] **M1** Running schema: connections (Vault-protected keys), activities, activity details, wellness, sync runs
+- [x] **M2** Sync job runs from a laptop and backfills history
+- [ ] **M3** Sync job runs twice daily on GitHub Actions
+- [ ] **M4** Grafana dashboard on a read-only reporting schema
+- [ ] **M5** Lifting schema: exercises, routines, workouts, sets, records
+- [ ] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today
+- [ ] **M7** Lifting logger: routines, active workout with rest timer, history, PRs
+- [ ] **M8** Training plan calendar linked to real activities
+- [ ] **M9** Runs, wellness and trends in the app
+- [ ] **M10** Garmin export backfill for wellness history before intervals.icu
+
+## Setup
+
+Filled in as each milestone lands.
+
+### Prerequisites
+
+- Python 3.12 and [uv](https://docs.astral.sh/uv/) for `sync/`
+- Node.js LTS for the Supabase CLI (`npx supabase`) and the Expo app
+- A Supabase account with two free projects: `splitset-dev` for development and `splitset` for real data
+- An intervals.icu account with your watch connected (Settings page → Athlete ID and API key)
+
+### Database
+
+Migrations are applied straight to the project's connection string, so no CLI login is needed.
+`SUPABASE_DB_URL` is the Session pooler URI from the dashboard's Connect dialog.
+
+```bash
+npx supabase db push --db-url "$SUPABASE_DB_URL"
+```
+
+To prove the migrations apply from nothing, reset the empty dev project and push again.
+Never run that against `splitset` once it holds real data.
+
+### Sync job
+
+```bash
+cp .env.example .env      # then fill in SUPABASE_DB_URL
+cd sync
+uv sync
+uv run pytest
+uv run splitset-sync run --dry-run
+```
+
+## Credits
+
+The shape of the sync job, the intervals.icu field mapping and the stream maths (best efforts,
+kilometre splits, route simplification) are ported from a friend's private running dashboard,
+kept unmodified in [`reference/`](reference/README.md). Thank you.
+
+Data © the athlete who recorded it. Maps © OpenStreetMap contributors where shown.

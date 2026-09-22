@@ -1,0 +1,59 @@
+name: sync
+
+# Pulls intervals.icu data into Supabase for every connected user.
+#
+# Cron times are UTC and deliberately off the hour: GitHub's scheduler is congested at :00
+# and can run late or skip. The morning pass is doubled for the same reason. Move these to
+# suit your morning; a run that finds nothing new is cheap.
+#
+# GitHub disables scheduled workflows after 60 days without repository activity. A commit
+# or a manual run re-enables them.
+
+on:
+  schedule:
+    - cron: "17 19 * * *"   # morning pass 1 (05:17 AEST / 06:17 AEDT)
+    - cron: "47 19 * * *"   # morning pass 2, in case the first was late or skipped
+    - cron: "17 9 * * *"    # evening pass (19:17 AEST / 20:17 AEDT)
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Re-fetch from each connection's oldest_date"
+        type: boolean
+        default: false
+      user:
+        description: "Only this user id or email (blank = everyone)"
+        type: string
+        default: ""
+      max_streams:
+        description: "Per-activity stream downloads per user"
+        type: number
+        default: 200
+
+concurrency:
+  group: splitset-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: sync
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - run: uv sync --frozen --no-dev
+      - name: Sync
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: >
+          uv run splitset-sync run
+          --trigger ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
+          --max-streams ${{ inputs.max_streams || 200 }}
+          ${{ inputs.full && '--full' || '' }}
+          ${{ inputs.user && format('--user {0}', inputs.user) || '' }}
