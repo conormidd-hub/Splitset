@@ -34,7 +34,7 @@ Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaitin
 - [x] **M0** Scaffold: toolchain, repo layout, Supabase project, `profiles` table
 - [x] **M1** Running schema: connections (Vault-protected keys), activities, activity details, wellness, sync runs
 - [x] **M2** Sync job runs from a laptop and backfills history
-- [ ] **M3** Sync job runs twice daily on GitHub Actions
+- [x] **M3** Sync job runs twice daily on GitHub Actions
 - [ ] **M4** Grafana dashboard on a read-only reporting schema
 - [x] **M5** Lifting schema: exercises, routines, workouts, sets, records
 - [~] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today (code complete; runtime check needs the app keys)
