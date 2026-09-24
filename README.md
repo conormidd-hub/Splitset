@@ -42,8 +42,9 @@ Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaitin
 - [~] **M8** Training plan calendar linked to real activities (schema, auto-link and UI complete; auto-link verified on real data)
 - [~] **M9** Runs, wellness and trends in the app (charts, route trace, exercise progress; runtime check pending)
 - [~] **M10** Garmin export backfill for wellness history before intervals.icu (parser and command ready; needs an export to run on)
-- [ ] **M11** Friend onboarding: invite-only sign-up, a first-run wizard from "create an intervals.icu account" to "paste your key" with live validation, first sync started on the spot
-- [ ] **M12** Security hardening: sync job on a cloud host (Google, AWS or Azure) reading secrets from its managed secret store, RLS tests in CI, encrypted backups, keychain session storage, SECURITY.md
+- [ ] **M11** Custom dashboards: a Dashboards tab with a tile builder over the synced data (numbers, lines, bars, lists), live preview, drag-to-arrange with animation, several dashboards with a switcher and reorder; Trends becomes the built-in template
+- [ ] **M12** Friend onboarding: invite-only sign-up, a first-run wizard from "create an intervals.icu account" to "paste your key" with live validation, first sync started on the spot
+- [ ] **M13** Security hardening: sync job on a cloud host (Google, AWS or Azure) reading secrets from its managed secret store, RLS tests in CI, encrypted backups, keychain session storage, SECURITY.md
 
 ## Setup
 
