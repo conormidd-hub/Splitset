@@ -35,13 +35,13 @@ Milestones, in order. `[x]` verified end to end, `[~]` code complete and awaitin
 - [x] **M1** Running schema: connections (Vault-protected keys), activities, activity details, wellness, sync runs
 - [x] **M2** Sync job runs from a laptop and backfills history
 - [x] **M3** Sync job runs twice daily on GitHub Actions
-- [ ] **M4** Grafana dashboard on a read-only reporting schema
+- [~] **M4** Grafana dashboard on a read-only reporting schema (every panel query runs as `grafana_reader` on synced data; Grafana Cloud import pending)
 - [x] **M5** Lifting schema: exercises, routines, workouts, sets, records
-- [~] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today (code complete; runtime check needs the app keys)
-- [~] **M7** Lifting logger: routines, active workout with rest timer, history, PRs (code complete; on-device check pending)
-- [~] **M8** Training plan calendar linked to real activities (schema, auto-link and UI complete; auto-link verified on real data)
-- [~] **M9** Runs, wellness and trends in the app (charts, route trace, exercise progress; runtime check pending)
-- [~] **M10** Garmin export backfill for wellness history before intervals.icu (parser and command ready; needs an export to run on)
+- [~] **M6** App shell: sign-in, Connect intervals.icu, Settings, Today (verified on web against a local stack: email-code sign-in, connect/pause/disconnect, units, delete account; needs the real project's keys)
+- [~] **M7** Lifting logger: routines, active workout with rest timer, history, PRs (verified on web, including a reload mid-workout; on-device check pending)
+- [~] **M8** Training plan calendar linked to real activities (auto-link verified on real data; plan UI and gym-session linking verified on web)
+- [~] **M9** Runs, wellness and trends in the app (charts, route trace, exercise progress; verified on web, on-device check pending)
+- [~] **M10** Garmin export backfill for wellness history before intervals.icu (verified on a synthetic export; needs a real one)
 - [ ] **M11** Custom dashboards: a Dashboards tab with a tile builder over the synced data (numbers, lines, bars, lists), live preview, drag-to-arrange with animation, several dashboards with a switcher and reorder; Trends becomes the built-in template
 - [ ] **M12** Friend onboarding: invite-only sign-up, a first-run wizard from "create an intervals.icu account" to "paste your key" with live validation, first sync started on the spot
 - [ ] **M13** Security hardening: sync job on a cloud host (Google, AWS or Azure) reading secrets from its managed secret store, RLS tests in CI, encrypted backups, keychain session storage, SECURITY.md
@@ -89,6 +89,7 @@ cp .env.example .env      # Supabase URL + publishable key (public client keys)
 npm install
 npx expo start            # press w for web, or scan the QR code with Expo Go
 npx tsc --noEmit          # typecheck
+npx expo lint             # lint (CI runs both on every app change)
 ```
 
 Routes live in `app/app/` (Expo Router): `sign-in.tsx`, then `(app)/` with the Today, Plan,
