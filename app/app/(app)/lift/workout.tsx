@@ -1,9 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { usePreviousSets } from '@/api/lifting';
+import { invalidateWorkoutData, usePreviousSets } from '@/api/lifting';
 import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
@@ -39,6 +40,7 @@ export default function ActiveWorkoutScreen() {
   const { palette } = useTheme();
   const units = useUnits();
   const uid = useUserId();
+  const qc = useQueryClient();
   const workout = useActiveWorkout((s) => s.workout);
   const lastError = useActiveWorkout((s) => s.lastError);
   const outboxLength = useActiveWorkout((s) => s.outbox.length);
@@ -65,7 +67,8 @@ export default function ActiveWorkoutScreen() {
     const id = await finish();
     setFinishing(false);
     if (id) {
-      linkWorkoutToPlan(uid, id, todayIso()).catch(() => {});
+      await linkWorkoutToPlan(uid, id, todayIso()).catch(() => false);
+      invalidateWorkoutData(qc, uid);
       router.replace(`/lift/history/${id}`);
     }
   };

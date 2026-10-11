@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
@@ -228,6 +228,15 @@ export function useWorkout(id: string | undefined) {
   });
 }
 
+/** A workout was saved or removed: history, records, "previous" placeholders and plan links move. */
+export function invalidateWorkoutData(qc: QueryClient, uid: string) {
+  qc.invalidateQueries({ queryKey: liftKeys.workouts(uid) });
+  qc.invalidateQueries({ queryKey: liftKeys.records(uid) });
+  qc.invalidateQueries({ queryKey: ['exerciseHistory', uid] });
+  qc.invalidateQueries({ queryKey: ['plan'] });
+  qc.invalidateQueries({ queryKey: ['planSession'] });
+}
+
 export function useDeleteWorkout() {
   const uid = useUserId();
   const qc = useQueryClient();
@@ -236,10 +245,7 @@ export function useDeleteWorkout() {
       const { error } = await supabase.from('workouts').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: liftKeys.workouts(uid) });
-      qc.invalidateQueries({ queryKey: liftKeys.records(uid) });
-    },
+    onSuccess: () => invalidateWorkoutData(qc, uid),
   });
 }
 

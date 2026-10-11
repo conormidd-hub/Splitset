@@ -60,11 +60,14 @@ export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round
   const lo = yMin ?? Math.min(...ys, band?.from ?? Infinity);
   const hi = yMax ?? Math.max(...ys, band?.to ?? -Infinity);
   const pad = (hi - lo) * 0.08 || 1;
+  // a bar's length is its value, so bars stand on zero unless the caller sets a floor
+  const hasBars = series.some((s) => s.kind === 'bars');
+  const floor = yMin ?? (hasBars && lo >= 0 ? 0 : lo - pad);
   const plotW = Math.max(0, width - M.left - M.right);
   const plotH = Math.max(0, height - M.top - M.bottom);
   const span = x1 - x0 || 86_400_000;
   const xs = scaleTime().domain([new Date(x0 - span * 0.02), new Date(x1 + span * 0.02)]).range([M.left, M.left + plotW]);
-  const ysc = scaleLinear().domain([yMin ?? lo - pad, yMax ?? hi + pad]).range([M.top + plotH, M.top]);
+  const ysc = scaleLinear().domain([floor, yMax ?? hi + pad]).range([M.top + plotH, M.top]);
   const xt = (ms: number) => xs(new Date(ms));
 
   const yTicks = ysc.ticks(4);
@@ -126,7 +129,7 @@ export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round
                 return (
                   <G key={s.name}>
                     {pts.map((p) => p.y == null ? null : (
-                      <Rect key={p.x} x={xt(p.x) - bw / 2} y={ysc(p.y)} width={bw} height={Math.max(0, ysc(lo - pad) - ysc(p.y))} fill={s.color} opacity={s.opacity ?? 0.85} rx={2} />
+                      <Rect key={p.x} x={xt(p.x) - bw / 2} y={ysc(p.y)} width={bw} height={Math.max(0, ysc(floor) - ysc(p.y))} fill={s.color} opacity={s.opacity ?? 0.85} rx={2} />
                     ))}
                   </G>
                 );
@@ -141,7 +144,7 @@ export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round
               const lineGen = d3line<Point>().defined((p) => p.y != null).x((p) => xt(p.x)).y((p) => ysc(p.y as number)).curve(curveMonotoneX);
               const d = lineGen(pts) ?? '';
               const areaD = kind === 'area'
-                ? (d3area<Point>().defined((p) => p.y != null).x((p) => xt(p.x)).y0(ysc(lo - pad)).y1((p) => ysc(p.y as number)).curve(curveMonotoneX)(pts) ?? '')
+                ? (d3area<Point>().defined((p) => p.y != null).x((p) => xt(p.x)).y0(ysc(floor)).y1((p) => ysc(p.y as number)).curve(curveMonotoneX)(pts) ?? '')
                 : null;
               return (
                 <G key={s.name}>

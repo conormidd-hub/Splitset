@@ -1,9 +1,11 @@
+import { parseISO, subDays } from 'date-fns';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { View } from 'react-native';
 
 import { isRun, useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
+import { useWorkouts } from '@/api/lifting';
 import { planTypeLabel, usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { latest, rollingMean, useWellness } from '@/api/wellness';
@@ -15,7 +17,8 @@ import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
 import { isoDate, longDate, relativeDay, shortTime, todayIso, weekStartIso } from '@/lib/dates';
-import { formatDistance, formatDuration, formatDurationShort, formatPace, secPerKm } from '@/lib/units';
+import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
+import { useActiveWorkout } from '@/stores/activeWorkout';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -31,11 +34,15 @@ export default function Today() {
   const wellness = useWellness(60);
   const today = todayIso();
   const plan = usePlanRange(today, today);
+  const workouts = useWorkouts(1);
+  const active = useActiveWorkout((s) => s.workout);
+  const lastLift = workouts.data?.[0];
 
   const refreshing = recent.isFetching || wellness.isFetching;
   const refresh = () => {
     recent.refetch();
     wellness.refetch();
+    workouts.refetch();
     syncRuns.refetch();
     connection.refetch();
   };
@@ -43,9 +50,7 @@ export default function Today() {
   const week = useMemo(() => {
     const rows = recent.data ?? [];
     const start = weekStartIso();
-    const d = new Date(start);
-    d.setDate(d.getDate() - 7);
-    const lastStart = isoDate(d);
+    const lastStart = isoDate(subDays(parseISO(start), 7));
     const thisWeek = rows.filter((a) => a.start_time_local >= start);
     const lastWeek = rows.filter((a) => a.start_time_local >= lastStart && a.start_time_local < start);
     const km = (list: typeof rows) => list.filter((a) => isRun(a.type)).reduce((s, a) => s + (a.distance_m ?? 0), 0);
@@ -154,11 +159,30 @@ export default function Today() {
         </Card>
       ) : null}
 
-      <Card title="Lifting">
-        <T tone="mut">The live gym sheet arrives with milestone 7. Routines, sets, rest timer and records will live here.</T>
-        <View style={{ marginTop: 12 }}>
-          <Button title="Open Lift" variant="secondary" small onPress={() => router.push('/lift')} />
-        </View>
+      <Card title="Lifting" right={<Button title="Lift" variant="ghost" small onPress={() => router.push('/lift')} />}>
+        {active ? (
+          <ListRow
+            first
+            title="Workout in progress"
+            subtitle={`${active.name} · started ${shortTime(active.startedAt)} · ${active.exercises.length} exercise${active.exercises.length === 1 ? '' : 's'}`}
+            badge={<Badge label="live" tone="accent" />}
+            onPress={() => router.push('/lift/workout')}
+          />
+        ) : lastLift ? (
+          <ListRow
+            first
+            title={lastLift.name ?? 'Workout'}
+            subtitle={`${relativeDay(lastLift.started_at)} · ${formatDurationShort(lastLift.duration_s)} · ${lastLift.sets_completed ?? 0} sets`}
+            value={lastLift.volume_kg ? formatWeight(lastLift.volume_kg, units, 0) : undefined}
+            valueSub={lastLift.volume_kg ? 'volume' : undefined}
+            onPress={() => router.push(`/lift/history/${lastLift.id}`)}
+          />
+        ) : (
+          <View style={{ gap: 12 }}>
+            <T tone="mut">No workouts logged yet. Routines, sets, the rest timer and records live in the Lift tab.</T>
+            <Button title="Start a workout" variant="secondary" small onPress={() => router.push('/lift')} />
+          </View>
+        )}
       </Card>
 
       {lastSync ? (

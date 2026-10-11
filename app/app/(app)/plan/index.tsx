@@ -19,6 +19,13 @@ import { radius, space } from '@/theme/tokens';
 
 const STATUS_TONE = { planned: 'mut', done: 'pos', skipped: 'neg' } as const;
 
+/** "12–18 Oct", or "28 Sep – 4 Oct" across a month end: short enough for the big title. */
+function weekTitle(start: string, end: string): string {
+  const a = parseISO(start);
+  const b = parseISO(end);
+  return a.getMonth() === b.getMonth() ? `${format(a, 'd')}–${format(b, 'd MMM')}` : `${format(a, 'd MMM')} – ${format(b, 'd MMM')}`;
+}
+
 export default function PlanWeek() {
   const { palette } = useTheme();
   const units = useUnits();
@@ -48,7 +55,7 @@ export default function PlanWeek() {
 
   return (
     <Screen
-      title={format(parseISO(weekStart), 'd MMM') + ' – ' + format(parseISO(weekEnd), 'd MMM')}
+      title={weekTitle(weekStart, weekEnd)}
       subtitle="Plan"
       refreshing={plan.isFetching}
       onRefresh={() => { plan.refetch(); actuals.refetch(); }}
@@ -84,8 +91,8 @@ export default function PlanWeek() {
         })}
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <T variant="small" tone="mut">{plan.data?.length ?? 0} planned · {doneCount} done{plannedKm ? ` · ${formatDistance(plannedKm, units, 0)} planned running` : ''}</T>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.md }}>
+        <T variant="small" tone="mut" style={{ flex: 1 }}>{plan.data?.length ?? 0} planned · {doneCount} done{plannedKm ? ` · ${formatDistance(plannedKm, units, 0)} planned running` : ''}</T>
         <Pressable onPress={() => router.push(`/plan/new?date=${today}`)}><T variant="small" tone="accent" weight="600">+ Add session</T></Pressable>
       </View>
 
