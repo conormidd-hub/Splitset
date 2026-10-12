@@ -12,11 +12,17 @@ uv run splitset-sync run                  # incremental sync for every active co
 uv run splitset-sync run --user conor@example.com --full --max-streams 50
 uv run splitset-sync connect --email conor@example.com --athlete-id i123456 --api-key ...
 uv run splitset-sync link --user conor@example.com --days 30
+uv run splitset-sync push-plan --dry-run      # what would change on the intervals.icu calendar
 uv run splitset-sync backfill-garmin --email conor@example.com "C:/path/to/DI_CONNECT" --dry-run
 ```
 
 Needs `SUPABASE_DB_URL` (the Supabase session-pooler connection string) in the environment
 or in a `.env` at the repo root. See `.env.example`.
+
+The app starts runs too ("Sync now", and `push-plan` after a plan change) by dispatching the
+`sync` workflow for one athlete; see the README's Sync now setup. Runs can overlap, so each
+athlete's sync and plan push hold a Postgres advisory lock: a second run waits, then reads fresh
+state, and never sends the same planned run twice.
 
 ## What a run does, per user
 
@@ -27,8 +33,11 @@ or in a `.env` at the repo root. See `.env.example`.
 3. Wellness for the same window, merged column by column so a Garmin export backfill survives.
 4. Streams for activities that have no detail row yet, newest first, capped by `--max-streams`.
    Activities without streams get a `has_streams=false` row so they are never refetched.
-5. Plan sessions and app workouts are linked to the activities that fulfilled them (see `linking.py`).
-6. A `sync_runs` row with the counts. One user's failure never stops the others.
+5. If the athlete turned on "Planned runs on your watch", the next two weeks of planned runs go
+   to their intervals.icu calendar, which passes them to Garmin Connect (see `planpush.py`).
+   Moved sessions are updated in place; skipped, deleted or moved-into-the-past ones are removed.
+6. Plan sessions and app workouts are linked to the activities that fulfilled them (see `linking.py`).
+7. A `sync_runs` row with the counts. One user's failure never stops the others.
 
 Auth failures (401/403) count up on the connection; after three in a row it is marked
 `auth_failed` and skipped until the user reconnects in the app.

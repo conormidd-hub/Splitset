@@ -22,8 +22,11 @@ type Props = {
 
 export function Screen({
   children, title, subtitle, right, scroll = true, padded = true,
-  edges = ['left', 'right'], refreshing, onRefresh, style,
+  edges, refreshing, onRefresh, style,
 }: Props) {
+  // a screen that draws its own title is a tab root with no navigation header above it, so it
+  // keeps clear of the status bar itself; under a header, the header already does
+  const safeEdges: Edge[] = edges ?? (title ? ['top', 'left', 'right'] : ['left', 'right']);
   const { palette } = useTheme();
   const header = title ? (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: space.sm }}>
@@ -43,7 +46,7 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={edges} style={{ flex: 1, backgroundColor: palette.bg }}>
+    <SafeAreaView edges={safeEdges} style={{ flex: 1, backgroundColor: palette.bg }}>
       {scroll ? (
         <ScrollView
           contentContainerStyle={{ paddingBottom: space.xxl }}

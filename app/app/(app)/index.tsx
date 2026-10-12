@@ -12,6 +12,7 @@ import { useProfile, useUnits } from '@/api/profile';
 import { latest, rollingMean, useWellness } from '@/api/wellness';
 import { PbButton } from '@/components/pbs/PbButton';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
+import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
@@ -95,7 +96,6 @@ export default function Today() {
   const rhrDelta = delta(ready.rhr?.value, ready.rhr7, true);
   const hrvDelta = delta(ready.hrv?.value, ready.hrv7, false);
 
-  const lastSync = syncRuns.data?.[0];
   const conn = connection.data;
   const name = profile.data?.display_name ?? '';
 
@@ -197,12 +197,7 @@ export default function Today() {
         )}
       </Card>
 
-      {lastSync ? (
-        <T variant="small" tone="mut" align="center">
-          Last sync {relativeDay(lastSync.started_at)} {shortTime(lastSync.started_at)} · {lastSync.status}
-          {lastSync.activities_fetched ? ` · ${lastSync.activities_fetched} activities` : ''}
-        </T>
-      ) : null}
+      <SyncNowBar />
     </Screen>
   );
 }
