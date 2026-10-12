@@ -172,6 +172,13 @@ def plan_actions(sessions: list[dict[str, Any]], tombstones: list[dict[str, Any]
 def push_plan(conn: Any, client: IntervalsClient, user_id: Any, today: date, dry_run: bool,
               ulog: logging.LoggerAdapter | logging.Logger = log) -> int:
     """Apply plan_actions for one athlete. Returns how many calendar changes went through."""
+    with db.athlete_lock(conn, "push", user_id):
+        return _push(conn, client, user_id, today, dry_run, ulog)
+
+
+def _push(conn: Any, client: IntervalsClient, user_id: Any, today: date, dry_run: bool,
+          ulog: logging.LoggerAdapter | logging.Logger) -> int:
+    # read inside the lock: another run may have just sent some of these
     sessions = db.sessions_for_push(conn, user_id, today)
     tombstones = db.event_tombstones(conn, user_id)
     actions = plan_actions(sessions, tombstones, today)

@@ -199,7 +199,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         log.info("%d active connection(s)", len(connections))
         failed = 0
         for c in connections:
-            if not run_user(conn, c, args, settings):
+            with db.athlete_lock(conn, "sync", c["user_id"]):
+                ok = run_user(conn, c, args, settings)
+            if not ok:
                 failed += 1
     if failed:
         log.error("%d of %d connection(s) failed", failed, len(connections))

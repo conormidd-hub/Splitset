@@ -7,6 +7,8 @@ connection; callers own commits and rollbacks.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID
@@ -23,6 +25,23 @@ from .wellness import WELLNESS_COLUMNS
 def connect(db_url: str) -> psycopg.Connection[Any]:
     return psycopg.connect(db_url, row_factory=dict_row, autocommit=False,
                            application_name="splitset-sync")
+
+
+@contextmanager
+def athlete_lock(conn: psycopg.Connection[Any], scope: str, user_id: Any) -> Iterator[None]:
+    """One process at a time per athlete and scope, across runs: the scheduled sync, a Sync now
+    from the app and an instant plan push can all be going at once. A session-level advisory
+    lock, so it holds across the commits inside; it waits rather than skips, then the work reads
+    fresh state, which is what stops two runs sending the same planned run to the watch twice."""
+    key = f"splitset:{scope}:{user_id}"
+    conn.execute("select pg_advisory_lock(hashtextextended(%s, 0))", (key,))
+    try:
+        yield
+    finally:
+        if conn.info.transaction_status == psycopg.pq.TransactionStatus.INERROR:
+            conn.rollback()
+        conn.execute("select pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
+        conn.commit()
 
 
 # ---------------------------------------------------------------- users and connections

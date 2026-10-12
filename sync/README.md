@@ -19,6 +19,11 @@ uv run splitset-sync backfill-garmin --email conor@example.com "C:/path/to/DI_CO
 Needs `SUPABASE_DB_URL` (the Supabase session-pooler connection string) in the environment
 or in a `.env` at the repo root. See `.env.example`.
 
+The app starts runs too ("Sync now", and `push-plan` after a plan change) by dispatching the
+`sync` workflow for one athlete; see the README's Sync now setup. Runs can overlap, so each
+athlete's sync and plan push hold a Postgres advisory lock: a second run waits, then reads fresh
+state, and never sends the same planned run twice.
+
 ## What a run does, per user
 
 1. Window: from `oldest_date` on the first run or `--full`, otherwise from seven days before

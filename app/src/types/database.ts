@@ -603,6 +603,38 @@ export type Database = {
           },
         ]
       }
+      sync_requests: {
+        Row: {
+          id: number
+          user_id: string
+          kind: string
+          requested_at: string
+          net_request_id: number | null
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          kind: string
+          requested_at?: string
+          net_request_id?: number | null
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          kind?: string
+          requested_at?: string
+          net_request_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_runs: {
         Row: {
           id: number
@@ -1053,6 +1085,18 @@ export type Database = {
       disconnect_intervals: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      request_sync: {
+        Args: {
+          p_kind?: string
+        }
+        Returns: Json
+      }
+      sync_request_status: {
+        Args: {
+          p_request: number
+        }
+        Returns: Json
       }
     }
     Enums: Record<string, never>
