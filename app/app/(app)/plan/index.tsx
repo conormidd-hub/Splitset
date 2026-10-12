@@ -1,6 +1,6 @@
 import { addDays, format, parseISO } from 'date-fns';
 import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -65,26 +65,48 @@ export default function PlanCalendar() {
   }, [plan.data, actuals.data, viaWorkouts.data]);
 
   // ---------------------------------------------------------------- layout, for drop targets
+  // Positions are measured when they're needed, never kept from onLayout: on the web onLayout
+  // only fires when a view changes size, so a week pushed down by the weeks above it loading
+  // would keep its old position.
   const scrollRef = useRef<ScrollView>(null);
   const wrapRef = useRef<View>(null);
   const view = useRef({ top: 0, height: 0, scrollY: 0, contentH: 0 });
-  const weekTop = useRef(new Map<string, number>());                  // week start -> y in the list
-  const rowBox = useRef(new Map<string, { week: string; y: number; h: number }>());
+  const weekEls = useRef(new Map<string, View>());                    // week start -> its card
+  const rowEls = useRef(new Map<string, View>());                     // date -> its row
+  // date -> the row's place in the window, and the list's scroll offset when it was measured
+  const rowBox = useRef(new Map<string, { top: number; h: number; scrollY: number }>());
   const scrolledToToday = useRef(false);
 
   const measureView = () => wrapRef.current?.measureInWindow((_x, y, _w, h) => { view.current.top = y; view.current.height = h; });
-  const dayAt = (absoluteY: number): string | null => {
-    const y = absoluteY - view.current.top + view.current.scrollY;
+  const measureRows = () => {
+    rowBox.current = new Map();
+    for (const [d, el] of rowEls.current) {
+      el.measureInWindow((_x, top, _w, h) => rowBox.current.set(d, { top, h, scrollY: view.current.scrollY }));
+    }
+  };
+  // undefined until the rows have been measured
+  const dayAt = (absoluteY: number): string | null | undefined => {
+    if (!rowBox.current.size) return undefined;
     for (const [d, r] of rowBox.current) {
-      const top = (weekTop.current.get(r.week) ?? 0) + r.y;
-      if (y >= top && y < top + r.h) return d;
+      const top = r.top - (view.current.scrollY - r.scrollY);
+      if (absoluteY >= top && absoluteY < top + r.h) return d;
     }
     return null;
   };
   const scrollToThisWeek = (animated: boolean) => {
-    const y = weekTop.current.get(thisWeek);
-    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - space.sm), animated });
+    const week = weekEls.current.get(thisWeek);
+    wrapRef.current?.measureInWindow((_x, top) => week?.measureInWindow((_x2, y) => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, view.current.scrollY + y - top - space.sm), animated });
+    }));
   };
+  // open on this week once it and the weeks above it have their sessions
+  const loaded = !!plan.data && !!actuals.data;
+  const openOnThisWeek = useEffectEvent(() => scrollToThisWeek(false));
+  useEffect(() => {
+    if (!loaded || scrolledToToday.current) return;
+    scrolledToToday.current = true;
+    setTimeout(openOnThisWeek, 0);
+  }, [loaded]);
 
   // ---------------------------------------------------------------- drag and drop
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -101,6 +123,7 @@ export default function PlanCalendar() {
   };
   const onDragStart = (session: PlanSession, grabY: number, absoluteY: number) => {
     measureView();
+    measureRows();
     suppressTap.current = true;
     pointer.current = absoluteY;
     grab.current = grabY;
@@ -112,7 +135,7 @@ export default function PlanCalendar() {
     pointer.current = absoluteY;
     ghostTop.setValue(absoluteY - view.current.top - grab.current);
     const d = dayAt(absoluteY);
-    setHover((prev) => (prev === d ? prev : d));
+    if (d !== undefined) setHover((prev) => (prev === d ? prev : d));
     const rel = absoluteY - view.current.top;
     const dir = rel < EDGE ? -1 : rel > view.current.height - EDGE ? 1 : 0;
     if (dir && !autoScroll.current) {
@@ -124,7 +147,7 @@ export default function PlanCalendar() {
         v.scrollY = next;
         scrollRef.current?.scrollTo({ y: next, animated: false });
         const d2 = dayAt(pointer.current);
-        setHover((prev) => (prev === d2 ? prev : d2));
+        if (d2 !== undefined) setHover((prev) => (prev === d2 ? prev : d2));
       }, 16);
     } else if (!dir) {
       stopAutoScroll();
@@ -195,14 +218,8 @@ export default function PlanCalendar() {
               pushOn={pushOn}
               dragging={drag?.session.id ?? null}
               suppressTap={suppressTap}
-              onLayout={(y) => {
-                weekTop.current.set(start, y);
-                if (start === thisWeek && !scrolledToToday.current) {
-                  scrolledToToday.current = true;
-                  setTimeout(() => scrollToThisWeek(false), 0);
-                }
-              }}
-              onRowLayout={(d, y, h) => rowBox.current.set(d, { week: start, y, h })}
+              weekRef={(el) => { if (el) weekEls.current.set(start, el); else weekEls.current.delete(start); }}
+              rowRef={(d, el) => { if (el) rowEls.current.set(d, el); else rowEls.current.delete(d); }}
               onDragStart={onDragStart}
               onDragMove={onDragMove}
               onDragEnd={onDragEnd}
@@ -237,21 +254,21 @@ type WeekProps = {
   pushOn: boolean;
   dragging: string | null;
   suppressTap: React.RefObject<boolean>;
-  onLayout: (y: number) => void;
-  onRowLayout: (day: string, y: number, h: number) => void;
+  weekRef: (el: View | null) => void;
+  rowRef: (day: string, el: View | null) => void;
   onDragStart: (s: PlanSession, grab: number, absoluteY: number) => void;
   onDragMove: (absoluteY: number) => void;
   onDragEnd: (s: PlanSession, absoluteY: number, dropped: boolean) => void;
 };
 
-function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, pushOn, dragging, suppressTap, onLayout, onRowLayout, ...drag }: WeekProps) {
+function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, pushOn, dragging, suppressTap, weekRef, rowRef, ...drag }: WeekProps) {
   const { palette } = useTheme();
   const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseISO(start), i)));
   const a = parseISO(days[0]);
   const b = parseISO(days[6]);
   return (
     <View
-      onLayout={(e) => onLayout(e.nativeEvent.layout.y)}
+      ref={weekRef}
       style={{
         backgroundColor: palette.surface, borderRadius: radius.lg, overflow: 'hidden',
         borderWidth: isThisWeek ? 2 : 1, borderColor: isThisWeek ? palette.accent : palette.hair,
@@ -274,7 +291,7 @@ function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, ho
         return (
           <View
             key={d}
-            onLayout={(e) => onRowLayout(d, e.nativeEvent.layout.y, e.nativeEvent.layout.height)}
+            ref={(el) => rowRef(d, el)}
             style={{ flexDirection: 'row', minHeight: 54, borderTopWidth: 1, borderTopColor: palette.hair, backgroundColor: hover === d ? palette.accentSoft : 'transparent' }}>
             <View style={{ width: LABEL_W, alignItems: 'center', justifyContent: 'center', paddingVertical: space.sm }}>
               <T variant="label" tone={isToday ? 'accent' : 'mut'}>{format(parseISO(d), 'EEE')}</T>
