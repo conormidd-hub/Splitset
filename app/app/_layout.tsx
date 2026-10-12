@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavThemeProvider } fro
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { queryClient, setupQueryFocus } from '@/lib/query';
@@ -16,14 +17,16 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   useEffect(() => setupQueryFocus(), []);
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <ThemeProvider>
-          <SplashController />
-          <RootNavigator />
-        </ThemeProvider>
-      </SessionProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
+          <ThemeProvider>
+            <SplashController />
+            <RootNavigator />
+          </ThemeProvider>
+        </SessionProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -60,6 +63,18 @@ function RootNavigator() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(app)" />
+          {/* above the tabs: reached from Today, Lift and the workout sheet alike */}
+          <Stack.Screen
+            name="pbs"
+            options={{
+              headerShown: true,
+              title: 'Personal bests',
+              headerStyle: { backgroundColor: palette.bg },
+              headerShadowVisible: false,
+              headerTintColor: palette.ink,
+              headerTitleStyle: { fontWeight: '700' },
+            }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />

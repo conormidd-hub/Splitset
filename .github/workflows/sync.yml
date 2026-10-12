@@ -6,6 +6,10 @@ name: sync
 # and can run late or skip. The morning pass is doubled for the same reason. Move these to
 # suit your morning; a run that finds nothing new is cheap.
 #
+# The app starts this workflow too, through public.request_sync (see the sync_requests
+# migration): "Sync now" is a full sync for one athlete, and a change to the plan is a quick
+# `push` run that sends their planned runs to intervals.icu and on to the watch.
+#
 # GitHub disables scheduled workflows after 60 days without repository activity. A commit
 # or a manual run re-enables them.
 
@@ -16,6 +20,11 @@ on:
     - cron: "17 9 * * *"    # evening pass (19:17 AEST / 20:17 AEDT)
   workflow_dispatch:
     inputs:
+      mode:
+        description: "sync: the full sync. push: only send planned runs to intervals.icu"
+        type: choice
+        options: [sync, push]
+        default: sync
       full:
         description: "Re-fetch from each connection's oldest_date"
         type: boolean
@@ -29,8 +38,12 @@ on:
         type: number
         default: 200
 
+# One run at a time per athlete and kind. A request made while one is running waits, and a newer
+# request replaces one that is still waiting, so a burst of plan edits becomes a single push.
+# Runs for different athletes, or one athlete's and the scheduled run for everyone, can overlap:
+# the sync job holds a per-athlete database lock, so nobody is synced or pushed twice at once.
 concurrency:
-  group: splitset-sync
+  group: splitset-${{ inputs.mode || 'sync' }}-${{ inputs.user || 'everyone' }}
   cancel-in-progress: false
 
 jobs:
@@ -40,6 +53,15 @@ jobs:
     defaults:
       run:
         working-directory: sync
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      # inputs reach the shell as variables, never pasted into the script
+      MODE: ${{ inputs.mode || 'sync' }}
+      USER_FILTER: ${{ inputs.user }}
+      FULL: ${{ inputs.full }}
+      MAX_STREAMS: ${{ inputs.max_streams || 200 }}
+      TRIGGER: ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -48,12 +70,15 @@ jobs:
           cache-dependency-glob: "sync/uv.lock"
       - run: uv sync --frozen --no-dev
       - name: Sync
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-        run: >
-          uv run splitset-sync run
-          --trigger ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
-          --max-streams ${{ inputs.max_streams || 200 }}
-          ${{ inputs.full && '--full' || '' }}
-          ${{ inputs.user && format('--user {0}', inputs.user) || '' }}
+        if: env.MODE != 'push'
+        run: |
+          args=(run --trigger "$TRIGGER" --max-streams "$MAX_STREAMS")
+          if [ "$FULL" = "true" ]; then args+=(--full); fi
+          if [ -n "$USER_FILTER" ]; then args+=(--user "$USER_FILTER"); fi
+          uv run splitset-sync "${args[@]}"
+      - name: Send planned runs to intervals.icu
+        if: env.MODE == 'push'
+        run: |
+          args=(push-plan)
+          if [ -n "$USER_FILTER" ]; then args+=(--user "$USER_FILTER"); fi
+          uv run splitset-sync "${args[@]}"

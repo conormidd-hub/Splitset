@@ -228,13 +228,14 @@ export function useWorkout(id: string | undefined) {
   });
 }
 
-/** A workout was saved or removed: history, records, "previous" placeholders and plan links move. */
+/** A workout was saved or removed: history, records, PBs, "previous" placeholders and plan links move. */
 export function invalidateWorkoutData(qc: QueryClient, uid: string) {
   qc.invalidateQueries({ queryKey: liftKeys.workouts(uid) });
   qc.invalidateQueries({ queryKey: liftKeys.records(uid) });
   qc.invalidateQueries({ queryKey: ['exerciseHistory', uid] });
   qc.invalidateQueries({ queryKey: ['plan'] });
   qc.invalidateQueries({ queryKey: ['planSession'] });
+  qc.invalidateQueries({ queryKey: ['pbs'] });
 }
 
 export function useDeleteWorkout() {

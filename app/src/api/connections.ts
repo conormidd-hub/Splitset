@@ -88,3 +88,16 @@ export function usePauseConnection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.connection(uid) }),
   });
 }
+
+/** Send the plan's runs to intervals.icu (and so Garmin) at each sync. */
+export function useSetPushPlan() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (on: boolean) => {
+      const { error } = await supabase.from('intervals_connections').update({ push_plan: on }).eq('user_id', uid);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.connection(uid) }),
+  });
+}
