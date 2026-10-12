@@ -98,7 +98,7 @@ export default function ActiveWorkoutScreen() {
             <TextInput
               value={workout.name}
               onChangeText={rename}
-              style={{ flex: 1, color: palette.ink, fontSize: fontSize.h1, fontWeight: '800', padding: 0 }}
+              style={{ flex: 1, minWidth: 0, color: palette.ink, fontSize: fontSize.h1, fontWeight: '800', padding: 0 }}
               placeholder="Workout"
               placeholderTextColor={palette.mut}
             />
