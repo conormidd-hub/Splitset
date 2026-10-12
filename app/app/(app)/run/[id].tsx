@@ -12,6 +12,7 @@ import { Grid, StatTile } from '@/components/ui/StatTile';
 import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { longDate, shortTime } from '@/lib/dates';
+import { rolling } from '@/lib/trends';
 import { formatDistance, formatDuration, formatElevation, formatHr, formatNumber, formatPace, secPerKm } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
@@ -118,8 +119,11 @@ export default function ActivityDetail() {
                 <View key={s.k} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
                   <T variant="mono" tone="mut" style={{ width: 40 }}>{s.k}</T>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                    <View style={{ height: 8, borderRadius: 4, backgroundColor: palette.accent, opacity: 0.85, width: `${Math.round(35 + (1 - frac) * 60)}%` }} />
-                    <T variant="mono">{formatPace(s.t, units, false)}</T>
+                    {/* the bar lives in its own track so the fastest split's label never runs into the hr column */}
+                    <View style={{ flex: 1 }}>
+                      <View style={{ height: 8, borderRadius: 4, backgroundColor: palette.accent, opacity: 0.85, width: `${Math.round(35 + (1 - frac) * 65)}%` }} />
+                    </View>
+                    <T variant="mono" style={{ width: 48 }}>{formatPace(s.t, units, false)}</T>
                   </View>
                   <T variant="mono" tone="mut" style={{ width: 60, textAlign: 'right' }}>{s.hr ?? '–'}</T>
                   <T variant="mono" tone="mut" style={{ width: 60, textAlign: 'right' }}>{s.el != null ? `+${s.el}` : '–'}</T>
@@ -142,15 +146,22 @@ export default function ActivityDetail() {
         ) : null}
 
         {samples ? (
-          <Card title="Heart rate and pace" subtitle="Every 10 seconds">
+          <Card title="Heart rate and pace" subtitle="Every 10 seconds; pace smoothed over 30 seconds">
+            {/* separate axes: on one axis a 5:30 pace sits flat at the bottom of a 0-160 bpm scale */}
             <LineChart
-              height={180}
-              series={[
-                { name: 'bpm', color: palette.neg, points: samples.hr },
-                { name: units === 'imperial' ? 'min/mi' : 'min/km', color: palette.accent, points: samples.pace, dashed: true },
-              ]}
+              height={150}
+              series={[{ name: 'bpm', color: palette.neg, points: samples.hr }]}
               xFormat={(ms) => `${Math.round(ms / 60000)}m`}
               yFormat={(v) => `${Math.round(v)}`}
+            />
+            <LineChart
+              height={150}
+              series={[{ name: units === 'imperial' ? 'min/mi' : 'min/km', color: palette.accent, points: rolling(samples.pace, 3) }]}
+              xFormat={(ms) => `${Math.round(ms / 60000)}m`}
+              yFormat={(v) => {
+                const sec = Math.round(v * 60);
+                return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+              }}
             />
           </Card>
         ) : null}

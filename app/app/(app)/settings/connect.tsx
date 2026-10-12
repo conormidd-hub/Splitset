@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { useConnectIntervals, useConnection, useDisconnectIntervals, usePauseConnection, useSyncRuns } from '@/api/connections';
+import { useConnectIntervals, useConnection, useDisconnectIntervals, usePauseConnection, useSetPushPlan, useSyncRuns } from '@/api/connections';
+import { requestPlanPush } from '@/api/sync';
+import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Chip';
+import { Badge, Segmented } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
@@ -20,6 +22,7 @@ export default function Connect() {
   const connect = useConnectIntervals();
   const disconnect = useDisconnectIntervals();
   const pause = usePauseConnection();
+  const pushPlan = useSetPushPlan();
 
   const conn = connection.data;
   const connected = !!conn && conn.status !== 'disconnected';
@@ -59,12 +62,33 @@ export default function Connect() {
             </T>
             {conn.last_error ? <ErrorBanner message={conn.last_error} /> : null}
           </View>
+          <View style={{ marginTop: space.sm }}>
+            <SyncNowBar />
+          </View>
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
             <Button title={conn.status === 'auth_failed' ? 'Reconnect' : 'Change key'} small variant="secondary" onPress={() => { setAthleteId(conn.athlete_id); setEditing(true); }} />
             {conn.status === 'active' || conn.status === 'paused' ? (
               <Button title={conn.status === 'paused' ? 'Resume' : 'Pause'} small variant="secondary" loading={pause.isPending} onPress={() => pause.mutate(conn.status !== 'paused')} />
             ) : null}
             <Button title="Disconnect" small variant="danger" loading={disconnect.isPending} onPress={onDisconnect} />
+          </View>
+        </Card>
+      ) : null}
+
+      {connected && conn ? (
+        <Card title="Planned runs on your watch" subtitle="Through intervals.icu to Garmin Connect">
+          <View style={{ gap: space.sm }}>
+            <Segmented<'off' | 'on'>
+              options={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]}
+              value={conn.push_plan ? 'on' : 'off'}
+              onChange={(v) => pushPlan.mutate(v === 'on', { onSuccess: () => { if (v === 'on') requestPlanPush(0); } })}
+            />
+            <T variant="small" tone="mut">
+              At every sync, planned runs for the next two weeks that have a distance or a time go to your intervals.icu calendar,
+              and intervals.icu passes them on to Garmin Connect and the watch when planned-workout upload is on in its Garmin
+              settings. Moving a session on the calendar moves it there; skipping or deleting one removes it. Race day stays off the watch.
+            </T>
+            <ErrorBanner message={pushPlan.error ? errorMessage(pushPlan.error) : null} />
           </View>
         </Card>
       ) : null}
@@ -91,7 +115,7 @@ export default function Connect() {
               key={r.id}
               first={i === 0}
               title={`${relativeDay(r.started_at)} ${shortTime(r.started_at)}`}
-              subtitle={r.error ? r.error.split('\n').slice(-1)[0] : `${r.activities_fetched} activities · ${r.wellness_days} wellness days · ${r.streams_fetched} details`}
+              subtitle={r.error ? r.error.split('\n').slice(-1)[0] : `${r.activities_fetched} activities · ${r.wellness_days} wellness days · ${r.streams_fetched} details${r.plan_pushed ? ` · ${r.plan_pushed} to watch` : ''}`}
               badge={<Badge label={r.status} tone={r.status === 'ok' ? 'pos' : r.status === 'running' ? 'mut' : 'neg'} />}
             />
           ))}

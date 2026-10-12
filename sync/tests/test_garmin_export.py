@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
-from splitset_sync.garmin_export import COLUMNS, UPSERT, find_root, parse_export
+from splitset_sync.garmin_export import COLUMNS, UPSERT, backfill, find_root, parse_export
 
 
 @pytest.fixture
@@ -56,3 +57,42 @@ def test_upsert_keeps_existing_values():
     for c in COLUMNS:
         assert f"coalesce(public.wellness.{c}, excluded.{c})" in UPSERT
     assert "'garmin_export'" in UPSERT
+
+
+class _DictRowConn:
+    """Just enough of a psycopg connection made by db.connect(), which returns dict rows."""
+
+    def __init__(self, existing: int):
+        self.existing = existing
+        self.rows: list[tuple] = []
+
+    def execute(self, sql, params):
+        existing = self.existing
+
+        class _Result:
+            def fetchone(self):
+                return {"n": existing}
+
+        return _Result()
+
+    def cursor(self):
+        conn = self
+
+        class _Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def executemany(self, sql, rows):
+                conn.rows.extend(rows)
+
+        return _Cursor()
+
+
+def test_backfill_counts_new_days_with_dict_rows(export: Path):
+    conn = _DictRowConn(existing=1)
+    written, new = backfill(conn, UUID(int=1), parse_export(export))
+    assert (written, new) == (3, 2)
+    assert len(conn.rows) == 3

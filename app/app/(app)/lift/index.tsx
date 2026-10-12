@@ -2,7 +2,9 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 
 import { useRoutines, useWorkouts } from '@/api/lifting';
+import { useLiftPbs } from '@/api/pbs';
 import { useUnits } from '@/api/profile';
+import { PbButton } from '@/components/pbs/PbButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
@@ -22,6 +24,7 @@ export default function LiftHome() {
   const start = useActiveWorkout((s) => s.start);
   const routines = useRoutines();
   const workouts = useWorkouts(20);
+  const lifts = useLiftPbs();
 
   const startEmpty = () => {
     if (!active) start(uid);
@@ -33,8 +36,13 @@ export default function LiftHome() {
       title="Lift"
       subtitle="Strength"
       refreshing={routines.isFetching || workouts.isFetching}
-      onRefresh={() => { routines.refetch(); workouts.refetch(); }}
-      right={<Button title="Exercises" variant="ghost" small onPress={() => router.push('/lift/exercises')} />}>
+      onRefresh={() => { routines.refetch(); workouts.refetch(); lifts.refetch(); }}
+      right={
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+          <PbButton />
+          <Button title="Exercises" variant="ghost" small onPress={() => router.push('/lift/exercises')} />
+        </View>
+      }>
       {active ? (
         <Card
           tone="accent"

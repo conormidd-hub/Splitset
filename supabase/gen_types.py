@@ -34,7 +34,7 @@ ARRAY_ELEMENT = {
     "_numeric": "number", "_text": "string", "_uuid": "string", "_bool": "boolean", "_date": "string",
     "_timestamptz": "string", "_jsonb": "Json",
 }
-FUNC_ARG = {"text": "string", "date": "string", "uuid": "string", "integer": "number", "boolean": "boolean",
+FUNC_ARG = {"text": "string", "date": "string", "uuid": "string", "integer": "number", "bigint": "number", "boolean": "boolean",
             "jsonb": "Json", "timestamp with time zone": "string"}
 
 

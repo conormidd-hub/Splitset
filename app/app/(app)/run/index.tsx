@@ -47,7 +47,7 @@ export default function RunList() {
   };
 
   return (
-    <SafeAreaView edges={['left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
       <FlatList
         data={rows}
         keyExtractor={(a) => a.id}
