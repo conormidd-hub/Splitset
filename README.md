@@ -62,6 +62,10 @@ Filled in as each milestone lands.
 Migrations are applied straight to the project's connection string, so no CLI login is needed.
 `SUPABASE_DB_URL` is the Session pooler URI from the dashboard's Connect dialog.
 
+The `migrate` workflow does this on GitHub as soon as a new migration reaches `main`, with the
+same `SUPABASE_DB_URL` secret as the sync job, so a merge never leaves the sync running ahead of
+the schema. To apply by hand (or to see what's waiting, with `--dry-run`):
+
 ```bash
 npx supabase db push --db-url "$SUPABASE_DB_URL"
 ```
@@ -158,9 +162,8 @@ The web build is a static site: `app/vercel.json` builds it with `npx expo expor
 sends every path to the app, so links and reloads land on the right screen.
 
 1. **Supabase, once:**
-   - Apply the migrations of the branch you're deploying (`npx supabase db push`, under
-     Database above). They only add tables, views and functions, so the scheduled sync on
-     `main` keeps working.
+   - The database is kept up to date by the `migrate` workflow (Database above). For a
+     preview of a branch with new migrations, apply them by hand first.
    - The app signs in with a 6-digit code, not a link. In Authentication, Emails, add
      `{{ .Token }}` to the **Magic Link** and **Confirm signup** templates, for example
      `<p>Your Splitset code: <strong>{{ .Token }}</strong></p>`.
