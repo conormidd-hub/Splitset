@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover hands the notch and home indicator insets to the safe-area views;
+         maximum-scale=1 stops iOS zooming into a field on focus (pinch zoom still works) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <title>%WEB_TITLE%</title>
+    <!-- Add to Home Screen: open full screen, like an installed app -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Splitset" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <!-- the two palettes' backgrounds, so there is no white flash before the app draws -->
+    <meta name="theme-color" content="#eef0f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+        background-color: #eef0f4;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background-color: #0d0d0d;
+        }
+      }
+      /* These styles disable body scrolling if you are using <ScrollView>; no rubber-band bounce of the whole page */
+      body {
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <div id="root"></div>
+  </body>
+</html>
