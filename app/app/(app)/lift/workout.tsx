@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { invalidateWorkoutData, usePreviousSets } from '@/api/lifting';
+import { invalidateWorkoutData, useExercises, usePreviousSets } from '@/api/lifting';
+import { useLiftPbs } from '@/api/pbs';
 import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
+import { LivePbPanel, metricsFor } from '@/components/pbs/LivePbPanel';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { NumberInput } from '@/components/ui/NumberInput';
@@ -14,6 +16,7 @@ import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
+import { formatLiftPb, LIFT_METRICS, mergeSession, sessionBests } from '@/lib/pbs';
 import { useUserId } from '@/lib/session';
 import { confirm } from '@/lib/confirm';
 import { adjustRest, formatClock, startRest, stopRest, useRestRemaining } from '@/lib/restTimer';
@@ -149,8 +152,31 @@ export default function ActiveWorkoutScreen() {
 
 function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) {
   const { palette } = useTheme();
-  const { addSet, removeExercise, setExerciseRest } = useActiveWorkout.getState();
+  const { addSet, updateSet, removeExercise, setExerciseRest } = useActiveWorkout.getState();
   const previous = usePreviousSets(block.exerciseId);
+  const exercises = useExercises();
+  const lifts = useLiftPbs();
+  const [showPb, setShowPb] = useState(false);
+  const bodyweight = exercises.data?.find((e) => e.id === block.exerciseId)?.is_bodyweight ?? false;
+  const metrics = metricsFor(block.measure, bodyweight);
+  const stored = lifts.data?.get(block.exerciseId);
+  const session = sessionBests(block.sets, block.measure, bodyweight);
+  // the rep range being lifted now (the next set to tick, else the last, falling back to what that
+  // set was last time): singles and doubles are 1RM territory, three and up 3RM
+  const firstOpen = block.sets.findIndex((s) => !s.completed);
+  const nextIdx = firstOpen === -1 ? block.sets.length - 1 : firstOpen;
+  const plannedReps = block.sets[nextIdx]?.reps ?? (previous.data[nextIdx] ?? previous.data[previous.data.length - 1])?.reps ?? 1;
+  const focus = metrics.includes('1rm') ? (plannedReps <= 2 ? '1rm' : '3rm') : (metrics[0] ?? null);
+  const merged = metrics.map((m) => ({ m, ...mergeSession(stored?.get(m), session[m]) }));
+  // the one set per metric that beat the all-time best, for a trophy on its row
+  const prSets = new Set(merged.filter((x) => x.beatsAllTime).map((x) => session[x.m]!.setId));
+  const summary = merged.filter((x) => x.all != null).slice(0, 2)
+    .map((x) => `${LIFT_METRICS.find((l) => l.key === x.m)?.short} ${formatLiftPb(x.m, x.all, units)}`).join(' · ');
+
+  const loadNextSet = (kg: number) => {
+    const target = block.sets.find((s) => !s.completed) ?? addSet(block.id);
+    if (target) updateSet(target.id, { weightKg: kg });
+  };
   const weighted = block.measure === 'weight_reps' || block.measure === 'weight_duration';
   const timed = block.measure === 'duration' || block.measure === 'weight_duration' || block.measure === 'distance_duration';
   const repped = block.measure === 'weight_reps' || block.measure === 'reps';
@@ -174,11 +200,32 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
         <Pressable style={{ flex: 1 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
           <T variant="h3" tone="accent">{block.name}</T>
         </Pressable>
+        {metrics.length ? (
+          <Pressable
+            onPress={() => setShowPb((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={`${block.name} personal bests`}
+            style={{ backgroundColor: showPb ? palette.amber : palette.surface, borderColor: palette.amber, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 }}>
+            <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>🏆 PB</T>
+          </Pressable>
+        ) : null}
         <Pressable onPress={cycleRest} style={{ backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
           <T variant="small" tone="ink2">{block.restSeconds ? `rest ${formatClock(block.restSeconds)}` : 'no rest'}</T>
         </Pressable>
         <Pressable onPress={onRemove} hitSlop={8}><T tone="mut">✕</T></Pressable>
       </View>
+
+      {metrics.length && !showPb ? (
+        <Pressable onPress={() => setShowPb(true)} style={{ marginTop: -4, marginBottom: space.sm }}>
+          <T variant="small" tone="mut">
+            {summary ? `All-time ${summary}` : 'No PB yet: tick a set to set one'}
+            {prSets.size ? <T variant="small" weight="700" style={{ color: palette.amber }}>{'  ·  new PB 🏆'}</T> : null}
+          </T>
+        </Pressable>
+      ) : null}
+      {showPb ? (
+        <LivePbPanel stored={stored} session={session} metrics={metrics} focus={focus} units={units} onLoad={loadNextSet} />
+      ) : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingBottom: 4 }}>
         <T variant="label" tone="mut" style={{ width: 32, textAlign: 'center' }}>set</T>
@@ -200,6 +247,7 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
           repped={repped}
           timed={timed}
           previous={previous.data[i] ?? previous.data[previous.data.length - 1]}
+          isPr={prSets.has(s.id)}
         />
       ))}
 
@@ -209,10 +257,11 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
 }
 
 function SetLine({
-  set, index, block, units, weighted, repped, timed, previous,
+  set, index, block, units, weighted, repped, timed, previous, isPr,
 }: {
   set: SetRow; index: number; block: ExerciseBlock; units: Units; weighted: boolean; repped: boolean; timed: boolean;
   previous?: { weight_kg: number | null; reps: number | null; seconds: number | null };
+  isPr?: boolean;
 }) {
   const { palette } = useTheme();
   const { updateSet, toggleSet, removeSet } = useActiveWorkout.getState();
@@ -258,7 +307,7 @@ function SetLine({
         <T variant="small" weight="700" tone={set.setType === 'working' ? 'ink2' : 'accent'}>{TYPE_LABEL[set.setType] || index + 1}</T>
       </Pressable>
       <Pressable style={{ flex: 1 }} onPress={fillFromPrevious}>
-        <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{prevText || '–'}</T>
+        <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{isPr ? '🏆 ' : ''}{prevText || '–'}</T>
       </Pressable>
       {weighted ? (
         <NumberInput

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { parseISO, subDays } from 'date-fns';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
@@ -9,6 +10,8 @@ import { useWorkouts } from '@/api/lifting';
 import { planTypeLabel, usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { latest, rollingMean, useWellness } from '@/api/wellness';
+import { PbButton } from '@/components/pbs/PbButton';
+import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
@@ -27,6 +30,7 @@ function greeting(): string {
 
 export default function Today() {
   const units = useUnits();
+  const qc = useQueryClient();
   const profile = useProfile();
   const connection = useConnection();
   const syncRuns = useSyncRuns(1);
@@ -43,6 +47,7 @@ export default function Today() {
     recent.refetch();
     wellness.refetch();
     workouts.refetch();
+    qc.invalidateQueries({ queryKey: ['pbs'] });
     syncRuns.refetch();
     connection.refetch();
   };
@@ -95,7 +100,12 @@ export default function Today() {
   const name = profile.data?.display_name ?? '';
 
   return (
-    <Screen title={name ? `${greeting()}, ${name}` : greeting()} subtitle={longDate(new Date().toISOString())} refreshing={refreshing} onRefresh={refresh}>
+    <Screen
+      title={name ? `${greeting()}, ${name}` : greeting()}
+      subtitle={longDate(new Date().toISOString())}
+      right={<PbButton />}
+      refreshing={refreshing}
+      onRefresh={refresh}>
       {connection.isSuccess && !conn ? (
         <Card tone="accent" title="Connect intervals.icu" subtitle="Your runs and wellness arrive from there twice a day." onPress={() => router.push('/settings/connect')}>
           <Button title="Connect" small onPress={() => router.push('/settings/connect')} />
@@ -132,6 +142,8 @@ export default function Today() {
           <StatTile label="Form" value={ready.ctl && ready.atl ? (ready.ctl.value - ready.atl.value).toFixed(0) : '–'} sub="CTL − ATL" />
         </Grid>
       </Card>
+
+      <TrophyCabinet units={units} />
 
       <Card title="This week" subtitle="Monday to today">
         <Grid>

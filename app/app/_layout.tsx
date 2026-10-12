@@ -60,6 +60,18 @@ function RootNavigator() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(app)" />
+          {/* above the tabs: reached from Today, Lift and the workout sheet alike */}
+          <Stack.Screen
+            name="pbs"
+            options={{
+              headerShown: true,
+              title: 'Personal bests',
+              headerStyle: { backgroundColor: palette.bg },
+              headerShadowVisible: false,
+              headerTintColor: palette.ink,
+              headerTitleStyle: { fontWeight: '700' },
+            }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />
