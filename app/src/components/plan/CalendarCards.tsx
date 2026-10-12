@@ -52,7 +52,7 @@ function Shell({ colour, done, children, right, dimmed }: { colour: string; done
       style={{
         flexDirection: 'row', alignItems: 'center', borderRadius: radius.md, overflow: 'hidden',
         backgroundColor: done ? palette.surface2 : palette.surface, borderWidth: 1, borderColor: palette.hair,
-        opacity: dimmed ? 0.35 : 1, userSelect: 'none',
+        opacity: dimmed ? 0.35 : 1,
       }}>
       <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: colour }} />
       <View style={{ flex: 1, paddingVertical: space.sm, paddingHorizontal: space.md }}>{children}</View>
