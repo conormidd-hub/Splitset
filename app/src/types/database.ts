@@ -259,6 +259,7 @@ export type Database = {
           consecutive_auth_failures: number
           created_at: string
           updated_at: string
+          push_plan: boolean
         }
         Insert: {
           user_id: string
@@ -272,6 +273,7 @@ export type Database = {
           consecutive_auth_failures?: number
           created_at?: string
           updated_at?: string
+          push_plan?: boolean
         }
         Update: {
           user_id?: string
@@ -285,6 +287,7 @@ export type Database = {
           consecutive_auth_failures?: number
           created_at?: string
           updated_at?: string
+          push_plan?: boolean
         }
         Relationships: [
           {
@@ -294,6 +297,28 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      plan_event_deletions: {
+        Row: {
+          id: number
+          user_id: string
+          event_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          event_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          event_id?: string
+          created_at?: string
+        }
+        Relationships: [
         ]
       }
       plan_sessions: {
@@ -596,6 +621,7 @@ export type Database = {
           wellness_days: number
           plan_links: number
           error: string | null
+          plan_pushed: number
         }
         Insert: {
           id?: never
@@ -614,6 +640,7 @@ export type Database = {
           wellness_days?: number
           plan_links?: number
           error?: string | null
+          plan_pushed?: number
         }
         Update: {
           id?: never
@@ -632,6 +659,7 @@ export type Database = {
           wellness_days?: number
           plan_links?: number
           error?: string | null
+          plan_pushed?: number
         }
         Relationships: [
           {

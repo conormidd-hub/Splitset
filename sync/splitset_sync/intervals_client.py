@@ -7,6 +7,7 @@ Endpoints used:
     GET /athlete/{id}/activities?oldest=YYYY-MM-DD&newest=YYYY-MM-DD
     GET /athlete/{id}/wellness?oldest=YYYY-MM-DD&newest=YYYY-MM-DD
     GET /activity/{id}/streams?types=time,distance,latlng,heartrate,altitude
+    POST, PUT, DELETE /athlete/{id}/events[/{event id}]   planned workouts (see planpush.py)
 """
 
 from __future__ import annotations
@@ -76,6 +77,14 @@ class IntervalsClient:
         check_auth(resp)
         return resp
 
+    def _send(self, method: str, path: str, body: dict[str, Any] | None = None) -> requests.Response:
+        try:
+            resp = self.sess.request(method, f"{API_ROOT}{path}", json=body, timeout=self.timeout)
+        except requests.RequestException as e:
+            raise IntervalsError(f"{method} {path}: {e.__class__.__name__}: {e}") from e
+        check_auth(resp)
+        return resp
+
     @staticmethod
     def _json(resp: requests.Response, path: str) -> Any:
         if not resp.ok:
@@ -109,6 +118,31 @@ class IntervalsClient:
             return None
         data = self._json(resp, path)
         return data if isinstance(data, list) else None
+
+    # ---------------------------------------------------------------- planned workouts
+
+    def create_event(self, body: dict[str, Any]) -> dict[str, Any]:
+        path = f"/athlete/{self.athlete_id}/events"
+        data = self._json(self._send("POST", path, body), path)
+        if not isinstance(data, dict) or "id" not in data:
+            raise IntervalsError(f"POST {path}: no event id in the response")
+        return data
+
+    def update_event(self, event_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
+        """The updated event, or None when it no longer exists (deleted on intervals.icu)."""
+        path = f"/athlete/{self.athlete_id}/events/{event_id}"
+        resp = self._send("PUT", path, body)
+        if resp.status_code == 404:
+            return None
+        data = self._json(resp, path)
+        return data if isinstance(data, dict) and "id" in data else {"id": event_id}
+
+    def delete_event(self, event_id: str) -> None:
+        """Gone already counts as done."""
+        path = f"/athlete/{self.athlete_id}/events/{event_id}"
+        resp = self._send("DELETE", path)
+        if not resp.ok and resp.status_code != 404:
+            raise IntervalsError(f"DELETE {path}: HTTP {resp.status_code}: {resp.text[:200]}")
 
     def close(self) -> None:
         self.sess.close()
