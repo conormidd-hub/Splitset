@@ -959,6 +959,35 @@ export type Database = {
         }
         Relationships: []
       }
+      lift_pbs: {
+        Row: {
+          user_id: string | null
+          exercise_id: string | null
+          metric: string | null
+          period: string | null
+          value: number | null
+          weight_kg: number | null
+          reps: number | null
+          seconds: number | null
+          set_id: string | null
+          workout_id: string | null
+          achieved_at: string | null
+        }
+        Relationships: []
+      }
+      run_pbs: {
+        Row: {
+          user_id: string | null
+          pb: string | null
+          period: string | null
+          distance_m: number | null
+          seconds: number | null
+          activity_id: string | null
+          activity_name: string | null
+          start_time_local: string | null
+        }
+        Relationships: []
+      }
       workout_summaries: {
         Row: {
           id: string | null
