@@ -1,13 +1,34 @@
+import { addDays, parseISO } from 'date-fns';
 import { View } from 'react-native';
 
 import { isRun, typeLabel, type ActivityListRow } from '@/api/activities';
 import { planTypeLabel, type PlanSession } from '@/api/plan';
 import { Badge } from '@/components/ui/Chip';
 import { T } from '@/components/ui/T';
+import { isoDate } from '@/lib/dates';
 import { formatDistance, formatDuration, formatDurationShort, type Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { Palette } from '@/theme/tokens';
 import { radius, space } from '@/theme/tokens';
+
+export type WatchState = 'on' | 'sending' | 'removing' | null;
+const WATCH_DAYS = 14;
+
+/**
+ * Where a session stands with the watch, by the sync job's rules (sync/splitset_sync/planpush.py):
+ * runs with a distance, a time or steps, not race day, not skipped, in the next two weeks go to
+ * intervals.icu. "sending" until the event carries this session's date; "removing" when it no
+ * longer belongs there. Edits to the title or target show as "on" until the push lands.
+ */
+export function watchState(s: PlanSession, pushOn: boolean, today: string): WatchState {
+  if (!pushOn) return null;
+  const until = isoDate(addDays(parseISO(today), WATCH_DAYS));
+  const hasWork = !!(s.target_distance_m || s.target_seconds || (Array.isArray(s.steps) && s.steps.length));
+  const wanted = s.type === 'run' && s.subtype !== 'race' && s.status !== 'skipped' && hasWork && s.date >= today && s.date < until;
+  const sentFor = s.external_hash?.split(':')[0] ?? null;
+  if (wanted) return s.external_event_id && sentFor === s.date ? 'on' : 'sending';
+  return s.external_event_id && sentFor && sentFor >= today ? 'removing' : null;
+}
 
 /** The colour bar down a card's left edge: what kind of session it is. */
 export function typeColour(palette: Palette, type: string | null | undefined): string {
@@ -49,13 +70,14 @@ function Tick() {
   );
 }
 
-export function SessionCard({ session: s, linked, units, past, dimmed }: {
+export function SessionCard({ session: s, linked, units, past, dimmed, watch }: {
   session: PlanSession;
   /** The activity that fulfilled it, when there is one. */
   linked?: ActivityListRow;
   units: Units;
   past: boolean;
   dimmed?: boolean;
+  watch?: WatchState;
 }) {
   const { palette } = useTheme();
   const done = s.status === 'done';
@@ -74,7 +96,12 @@ export function SessionCard({ session: s, linked, units, past, dimmed }: {
       dimmed={dimmed}
       right={
         <>
-          {s.external_event_id && s.status === 'planned' && !past ? <T variant="small" accessibilityLabel="on your watch">⌚</T> : null}
+          {watch === 'on' ? <T variant="small" accessibilityLabel="on your watch">⌚</T> : null}
+          {watch === 'sending' || watch === 'removing' ? (
+            <T variant="tiny" tone="mut" accessibilityLabel={watch === 'sending' ? 'sending to your watch' : 'removing from your watch'}>
+              ⌚ {watch === 'sending' ? 'sending…' : 'removing…'}
+            </T>
+          ) : null}
           {done ? <Tick /> : null}
           {skipped ? <Badge label="skipped" /> : null}
           {missed ? <Badge label="missed" tone="neg" /> : null}

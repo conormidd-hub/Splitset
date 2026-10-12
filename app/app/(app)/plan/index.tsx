@@ -8,7 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { isRun, type ActivityListRow } from '@/api/activities';
 import { useActivitiesBetween, useMovePlanSession, usePlanRange, useWorkoutActivityIds, type PlanSession } from '@/api/plan';
 import { useUnits } from '@/api/profile';
-import { ActivityCard, SessionCard } from '@/components/plan/CalendarCards';
+import { useConnection } from '@/api/connections';
+import { usePlanPush } from '@/api/sync';
+import { ActivityCard, SessionCard, watchState } from '@/components/plan/CalendarCards';
+import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Chip';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
@@ -40,7 +43,12 @@ export default function PlanCalendar() {
   const from = isoDate(addDays(parseISO(thisWeek), -7 * weeksBack));
   const to = isoDate(addDays(parseISO(thisWeek), 7 * (WEEKS_AHEAD + 1) - 1));
 
-  const plan = usePlanRange(from, to);
+  const connection = useConnection();
+  const pushOn = !!connection.data?.push_plan && connection.data.status === 'active';
+  const polling = usePlanPush((st) => st.polling);
+  const plan = usePlanRange(from, to, {
+    pollWhile: (rows) => polling && rows.some((s) => { const w = watchState(s, pushOn, today); return w === 'sending' || w === 'removing'; }),
+  });
   const actuals = useActivitiesBetween(from, to);
   const viaWorkouts = useWorkoutActivityIds(from, to);
   const move = useMovePlanSession();
@@ -159,6 +167,9 @@ export default function PlanCalendar() {
         <Button title="Today" variant="secondary" small onPress={() => scrollToThisWeek(true)} />
         <Button title="+ Add" small onPress={() => router.push(`/plan/new?date=${today}`)} />
       </View>
+      <View style={{ paddingHorizontal: space.lg, paddingBottom: space.xs }}>
+        <SyncNowBar />
+      </View>
       {plan.error ? <View style={{ paddingHorizontal: space.lg }}><ErrorBanner message={errorMessage(plan.error)} /></View> : null}
 
       <View ref={wrapRef} style={{ flex: 1 }} onLayout={(e: LayoutChangeEvent) => { view.current.height = e.nativeEvent.layout.height; measureView(); }}>
@@ -181,6 +192,7 @@ export default function PlanCalendar() {
               units={units}
               km={runKm(start)}
               hover={hover}
+              pushOn={pushOn}
               dragging={drag?.session.id ?? null}
               suppressTap={suppressTap}
               onLayout={(y) => {
@@ -222,6 +234,7 @@ type WeekProps = {
   units: Units;
   km: { done: number; planned: number };
   hover: string | null;
+  pushOn: boolean;
   dragging: string | null;
   suppressTap: React.RefObject<boolean>;
   onLayout: (y: number) => void;
@@ -231,7 +244,7 @@ type WeekProps = {
   onDragEnd: (s: PlanSession, absoluteY: number, dropped: boolean) => void;
 };
 
-function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, dragging, suppressTap, onLayout, onRowLayout, ...drag }: WeekProps) {
+function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, pushOn, dragging, suppressTap, onLayout, onRowLayout, ...drag }: WeekProps) {
   const { palette } = useTheme();
   const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseISO(start), i)));
   const a = parseISO(days[0]);
@@ -275,7 +288,14 @@ function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, ho
               ) : null}
               {info?.sessions.map((s) => (
                 <DraggableSession key={s.id} session={s} enabled={s.status === 'planned'} suppressTap={suppressTap} {...drag}>
-                  <SessionCard session={s} linked={s.activity_id ? activityById.get(s.activity_id) : undefined} units={units} past={past} dimmed={dragging === s.id} />
+                  <SessionCard
+                    session={s}
+                    linked={s.activity_id ? activityById.get(s.activity_id) : undefined}
+                    units={units}
+                    past={past}
+                    dimmed={dragging === s.id}
+                    watch={watchState(s, pushOn, today)}
+                  />
                 </DraggableSession>
               ))}
               {info?.extras.map((x) => (

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { LIST_COLUMNS, type ActivityListRow } from './activities';
+import { requestPlanPush } from './sync';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesInsert } from '@/types/database';
@@ -27,11 +28,14 @@ export const planKeys = {
 };
 
 /** Sessions with date in [from, to], ordered by date then position. */
-export function usePlanRange(from: string, to: string) {
+export function usePlanRange(from: string, to: string, opts: { pollWhile?: (rows: PlanSession[]) => boolean } = {}) {
   const uid = useUserId();
+  const { pollWhile } = opts;
   return useQuery({
     queryKey: planKeys.range(uid, from, to),
     enabled: !!uid,
+    // e.g. while a moved session is on its way to the watch
+    refetchInterval: (q) => (pollWhile && q.state.data && pollWhile(q.state.data) ? 4000 : false),
     queryFn: async (): Promise<PlanSession[]> => {
       const { data, error } = await supabase
         .from('plan_sessions')
@@ -99,9 +103,11 @@ export function useWorkoutActivityIds(from: string, to: string) {
   });
 }
 
-function invalidatePlan(qc: ReturnType<typeof useQueryClient>) {
+/** The plan changed: refresh what shows it, and send planned runs to the watch straight away. */
+function planChanged(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['plan'] });
   qc.invalidateQueries({ queryKey: ['planSession'] });
+  requestPlanPush();
 }
 
 export type PlanSessionInput = Pick<
@@ -124,7 +130,7 @@ export function useSavePlanSession() {
       if (error) throw error;
       return data.id;
     },
-    onSuccess: () => invalidatePlan(qc),
+    onSuccess: () => planChanged(qc),
   });
 }
 
@@ -156,7 +162,7 @@ export function useMovePlanSession() {
     onError: (_e, _v, ctx) => {
       for (const [key, rows] of ctx?.before ?? []) qc.setQueryData(key, rows);
     },
-    onSettled: () => invalidatePlan(qc),
+    onSettled: () => planChanged(qc),
   });
 }
 
@@ -167,7 +173,7 @@ export function useDeletePlanSession() {
       const { error } = await supabase.from('plan_sessions').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => invalidatePlan(qc),
+    onSuccess: () => planChanged(qc),
   });
 }
 
@@ -181,7 +187,7 @@ export function useSetPlanStatus() {
       const { error } = await supabase.from('plan_sessions').update(patch).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => invalidatePlan(qc),
+    onSuccess: () => planChanged(qc),
   });
 }
 
@@ -200,7 +206,7 @@ export function useLinkPlanSession() {
       if (error) throw error;
     },
     onSuccess: () => {
-      invalidatePlan(qc);
+      planChanged(qc);
       qc.invalidateQueries({ queryKey: ['actuals'] });
     },
   });

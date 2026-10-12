@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { useConnectIntervals, useConnection, useDisconnectIntervals, usePauseConnection, useSetPushPlan, useSyncRuns } from '@/api/connections';
+import { requestPlanPush } from '@/api/sync';
+import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, Segmented } from '@/components/ui/Chip';
@@ -60,6 +62,9 @@ export default function Connect() {
             </T>
             {conn.last_error ? <ErrorBanner message={conn.last_error} /> : null}
           </View>
+          <View style={{ marginTop: space.sm }}>
+            <SyncNowBar />
+          </View>
           <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.md, flexWrap: 'wrap' }}>
             <Button title={conn.status === 'auth_failed' ? 'Reconnect' : 'Change key'} small variant="secondary" onPress={() => { setAthleteId(conn.athlete_id); setEditing(true); }} />
             {conn.status === 'active' || conn.status === 'paused' ? (
@@ -76,7 +81,7 @@ export default function Connect() {
             <Segmented<'off' | 'on'>
               options={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]}
               value={conn.push_plan ? 'on' : 'off'}
-              onChange={(v) => pushPlan.mutate(v === 'on')}
+              onChange={(v) => pushPlan.mutate(v === 'on', { onSuccess: () => { if (v === 'on') requestPlanPush(0); } })}
             />
             <T variant="small" tone="mut">
               At every sync, planned runs for the next two weeks that have a distance or a time go to your intervals.icu calendar,
