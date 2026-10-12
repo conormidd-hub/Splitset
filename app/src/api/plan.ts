@@ -79,6 +79,26 @@ export function useActivitiesBetween(from: string, to: string) {
   });
 }
 
+/** Watch recordings already paired with an app workout in [from, to]: shown through the workout, not again. */
+export function useWorkoutActivityIds(from: string, to: string) {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: ['workoutActivities', uid, from, to],
+    enabled: !!uid,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from('workouts')
+        .select('activity_id')
+        .eq('user_id', uid)
+        .not('activity_id', 'is', null)
+        .gte('started_at', `${from}T00:00:00`)
+        .lte('started_at', `${to}T23:59:59`);
+      if (error) throw error;
+      return new Set(data.map((w) => w.activity_id as string));
+    },
+  });
+}
+
 function invalidatePlan(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['plan'] });
   qc.invalidateQueries({ queryKey: ['planSession'] });
@@ -105,6 +125,38 @@ export function useSavePlanSession() {
       return data.id;
     },
     onSuccess: () => invalidatePlan(qc),
+  });
+}
+
+/**
+ * Move a session to another day (drag and drop on the calendar). The calendar updates at once;
+ * a failed write puts it back. The next sync carries the move to intervals.icu and the watch.
+ */
+export function useMovePlanSession() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, date, position }: { id: string; date: string; position: number }) => {
+      const { error } = await supabase
+        .from('plan_sessions')
+        .update({ date, position, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onMutate: async ({ id, date, position }) => {
+      await qc.cancelQueries({ queryKey: ['plan', uid] });
+      const before = qc.getQueriesData<PlanSession[]>({ queryKey: ['plan', uid] });
+      for (const [key, rows] of before) {
+        if (!rows) continue;
+        const moved = rows.map((s) => (s.id === id ? { ...s, date, position } : s));
+        qc.setQueryData(key, moved.sort((a, b) => a.date.localeCompare(b.date) || a.position - b.position));
+      }
+      return { before };
+    },
+    onError: (_e, _v, ctx) => {
+      for (const [key, rows] of ctx?.before ?? []) qc.setQueryData(key, rows);
+    },
+    onSettled: () => invalidatePlan(qc),
   });
 }
 

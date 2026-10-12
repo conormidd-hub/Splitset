@@ -1,141 +1,320 @@
 import { addDays, format, parseISO } from 'date-fns';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isRun, typeLabel, type ActivityListRow } from '@/api/activities';
-import { planTypeLabel, useActivitiesBetween, usePlanRange, type PlanSession } from '@/api/plan';
+import { isRun, type ActivityListRow } from '@/api/activities';
+import { useActivitiesBetween, useMovePlanSession, usePlanRange, useWorkoutActivityIds, type PlanSession } from '@/api/plan';
 import { useUnits } from '@/api/profile';
+import { ActivityCard, SessionCard } from '@/components/plan/CalendarCards';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
-import { Screen } from '@/components/ui/Screen';
-import { Loading } from '@/components/ui/States';
+import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { isoDate, todayIso, weekStartIso } from '@/lib/dates';
-import { formatDistance, formatDurationShort, formatPace, secPerKm } from '@/lib/units';
+import { formatDistance, type Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
-const STATUS_TONE = { planned: 'mut', done: 'pos', skipped: 'neg' } as const;
+const WEEKS_AHEAD = 8;
+const LABEL_W = 52;       // the day column
+const EDGE = 64;          // drag this close to the top or bottom and the list scrolls
+const SCROLL_STEP = 14;   // px per tick while it does
 
-/** "12–18 Oct", or "28 Sep – 4 Oct" across a month end: short enough for the big title. */
-function weekTitle(start: string, end: string): string {
-  const a = parseISO(start);
-  const b = parseISO(end);
-  return a.getMonth() === b.getMonth() ? `${format(a, 'd')}–${format(b, 'd MMM')}` : `${format(a, 'd MMM')} – ${format(b, 'd MMM')}`;
-}
+type Day = { sessions: PlanSession[]; extras: ActivityListRow[] };
+type Drag = { session: PlanSession };
 
-export default function PlanWeek() {
+/**
+ * The plan as a calendar: week after week of seven days, rest days included, with what was
+ * planned, what was done and what was done unplanned. Hold a planned session and drag it to
+ * another day to move it; the next sync moves it on the watch too.
+ */
+export default function PlanCalendar() {
   const { palette } = useTheme();
   const units = useUnits();
-  const [weekStart, setWeekStart] = useState(weekStartIso());
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseISO(weekStart), i))), [weekStart]);
-  const weekEnd = days[6];
   const today = todayIso();
+  const thisWeek = weekStartIso();
+  const [weeksBack, setWeeksBack] = useState(4);
+  const from = isoDate(addDays(parseISO(thisWeek), -7 * weeksBack));
+  const to = isoDate(addDays(parseISO(thisWeek), 7 * (WEEKS_AHEAD + 1) - 1));
 
-  const plan = usePlanRange(weekStart, weekEnd);
-  const actuals = useActivitiesBetween(weekStart, weekEnd);
-  const linkedIds = useMemo(() => new Set((plan.data ?? []).map((s) => s.activity_id).filter(Boolean)), [plan.data]);
+  const plan = usePlanRange(from, to);
+  const actuals = useActivitiesBetween(from, to);
+  const viaWorkouts = useWorkoutActivityIds(from, to);
+  const move = useMovePlanSession();
 
-  const byDay = useMemo(() => {
-    const m = new Map<string, { sessions: PlanSession[]; extras: ActivityListRow[] }>();
-    for (const d of days) m.set(d, { sessions: [], extras: [] });
-    for (const s of plan.data ?? []) m.get(s.date)?.sessions.push(s);
-    for (const a of actuals.data ?? []) {
-      if (linkedIds.has(a.id)) continue;
-      m.get(a.start_time_local.slice(0, 10))?.extras.push(a);
+  const weeks = Array.from({ length: weeksBack + WEEKS_AHEAD + 1 }, (_, i) => isoDate(addDays(parseISO(from), 7 * i)));
+  const { byDay, activityById } = useMemo(() => {
+    // an activity shows once: under the session it fulfilled, or the app workout that logged it
+    const linked = new Set([...(plan.data ?? []).map((s) => s.activity_id).filter(Boolean), ...(viaWorkouts.data ?? [])]);
+    const days = new Map<string, Day>();
+    const day = (d: string) => days.get(d) ?? days.set(d, { sessions: [], extras: [] }).get(d)!;
+    for (const s of plan.data ?? []) day(s.date).sessions.push(s);
+    for (const a of actuals.data ?? []) if (!linked.has(a.id)) day(a.start_time_local.slice(0, 10)).extras.push(a);
+    return { byDay: days, activityById: new Map((actuals.data ?? []).map((a) => [a.id, a])) };
+  }, [plan.data, actuals.data, viaWorkouts.data]);
+
+  // ---------------------------------------------------------------- layout, for drop targets
+  const scrollRef = useRef<ScrollView>(null);
+  const wrapRef = useRef<View>(null);
+  const view = useRef({ top: 0, height: 0, scrollY: 0, contentH: 0 });
+  const weekTop = useRef(new Map<string, number>());                  // week start -> y in the list
+  const rowBox = useRef(new Map<string, { week: string; y: number; h: number }>());
+  const scrolledToToday = useRef(false);
+
+  const measureView = () => wrapRef.current?.measureInWindow((_x, y, _w, h) => { view.current.top = y; view.current.height = h; });
+  const dayAt = (absoluteY: number): string | null => {
+    const y = absoluteY - view.current.top + view.current.scrollY;
+    for (const [d, r] of rowBox.current) {
+      const top = (weekTop.current.get(r.week) ?? 0) + r.y;
+      if (y >= top && y < top + r.h) return d;
     }
-    return m;
-  }, [days, plan.data, actuals.data, linkedIds]);
+    return null;
+  };
+  const scrollToThisWeek = (animated: boolean) => {
+    const y = weekTop.current.get(thisWeek);
+    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - space.sm), animated });
+  };
 
-  const shift = (weeks: number) => setWeekStart(isoDate(addDays(parseISO(weekStart), weeks * 7)));
-  const plannedKm = (plan.data ?? []).filter((s) => s.type === 'run').reduce((t, s) => t + (s.target_distance_m ?? 0), 0);
-  const doneCount = (plan.data ?? []).filter((s) => s.status === 'done').length;
+  // ---------------------------------------------------------------- drag and drop
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
+  const [ghostTop] = useState(() => new Animated.Value(0));
+  const pointer = useRef(0);
+  const grab = useRef(0);
+  const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const suppressTap = useRef(false);
+
+  const stopAutoScroll = () => {
+    if (autoScroll.current) clearInterval(autoScroll.current);
+    autoScroll.current = null;
+  };
+  const onDragStart = (session: PlanSession, grabY: number, absoluteY: number) => {
+    measureView();
+    suppressTap.current = true;
+    pointer.current = absoluteY;
+    grab.current = grabY;
+    ghostTop.setValue(absoluteY - view.current.top - grabY);
+    setDrag({ session });
+    setHover(session.date);
+  };
+  const onDragMove = (absoluteY: number) => {
+    pointer.current = absoluteY;
+    ghostTop.setValue(absoluteY - view.current.top - grab.current);
+    const d = dayAt(absoluteY);
+    setHover((prev) => (prev === d ? prev : d));
+    const rel = absoluteY - view.current.top;
+    const dir = rel < EDGE ? -1 : rel > view.current.height - EDGE ? 1 : 0;
+    if (dir && !autoScroll.current) {
+      autoScroll.current = setInterval(() => {
+        const v = view.current;
+        const max = Math.max(0, v.contentH - v.height);
+        const next = Math.min(max, Math.max(0, v.scrollY + dir * SCROLL_STEP));
+        if (next === v.scrollY) return;
+        v.scrollY = next;
+        scrollRef.current?.scrollTo({ y: next, animated: false });
+        const d2 = dayAt(pointer.current);
+        setHover((prev) => (prev === d2 ? prev : d2));
+      }, 16);
+    } else if (!dir) {
+      stopAutoScroll();
+    }
+  };
+  const onDragEnd = (session: PlanSession, absoluteY: number, dropped: boolean) => {
+    stopAutoScroll();
+    const target = dropped ? dayAt(absoluteY) : null;
+    if (target && target !== session.date) {
+      const last = byDay.get(target)?.sessions.reduce((m, s) => Math.max(m, s.position), -1) ?? -1;
+      move.mutate({ id: session.id, date: target, position: last + 1 });
+    }
+    setDrag(null);
+    setHover(null);
+    setTimeout(() => { suppressTap.current = false; }, 250);
+  };
+
+  const runKm = (start: string) => {
+    let done = 0;
+    let planned = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = byDay.get(isoDate(addDays(parseISO(start), i)));
+      for (const a of d?.extras ?? []) if (isRun(a.type)) done += a.distance_m ?? 0;
+      for (const s of d?.sessions ?? []) {
+        if (s.type === 'run') planned += s.target_distance_m ?? 0;
+        const a = s.activity_id ? activityById.get(s.activity_id) : undefined;
+        if (a && isRun(a.type)) done += a.distance_m ?? 0;
+      }
+    }
+    return { done, planned };
+  };
 
   return (
-    <Screen
-      title={weekTitle(weekStart, weekEnd)}
-      subtitle="Plan"
-      refreshing={plan.isFetching}
-      onRefresh={() => { plan.refetch(); actuals.refetch(); }}
-      right={
-        <View style={{ flexDirection: 'row', gap: space.xs }}>
-          <Button title="‹" variant="secondary" small onPress={() => shift(-1)} />
-          <Button title="Today" variant="secondary" small onPress={() => setWeekStart(weekStartIso())} />
-          <Button title="›" variant="secondary" small onPress={() => shift(1)} />
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.sm, gap: space.sm }}>
+        <View style={{ flex: 1 }}>
+          <T variant="label" tone="mut">Plan</T>
+          <T variant="display">Calendar</T>
         </View>
-      }>
-      {/* day strip */}
-      <View style={{ flexDirection: 'row', gap: 4 }}>
-        {days.map((d) => {
-          const info = byDay.get(d);
-          const isToday = d === today;
-          return (
-            <Pressable
-              key={d}
-              onPress={() => router.push(`/plan/new?date=${d}`)}
-              style={{ flex: 1, alignItems: 'center', paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: isToday ? palette.accentSoft : palette.surface, borderWidth: 1, borderColor: isToday ? palette.accentLine : palette.hair }}>
-              <T variant="tiny" tone="mut">{format(parseISO(d), 'EEE')}</T>
-              <T variant="h3" tone={isToday ? 'accent' : 'ink'}>{format(parseISO(d), 'd')}</T>
-              <View style={{ flexDirection: 'row', gap: 3, marginTop: 4, minHeight: 6 }}>
-                {info?.sessions.map((s) => (
-                  <View key={s.id} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: s.status === 'done' ? palette.pos : s.status === 'skipped' ? palette.neg : palette.mut }} />
-                ))}
-                {info?.extras.map((a) => (
-                  <View key={a.id} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: palette.blue, opacity: 0.6 }} />
-                ))}
-              </View>
-            </Pressable>
-          );
-        })}
+        <Button title="Today" variant="secondary" small onPress={() => scrollToThisWeek(true)} />
+        <Button title="+ Add" small onPress={() => router.push(`/plan/new?date=${today}`)} />
       </View>
+      {plan.error ? <View style={{ paddingHorizontal: space.lg }}><ErrorBanner message={errorMessage(plan.error)} /></View> : null}
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.md }}>
-        <T variant="small" tone="mut" style={{ flex: 1 }}>{plan.data?.length ?? 0} planned · {doneCount} done{plannedKm ? ` · ${formatDistance(plannedKm, units, 0)} planned running` : ''}</T>
-        <Pressable onPress={() => router.push(`/plan/new?date=${today}`)}><T variant="small" tone="accent" weight="600">+ Add session</T></Pressable>
+      <View ref={wrapRef} style={{ flex: 1 }} onLayout={(e: LayoutChangeEvent) => { view.current.height = e.nativeEvent.layout.height; measureView(); }}>
+        <ScrollView
+          ref={scrollRef}
+          scrollEnabled={!drag}
+          scrollEventThrottle={16}
+          onScroll={(e) => { view.current.scrollY = e.nativeEvent.contentOffset.y; }}
+          onContentSizeChange={(_w, h) => { view.current.contentH = h; }}
+          contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, gap: space.md, paddingBottom: space.xxl * 2 }}>
+          <Button title="Show earlier weeks" variant="ghost" small onPress={() => setWeeksBack((n) => n + 8)} />
+          {weeks.map((start) => (
+            <WeekCard
+              key={start}
+              start={start}
+              today={today}
+              isThisWeek={start === thisWeek}
+              byDay={byDay}
+              activityById={activityById}
+              units={units}
+              km={runKm(start)}
+              hover={hover}
+              dragging={drag?.session.id ?? null}
+              suppressTap={suppressTap}
+              onLayout={(y) => {
+                weekTop.current.set(start, y);
+                if (start === thisWeek && !scrolledToToday.current) {
+                  scrolledToToday.current = true;
+                  setTimeout(() => scrollToThisWeek(false), 0);
+                }
+              }}
+              onRowLayout={(d, y, h) => rowBox.current.set(d, { week: start, y, h })}
+              onDragStart={onDragStart}
+              onDragMove={onDragMove}
+              onDragEnd={onDragEnd}
+            />
+          ))}
+          <T variant="small" tone="mut" align="center">Hold a planned session and drag it to another day.</T>
+        </ScrollView>
+
+        {drag ? (
+          <Animated.View
+            style={{
+              position: 'absolute', top: ghostTop, left: space.lg + LABEL_W + 1, right: space.lg + space.sm + 1,
+              pointerEvents: 'none', transform: [{ scale: 1.03 }], boxShadow: '0 6px 16px rgba(0, 0, 0, 0.25)', borderRadius: radius.md,
+            }}>
+            <SessionCard session={drag.session} units={units} past={false} />
+          </Animated.View>
+        ) : null}
       </View>
+    </SafeAreaView>
+  );
+}
 
-      {plan.isLoading ? <Loading /> : null}
+type WeekProps = {
+  start: string;
+  today: string;
+  isThisWeek: boolean;
+  byDay: Map<string, Day>;
+  activityById: Map<string, ActivityListRow>;
+  units: Units;
+  km: { done: number; planned: number };
+  hover: string | null;
+  dragging: string | null;
+  suppressTap: React.RefObject<boolean>;
+  onLayout: (y: number) => void;
+  onRowLayout: (day: string, y: number, h: number) => void;
+  onDragStart: (s: PlanSession, grab: number, absoluteY: number) => void;
+  onDragMove: (absoluteY: number) => void;
+  onDragEnd: (s: PlanSession, absoluteY: number, dropped: boolean) => void;
+};
 
+function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, dragging, suppressTap, onLayout, onRowLayout, ...drag }: WeekProps) {
+  const { palette } = useTheme();
+  const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseISO(start), i)));
+  const a = parseISO(days[0]);
+  const b = parseISO(days[6]);
+  return (
+    <View
+      onLayout={(e) => onLayout(e.nativeEvent.layout.y)}
+      style={{
+        backgroundColor: palette.surface, borderRadius: radius.lg, overflow: 'hidden',
+        borderWidth: isThisWeek ? 2 : 1, borderColor: isThisWeek ? palette.accent : palette.hair,
+      }}>
+      <View style={{ padding: space.lg, paddingBottom: space.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <T variant="h3">{format(a, 'd MMM')} – {format(b, 'd MMM')}</T>
+          {isThisWeek ? <Badge label="THIS WEEK" tone="accent" /> : null}
+        </View>
+        <T variant="small" tone="mut">
+          Total: <T variant="small" weight="700">{formatDistance(km.done, units, 1)}</T>
+          {km.planned ? ` of ${formatDistance(km.planned, units, 0)} planned` : ''}
+        </T>
+      </View>
       {days.map((d) => {
-        const info = byDay.get(d)!;
-        if (!info.sessions.length && !info.extras.length) return null;
+        const info = byDay.get(d);
+        const isToday = d === today;
         const past = d < today;
+        const empty = !info?.sessions.length && !info?.extras.length;
         return (
-          <Card key={d} title={d === today ? 'Today' : format(parseISO(d), 'EEEE d MMMM')} subtitle={past && info.sessions.some((s) => s.status === 'planned') ? 'has unfinished sessions' : undefined}>
-            {info.sessions.map((s, i) => (
-              <Pressable key={s.id} onPress={() => router.push(`/plan/${s.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, borderTopWidth: i ? 1 : 0, borderTopColor: palette.hair }}>
-                <Badge label={planTypeLabel(s.type)} tone={s.type === 'run' ? 'accent' : 'mut'} />
-                <View style={{ flex: 1 }}>
-                  <T variant="h3" numberOfLines={1}>{s.title}</T>
-                  <T variant="small" tone="mut">
-                    {[s.subtype, s.target_distance_m ? formatDistance(s.target_distance_m, units, 1) : null, s.target_seconds ? formatDurationShort(s.target_seconds) : null].filter(Boolean).join(' · ') || planTypeLabel(s.type)}
-                  </T>
-                </View>
-                <Badge label={s.status === 'planned' && past ? 'missed' : s.status} tone={s.status === 'planned' && past ? 'neg' : STATUS_TONE[s.status as keyof typeof STATUS_TONE]} />
-              </Pressable>
-            ))}
-            {info.extras.map((a, i) => (
-              <Pressable key={a.id} onPress={() => router.push(`/run/${a.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, borderTopWidth: i || info.sessions.length ? 1 : 0, borderTopColor: palette.hair, opacity: 0.8 }}>
-                <Badge label={typeLabel(a.type)} />
-                <View style={{ flex: 1 }}>
-                  <T numberOfLines={1}>{a.name ?? typeLabel(a.type)}</T>
-                  <T variant="small" tone="mut">
-                    unplanned · {a.distance_m ? `${formatDistance(a.distance_m, units)}${isRun(a.type) ? ` · ${formatPace(secPerKm(a.distance_m, a.moving_time_s), units)}` : ''}` : formatDurationShort(a.moving_time_s)}
-                  </T>
-                </View>
-              </Pressable>
-            ))}
-          </Card>
+          <View
+            key={d}
+            onLayout={(e) => onRowLayout(d, e.nativeEvent.layout.y, e.nativeEvent.layout.height)}
+            style={{ flexDirection: 'row', minHeight: 54, borderTopWidth: 1, borderTopColor: palette.hair, backgroundColor: hover === d ? palette.accentSoft : 'transparent' }}>
+            <View style={{ width: LABEL_W, alignItems: 'center', justifyContent: 'center', paddingVertical: space.sm }}>
+              <T variant="label" tone={isToday ? 'accent' : 'mut'}>{format(parseISO(d), 'EEE')}</T>
+              <T variant="h3" tone={isToday ? 'accent' : empty ? 'mut' : 'ink'}>{format(parseISO(d), 'd')}</T>
+            </View>
+            <View style={{ flex: 1, paddingVertical: space.sm, paddingRight: space.sm, gap: 6, justifyContent: 'center' }}>
+              {empty ? (
+                <Pressable onPress={() => router.push(`/plan/new?date=${d}`)} accessibilityLabel={`Add a session on ${format(parseISO(d), 'EEEE d MMMM')}`}>
+                  <T tone="mut">{hover === d && dragging ? 'Drop here' : 'Rest day'}</T>
+                </Pressable>
+              ) : null}
+              {info?.sessions.map((s) => (
+                <DraggableSession key={s.id} session={s} enabled={s.status === 'planned'} suppressTap={suppressTap} {...drag}>
+                  <SessionCard session={s} linked={s.activity_id ? activityById.get(s.activity_id) : undefined} units={units} past={past} dimmed={dragging === s.id} />
+                </DraggableSession>
+              ))}
+              {info?.extras.map((x) => (
+                <Pressable key={x.id} onPress={() => router.push(`/run/${x.id}`)}>
+                  <ActivityCard activity={x} units={units} />
+                </Pressable>
+              ))}
+            </View>
+          </View>
         );
       })}
+    </View>
+  );
+}
 
-      {!plan.isLoading && !(plan.data?.length) && !(actuals.data?.length) ? (
-        <Card title="An empty week" subtitle="Tap a day above or Add session to plan it. Runs and gym sessions link to what you actually do.">
-          <Button title="Add a session" small onPress={() => router.push(`/plan/new?date=${today}`)} />
-        </Card>
-      ) : null}
-    </Screen>
+function DraggableSession({ session, enabled, suppressTap, onDragStart, onDragMove, onDragEnd, children }: {
+  session: PlanSession;
+  enabled: boolean;
+  suppressTap: React.RefObject<boolean>;
+  onDragStart: WeekProps['onDragStart'];
+  onDragMove: WeekProps['onDragMove'];
+  onDragEnd: WeekProps['onDragEnd'];
+  children: React.ReactNode;
+}) {
+  // a long press picks the card up; plain taps fall through to the Pressable and open it
+  const pan = Gesture.Pan()
+    .enabled(enabled)
+    .activateAfterLongPress(300)
+    .runOnJS(true)
+    .onStart((e) => onDragStart(session, e.y, e.absoluteY))
+    .onUpdate((e) => onDragMove(e.absoluteY))
+    .onEnd((e, success) => onDragEnd(session, e.absoluteY, success));
+  return (
+    <GestureDetector gesture={pan}>
+      <Pressable
+        onPress={() => { if (!suppressTap.current) router.push(`/plan/${session.id}`); }}
+        accessibilityHint={enabled ? 'Hold and drag to move to another day' : undefined}>
+        {children}
+      </Pressable>
+    </GestureDetector>
   );
 }
