@@ -22,6 +22,10 @@ type Props = {
 };
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+/** A day cell never grows past this, so a wide browser window gets a calendar, not a wall. */
+const CELL_MAX = 46;
+const GAP = 4;
+const GRID_MAX = CELL_MAX * 7 + GAP * 6;
 
 /** The colour a kind of session gets, the same as the plan calendar's left bars. */
 export function kindColour(palette: Palette, kind: SessionKind): string {
@@ -49,14 +53,15 @@ export function StreakCalendar({ year, month0, byDay, today, selected, onSelect 
 
   return (
     <Card title={title} subtitle={days.length ? `${active} of ${days.length} days with a workout` : undefined}>
+      <View style={{ width: '100%', maxWidth: GRID_MAX, alignSelf: 'center' }}>
       <View style={{ flexDirection: 'row', marginBottom: space.xs }}>
         {WEEKDAYS.map((d, i) => (
           <T key={i} variant="tiny" tone="mut" align="center" style={{ flex: 1 }}>{d}</T>
         ))}
       </View>
-      <View style={{ gap: 4 }}>
+      <View style={{ gap: GAP }}>
         {weeks.map((week, wi) => (
-          <View key={wi} style={{ flexDirection: 'row', gap: 4 }}>
+          <View key={wi} style={{ flexDirection: 'row', gap: GAP }}>
             {week.map((cell) => {
               const sessions = cell.inMonth ? byDay.get(cell.date) ?? [] : [];
               const first = sessions[0];
@@ -80,7 +85,7 @@ export function StreakCalendar({ year, month0, byDay, today, selected, onSelect 
                   <T variant="tiny" tone={isToday ? 'accent' : first ? 'ink2' : 'mut'} weight={isToday ? '800' : undefined} style={{ position: 'absolute', top: 2, left: 4 }}>
                     {parseInt(cell.date.slice(8, 10), 10)}
                   </T>
-                  {first ? <SymbolView name={KIND_ICON[first.kind]} tintColor={kindColour(palette, first.kind)} size={18} style={{ marginTop: 6 }} /> : null}
+                  {first ? <SymbolView name={KIND_ICON[first.kind]} tintColor={kindColour(palette, first.kind)} size={16} style={{ marginTop: 6 }} /> : null}
                   {sessions.length > 1 ? (
                     <View style={{ position: 'absolute', right: 2, bottom: 2, backgroundColor: palette.accent, borderRadius: radius.pill, paddingHorizontal: 4, minWidth: 16, alignItems: 'center' }}>
                       <T variant="tiny" tone="onAccent" weight="800">+{sessions.length - 1}</T>
@@ -91,6 +96,7 @@ export function StreakCalendar({ year, month0, byDay, today, selected, onSelect 
             })}
           </View>
         ))}
+      </View>
       </View>
       {picked.length ? (
         <View style={{ marginTop: space.sm }}>

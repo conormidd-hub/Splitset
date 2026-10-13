@@ -31,7 +31,7 @@ export const ICONS = {
   cardio:    { ios: 'figure.mixed.cardio',       android: 'exercise',              web: 'exercise' },
   flame:     { ios: 'flame.fill',                android: 'local_fire_department', web: 'local_fire_department' },
   time:      { ios: 'stopwatch.fill',            android: 'timeline',              web: 'timeline' },
-  trophy:    { ios: 'trophy.fill',               android: 'sports_score',          web: 'sports_score' },
+  trophy:    { ios: 'trophy.fill',               android: 'emoji_events',          web: 'emoji_events' },
   battery:   { ios: 'bolt.fill',                 android: 'battery_charging_full', web: 'battery_charging_full' },
   water:     { ios: 'drop.fill',                 android: 'water_drop',            web: 'water_drop' },
   sparkles:  { ios: 'sparkles',                  android: 'insights',              web: 'insights' },
