@@ -27,7 +27,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # an exact version downloads straight from the release; `latest` asks GitHub's API
+          # first, which shared runners can find rate limited
+          version: 2.120.0
       - name: Migrations waiting to be applied
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
       - name: Apply them
