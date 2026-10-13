@@ -81,6 +81,8 @@ export const heat = {
   flame: palettes.night.accent,
   core: '#d6ffe9',
   cold: palettes.night.mut,
+  /** The streak's own fire on the month view: a red flame and the path that joins the weeks. */
+  ember: '#ff6a3d',
 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

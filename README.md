@@ -149,24 +149,32 @@ greyed out and explained rather than hidden. **Change** on the In focus card pic
 change saves to `profiles.home_layout` (and a copy on the device), so every phone shows the same
 home.
 
-### Streaks
+### Streaks and the calendar
 
 Two Strava-style nudges on Today. Under the PBs pill, a green flame with the number of weeks in a
 row (Monday to Sunday) with at least one workout: any activity the watch recorded plus any gym
 workout logged in the app that the watch did not also record. This week counts as soon as it has
-one; an empty current week does not break the streak until it ends. Tap it for the month view: the
-same days the Plan tab shows week by week, one month at a time, with the first workout's icon on
-each day and "+2" when there were more, a dashed outline where a session is planned, a red dot
-where one was missed. Tap a day for its workouts and plans, to add a session, or to open that week
-in the Plan, which scrolls there and flashes the day. The link runs the other way too: every week
-card in the Plan that belongs to the streak carries a small flame with its number, the flame pill
-in the Plan's header opens the month view, and a week's dates open its month. The month view also
-says what keeps this week alive: the next planned session, or a button to plan one. Under the
-greeting, **streak heat**: a thin line of fire in the night green that
-burns by the last seven days, captioned "3/7 streak heat". One workout lights a seventh of it,
-each one more lights more and burns hotter (two a little, three or four well, five or six hot),
-seven and the whole line is ablaze; nothing in seven days and it goes cold. The flames flicker on
-the UI thread and hold still when the system asks for reduced motion.
+one; an empty current week does not break the streak until it ends. Under the greeting, **streak
+heat**: a thin line of fire in the night green that burns by the last seven days, captioned
+"3/7 streak heat". One workout lights a seventh of it, each one more lights more and burns hotter
+(two a little, three or four well, five or six hot), seven and the whole line is ablaze; nothing
+in seven days and it goes cold. The flames flicker on the UI thread and hold still when the
+system asks for reduced motion.
+
+The Plan tab is one calendar with three views of the same days, switched by the icons at the top
+(the word shows on the one you are in), with one day in focus that carries across them:
+
+- **Month**: seven across, a workout's icon on the day it happened and "+2" when there were more,
+  a dashed outline where a session is planned, a red dot where one was missed, faded where it was
+  skipped. Down the left, the streak: a red flame and its number on every week that is part of it,
+  joined by a path that draws itself down the gutter when the month opens and runs into the
+  streak counter where the chain ends. The flame pill on Today (and in the Plan's header) opens
+  this view. Tap a day to open it.
+- **Week**: the plan week by week, draggable, as before but a little tighter; weeks in the streak
+  carry a small flame with their number, a week's dates open its month, a day's date opens the day.
+- **Day**: one day in full: every planned session with its target, notes, watch state and the
+  activity it was linked to, everything the watch recorded, gym workouts logged here, and the
+  quick ways to mark one done, skip it or add one. A strip of the week above it moves day to day.
 
 ### Metric pages
 
