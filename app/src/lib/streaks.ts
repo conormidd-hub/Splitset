@@ -118,6 +118,31 @@ export function weekStreak(sessions: readonly Session[], today: string, oldest?:
   return { weeks: n, thisWeek: has, capped };
 }
 
+/** The weeks of the current streak, oldest first, so a calendar can number them. */
+export function streakWeeks(sessions: readonly Session[], today: string): string[] {
+  const weeks = new Set(sessions.map((s) => weekStartIso(parseISO(s.date))));
+  const thisWeek = weekStartIso(parseISO(today));
+  let cursor = weeks.has(thisWeek) ? thisWeek : isoDate(addDays(parseISO(thisWeek), -7));
+  const out: string[] = [];
+  while (weeks.has(cursor)) {
+    out.unshift(cursor);
+    cursor = isoDate(addDays(parseISO(cursor), -7));
+  }
+  return out;
+}
+
+/** The icon a planned session's type gets on the month grid; a rest day gets none. */
+export function planKind(type: string | null | undefined): SessionKind | null {
+  switch (type) {
+    case 'run': return 'run';
+    case 'strength': return 'lift';
+    case 'ride': return 'ride';
+    case 'walk': return 'walk';
+    case 'rest': return null;
+    default: return 'other';
+  }
+}
+
 /** 0 cold, 1 one session, 2 two, 3 three or four, 4 five or six, 5 seven or more. */
 export type HeatTier = 0 | 1 | 2 | 3 | 4 | 5;
 

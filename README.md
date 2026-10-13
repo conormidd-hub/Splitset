@@ -154,9 +154,15 @@ home.
 Two Strava-style nudges on Today. Under the PBs pill, a green flame with the number of weeks in a
 row (Monday to Sunday) with at least one workout: any activity the watch recorded plus any gym
 workout logged in the app that the watch did not also record. This week counts as soon as it has
-one; an empty current week does not break the streak until it ends. Tap it for a calendar, month
-by month, with the first workout's icon on each day and "+2" when there were more; tap a day for
-its workouts. Under the greeting, **streak heat**: a thin line of fire in the night green that
+one; an empty current week does not break the streak until it ends. Tap it for the month view: the
+same days the Plan tab shows week by week, one month at a time, with the first workout's icon on
+each day and "+2" when there were more, a dashed outline where a session is planned, a red dot
+where one was missed. Tap a day for its workouts and plans, to add a session, or to open that week
+in the Plan, which scrolls there and flashes the day. The link runs the other way too: every week
+card in the Plan that belongs to the streak carries a small flame with its number, the flame pill
+in the Plan's header opens the month view, and a week's dates open its month. The month view also
+says what keeps this week alive: the next planned session, or a button to plan one. Under the
+greeting, **streak heat**: a thin line of fire in the night green that
 burns by the last seven days, captioned "3/7 streak heat". One workout lights a seventh of it,
 each one more lights more and burns hotter (two a little, three or four well, five or six hot),
 seven and the whole line is ablaze; nothing in seven days and it goes cold. The flames flicker on

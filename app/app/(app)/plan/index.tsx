@@ -1,5 +1,6 @@
 import { addDays, format, parseISO } from 'date-fns';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
@@ -9,7 +10,9 @@ import { isRun, type ActivityListRow } from '@/api/activities';
 import { useActivitiesBetween, useMovePlanSession, usePlanRange, useWorkoutActivityIds, type PlanSession } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { useConnection } from '@/api/connections';
+import { useTrainingSessions } from '@/api/streaks';
 import { usePlanPush } from '@/api/sync';
+import { StreakButton } from '@/components/home/StreakButton';
 import { ActivityCard, SessionCard, watchState } from '@/components/plan/CalendarCards';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
@@ -17,9 +20,11 @@ import { Badge } from '@/components/ui/Chip';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { isoDate, todayIso, weekStartIso } from '@/lib/dates';
+import { ICONS } from '@/lib/icons';
+import { sessionsFrom, streakWeeks, weekStreak } from '@/lib/streaks';
 import { formatDistance, type Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius, space } from '@/theme/tokens';
+import { heat, radius, space } from '@/theme/tokens';
 
 const WEEKS_AHEAD = 8;
 const LABEL_W = 52;       // the day column
@@ -52,6 +57,16 @@ export default function PlanCalendar() {
   const actuals = useActivitiesBetween(from, to);
   const viaWorkouts = useWorkoutActivityIds(from, to);
   const move = useMovePlanSession();
+
+  // the streak runs through these weeks: a flame and its number on every week card that is part of it
+  const training = useTrainingSessions();
+  const { streak, streakNo } = useMemo(() => {
+    const sessions = sessionsFrom(training.data?.activities ?? [], training.data?.workouts ?? [], units);
+    return {
+      streak: weekStreak(sessions, today, training.data?.oldest),
+      streakNo: new Map(streakWeeks(sessions, today).map((w, i) => [w, i + 1])),
+    };
+  }, [training.data, units, today]);
 
   const weeks = Array.from({ length: weeksBack + WEEKS_AHEAD + 1 }, (_, i) => isoDate(addDays(parseISO(from), 7 * i)));
   const { byDay, activityById } = useMemo(() => {
@@ -93,12 +108,13 @@ export default function PlanCalendar() {
     }
     return null;
   };
-  const scrollToThisWeek = (animated: boolean) => {
-    const week = weekEls.current.get(thisWeek);
+  const scrollToWeek = (start: string, animated: boolean) => {
+    const week = weekEls.current.get(start);
     wrapRef.current?.measureInWindow((_x, top) => week?.measureInWindow((_x2, y) => {
       scrollRef.current?.scrollTo({ y: Math.max(0, view.current.scrollY + y - top - space.sm), animated });
     }));
   };
+  const scrollToThisWeek = (animated: boolean) => scrollToWeek(thisWeek, animated);
   // open on this week once it and the weeks above it have their sessions
   const loaded = !!plan.data && !!actuals.data;
   const openOnThisWeek = useEffectEvent(() => scrollToThisWeek(false));
@@ -116,6 +132,27 @@ export default function PlanCalendar() {
   const grab = useRef(0);
   const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
   const suppressTap = useRef(false);
+
+  // the month view sends people here with ?date=: open enough weeks, scroll to that one, flash the
+  // day. It all happens a tick later, off the effect itself, so the state changes never cascade
+  const params = useLocalSearchParams<{ date?: string }>();
+  const jumpTo = useEffectEvent((date: string) => {
+    const wk = weekStartIso(parseISO(date));
+    let back = 0;
+    for (let w = thisWeek; w > wk; w = isoDate(addDays(parseISO(w), -7))) back++;
+    const more = back > weeksBack;
+    if (more) setWeeksBack(back + 1);
+    scrolledToToday.current = true;
+    setHover(date);
+    setTimeout(() => scrollToWeek(wk, true), more ? 300 : 60);
+    setTimeout(() => setHover((h) => (h === date ? null : h)), 1800);
+  });
+  useEffect(() => {
+    const date = params.date;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    const t = setTimeout(() => jumpTo(date), 0);
+    return () => clearTimeout(t);
+  }, [params.date]);
 
   const stopAutoScroll = () => {
     if (autoScroll.current) clearInterval(autoScroll.current);
@@ -187,6 +224,7 @@ export default function PlanCalendar() {
           <T variant="label" tone="mut">Plan</T>
           <T variant="display">Calendar</T>
         </View>
+        {training.isSuccess ? <StreakButton streak={streak} compact /> : null}
         <Button title="Today" variant="secondary" small onPress={() => scrollToThisWeek(true)} />
         <Button title="+ Add" small onPress={() => router.push(`/plan/new?date=${today}`)} />
       </View>
@@ -214,6 +252,7 @@ export default function PlanCalendar() {
               activityById={activityById}
               units={units}
               km={runKm(start)}
+              streakNo={streakNo.get(start)}
               hover={hover}
               pushOn={pushOn}
               dragging={drag?.session.id ?? null}
@@ -250,6 +289,8 @@ type WeekProps = {
   activityById: Map<string, ActivityListRow>;
   units: Units;
   km: { done: number; planned: number };
+  /** This week's number in the current streak, when it is part of it. */
+  streakNo?: number;
   hover: string | null;
   pushOn: boolean;
   dragging: string | null;
@@ -261,7 +302,7 @@ type WeekProps = {
   onDragEnd: (s: PlanSession, absoluteY: number, dropped: boolean) => void;
 };
 
-function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, hover, pushOn, dragging, suppressTap, weekRef, rowRef, ...drag }: WeekProps) {
+function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, streakNo, hover, pushOn, dragging, suppressTap, weekRef, rowRef, ...drag }: WeekProps) {
   const { palette } = useTheme();
   const days = Array.from({ length: 7 }, (_, i) => isoDate(addDays(parseISO(start), i)));
   const a = parseISO(days[0]);
@@ -275,7 +316,14 @@ function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, ho
       }}>
       <View style={{ padding: space.lg, paddingBottom: space.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-          <T variant="h3">{format(a, 'd MMM')} – {format(b, 'd MMM')}</T>
+          <Pressable
+            onPress={() => router.push({ pathname: '/calendar', params: { month: start.slice(0, 7), date: start } })}
+            accessibilityRole="button"
+            accessibilityLabel={`${format(a, 'd MMM')} to ${format(b, 'd MMM')}, open the month view`}
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+            <T variant="h3">{format(a, 'd MMM')} – {format(b, 'd MMM')}</T>
+          </Pressable>
+          {streakNo ? <StreakWeek n={streakNo} /> : null}
           {isThisWeek ? <Badge label="THIS WEEK" tone="accent" /> : null}
         </View>
         <T variant="small" tone="mut">
@@ -324,6 +372,19 @@ function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, ho
           </View>
         );
       })}
+    </View>
+  );
+}
+
+/** The week's place in the streak: a small green flame and its number, counting up week by week. */
+function StreakWeek({ n }: { n: number }) {
+  const { palette } = useTheme();
+  return (
+    <View
+      accessibilityLabel={`Streak week ${n}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 2 }}>
+      <SymbolView name={ICONS.flame} tintColor={heat.flame} size={12} />
+      <T variant="tiny" weight="800" style={{ color: heat.flame, fontVariant: ['tabular-nums'] }}>{n}</T>
     </View>
   );
 }

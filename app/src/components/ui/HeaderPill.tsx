@@ -14,6 +14,8 @@ type Props = {
   onPress: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  /** A smaller pill for a header that already has buttons in it. */
+  compact?: boolean;
   style?: ViewStyle;
 };
 
@@ -21,7 +23,7 @@ type Props = {
 export const PILL_HEIGHT = 40;
 export const PILL_MIN_WIDTH = 92;
 
-export function HeaderPill({ icon, label, colour, onPress, accessibilityLabel, accessibilityHint, style }: Props) {
+export function HeaderPill({ icon, label, colour, onPress, accessibilityLabel, accessibilityHint, compact = false, style }: Props) {
   const { palette } = useTheme();
   return (
     <Pressable
@@ -31,16 +33,16 @@ export function HeaderPill({ icon, label, colour, onPress, accessibilityLabel, a
       accessibilityHint={accessibilityHint}
       style={({ pressed }) => [
         {
-          height: PILL_HEIGHT, minWidth: PILL_MIN_WIDTH,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+          height: compact ? 34 : PILL_HEIGHT, minWidth: compact ? 0 : PILL_MIN_WIDTH,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: compact ? 4 : 6,
           backgroundColor: palette.surface, borderColor: colour, borderWidth: 1.5,
-          borderRadius: radius.pill, paddingHorizontal: space.md,
+          borderRadius: radius.pill, paddingHorizontal: compact ? space.sm + 2 : space.md,
           opacity: pressed ? 0.8 : 1,
         },
         style,
       ]}>
-      <SymbolView name={icon} tintColor={colour} size={20} />
-      <T variant="h3" weight="800" style={{ color: colour, fontVariant: ['tabular-nums'] }}>{label}</T>
+      <SymbolView name={icon} tintColor={colour} size={compact ? 16 : 20} />
+      <T variant={compact ? 'small' : 'h3'} weight="800" style={{ color: colour, fontVariant: ['tabular-nums'] }}>{label}</T>
     </Pressable>
   );
 }
