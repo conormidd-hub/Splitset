@@ -5,7 +5,7 @@ import { keys } from './keys';
 import { useProfile, useUpdateProfile, type Profile } from './profile';
 import { METRICS, type MetricId } from '@/lib/metrics';
 import { useUserId } from '@/lib/session';
-import { storage } from '@/lib/storage';
+import { homeLayoutKey, storage } from '@/lib/storage';
 
 /**
  * The Today screen's layout, Garmin Connect style: one In focus metric above the At a glance
@@ -20,8 +20,6 @@ export const DEFAULT_LAYOUT: HomeLayout = {
   focus: 'readiness',
   glance: ['resting_hr', 'hrv', 'sleep', 'training_status', 'vo2max', 'steps', 'weekly_distance', 'fitness'],
 };
-
-const STORAGE_KEY = 'splitset-home-layout';
 
 const isMetricId = (v: unknown): v is MetricId => typeof v === 'string' && v in METRICS;
 
@@ -53,29 +51,43 @@ export function useHomeLayout() {
   const qc = useQueryClient();
   const profile = useProfile();
   const update = useUpdateProfile();
-  const [cached, setCached] = useState<HomeLayout | null | undefined>(undefined);
+  // the device copy, tagged with whose it is, so a sign-out and sign-in never shows the last account's
+  const [cachedFor, setCachedFor] = useState<{ uid: string; layout: HomeLayout | null } | undefined>(undefined);
+  const cached = cachedFor?.uid === uid ? cachedFor.layout : undefined;
   // the choice being saved, so a profile refetch racing the write can't flick the screen back
   const [pending, setPending] = useState<HomeLayout | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    storage.getItem(STORAGE_KEY)
-      .then((v) => { if (mounted) setCached(parseLayout(v)); })
-      .catch(() => { if (mounted) setCached(null); });
+    storage.getItem(homeLayoutKey(uid))
+      .then((v) => { if (mounted) setCachedFor({ uid, layout: parseLayout(v) }); })
+      .catch(() => { if (mounted) setCachedFor({ uid, layout: null }); });
     return () => { mounted = false; };
-  }, []);
+  }, [uid]);
 
   const fromProfile = useMemo(() => (profile.data ? parseLayout(profile.data.home_layout) : null), [profile.data]);
 
-  const layout: HomeLayout = pending ?? fromProfile ?? cached ?? DEFAULT_LAYOUT;
+  // the device copy only speaks until the profile has answered: once it has, a null there means
+  // the default, not whatever the last account on this phone chose
+  const layout: HomeLayout = pending ?? (profile.data ? fromProfile ?? DEFAULT_LAYOUT : cached ?? DEFAULT_LAYOUT);
 
   const { mutate } = update;
   const save = useCallback((next: HomeLayout) => {
     setPending(next);
-    storage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-    // the home screen reads the profile query: update it now so nothing waits on the network
-    qc.setQueryData<Profile>(keys.profile(uid), (p) => (p ? { ...p, home_layout: next } : p));
-    mutate({ home_layout: next }, { onSettled: () => setPending((cur) => (cur === next ? null : cur)) });
+    storage.setItem(homeLayoutKey(uid), JSON.stringify(next)).catch(() => {});
+    // the home screen reads the profile query: update it now so nothing waits on the network, and
+    // stop a refetch already in flight from landing an older row on top of it
+    const key = keys.profile(uid);
+    const stamp = (p: Profile | undefined) => (p ? { ...p, home_layout: next } : p);
+    void qc.cancelQueries({ queryKey: key });
+    qc.setQueryData<Profile>(key, stamp);
+    mutate({ home_layout: next }, {
+      onSettled: () => setPending((cur) => {
+        if (cur !== next) return cur;
+        qc.setQueryData<Profile>(key, stamp);
+        return null;
+      }),
+    });
   }, [qc, uid, mutate]);
 
   return {

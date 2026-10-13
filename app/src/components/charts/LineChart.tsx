@@ -18,6 +18,8 @@ export type Series = {
   width?: number;
   dashed?: boolean;
   opacity?: number;
+  /** False keeps a helper series (dots under a line) out of the legend and the tap readout. */
+  legend?: boolean;
 };
 
 type Props = {
@@ -29,8 +31,12 @@ type Props = {
   yMax?: number;
   /** A shaded horizontal band, e.g. the 0.8 to 1.3 comfort zone for ACWR. */
   band?: { from: number; to: number; color: string };
+  /** Names the band in the legend. */
+  bandLabel?: string;
   showLegend?: boolean;
   emptyText?: string;
+  /** The tapped point's date in the readout; defaults to xFormat. */
+  cursorFormat?: (ms: number) => string;
 };
 
 const M = { top: 10, right: 10, bottom: 22, left: 42 };
@@ -41,7 +47,7 @@ const defaultX = (ms: number) => {
 };
 
 /** One chart for lines, areas, bars and dots over time. Runs on iOS, Android and web. */
-export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round(v)}`, xFormat = defaultX, yMin, yMax, band, showLegend = true, emptyText = 'No data yet' }: Props) {
+export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round(v)}`, xFormat = defaultX, yMin, yMax, band, bandLabel, showLegend = true, emptyText = 'No data yet', cursorFormat }: Props) {
   const { palette } = useTheme();
   const [width, setWidth] = useState(0);
   const [cursor, setCursor] = useState<number | null>(null);
@@ -85,7 +91,8 @@ export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round
     setCursor(best ? best.x : null);
   };
 
-  const cursorValues = cursor == null ? [] : series.map((s) => {
+  const shown = series.filter((s) => s.legend !== false);
+  const cursorValues = cursor == null ? [] : shown.map((s) => {
     const p = s.points.find((q) => q.x === cursor);
     return p && p.y != null ? `${s.name} ${yFormat(p.y)}` : null;
   }).filter(Boolean);
@@ -95,14 +102,22 @@ export function LineChart({ series, height = 200, yFormat = (v) => `${Math.round
       {showLegend ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginBottom: 4, minHeight: 18 }}>
           {cursor != null ? (
-            <T variant="small" tone="ink" weight="600">{xFormat(cursor)} · {cursorValues.join(' · ')}</T>
+            <T variant="small" tone="ink" weight="600">{(cursorFormat ?? xFormat)(cursor)} · {cursorValues.join(' · ')}</T>
           ) : (
-            series.map((s) => (
-              <View key={s.name} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
-                <T variant="small" tone="mut">{s.name}</T>
-              </View>
-            ))
+            <>
+              {shown.map((s) => (
+                <View key={s.name} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }} />
+                  <T variant="small" tone="mut">{s.name}</T>
+                </View>
+              ))}
+              {band && bandLabel ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <View style={{ width: 10, height: 8, borderRadius: 2, backgroundColor: band.color, opacity: 0.35 }} />
+                  <T variant="small" tone="mut">{bandLabel}</T>
+                </View>
+              ) : null}
+            </>
           )}
         </View>
       ) : null}

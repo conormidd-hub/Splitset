@@ -16,6 +16,8 @@ import type { MetricInputs, Tone } from './metrics';
  */
 
 const DAY = 86_400_000;
+/** Whole calendar days from `date` to `today`; dayMs is local noon, so a DST hour rounds away. */
+const daysAgo = (date: string, today: string) => Math.round((dayMs(today) - dayMs(date)) / DAY);
 const clamp = (v: number, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, v));
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const sd = (xs: number[]) => {
@@ -70,8 +72,7 @@ export type HrvStatus = {
 export function hrvStatus(inputs: MetricInputs, asOf?: string): HrvStatus {
   const rows = asOf ? upTo(inputs.wellness, asOf) : inputs.wellness;
   const today = asOf ?? inputs.today;
-  const weekStart = dayMs(today) - 7 * DAY;
-  const week = rows.filter((r) => dayMs(r.date) > weekStart && num(r.hrv)).map((r) => r.hrv as number);
+  const week = rows.filter((r) => daysAgo(r.date, today) < 7 && num(r.hrv)).map((r) => r.hrv as number);
   const weekly = mean(week);
   const none = (why: string): HrvStatus => ({ status: 'No status', tone: 'mut', weekly, nights: week.length, baselineLow: null, baselineHigh: null, baselineSource: 'none', why });
   if (weekly == null || week.length < 4) return none(week.length ? 'Fewer than four nights of HRV this week.' : 'No overnight HRV in the last week.');
@@ -87,7 +88,7 @@ export function hrvStatus(inputs: MetricInputs, asOf?: string): HrvStatus {
     spread = (high - low) / 2;
     source = 'garmin';
   } else {
-    const prior = rows.filter((r) => dayMs(r.date) <= weekStart && dayMs(r.date) > weekStart - 21 * DAY && num(r.hrv)).map((r) => r.hrv as number);
+    const prior = rows.filter((r) => { const d = daysAgo(r.date, today); return d >= 7 && d < 28 && num(r.hrv); }).map((r) => r.hrv as number);
     const m = mean(prior);
     const s = sd(prior);
     if (m != null && s != null && prior.length >= 14) {
@@ -163,17 +164,17 @@ export function trainingReadiness(inputs: MetricInputs, asOf?: string): Readines
 
   // a synced score (Oura through intervals.icu) wins over the estimate; Garmin never sends one
   const synced = latestOf(rows, 'readiness', today);
-  const recentSynced = synced && dayMs(today) - dayMs(synced.date) <= 2 * DAY ? synced : null;
+  const recentSynced = synced && daysAgo(synced.date, today) <= 2 ? synced : null;
 
   // 1. sleep: last night only counts if it is recent
-  const night = last && dayMs(today) - dayMs(last.date) <= 1 * DAY ? last : null;
+  const night = last && daysAgo(last.date, today) <= 1 ? last : null;
   const sleep = sleepFactor(night);
 
   // 2. recovery: fatigue against fitness, and whether yesterday was a hard day
   const ctl = latestOf(rows, 'ctl', today)?.value ?? null;
   const atl = latestOf(rows, 'atl', today)?.value ?? null;
   const lastAct = acts.length ? acts[acts.length - 1] : null;
-  const sinceAct = lastAct ? (dayMs(today) - dayMs(lastAct.start_time_local.slice(0, 10))) / DAY : null;
+  const sinceAct = lastAct ? daysAgo(lastAct.start_time_local.slice(0, 10), today) : null;
   let recovery: number | null = null;
   let recoveryText = 'No training load yet';
   if (ctl != null && atl != null && ctl > 0) {
@@ -202,13 +203,13 @@ export function trainingReadiness(inputs: MetricInputs, asOf?: string): Readines
   const acuteText = r == null ? (acute ? 'Needs four weeks of training' : 'No activities yet') : `ratio ${r.toFixed(2)} · ${r < 0.8 ? 'low' : r <= 1.4 ? 'optimal' : r < 2 ? 'high' : 'very high'}`;
 
   // 5. sleep history: the last three nights
-  const nights = rows.filter((x) => dayMs(x.date) > todayMs - 3 * DAY && num(x.sleep_s)).map((x) => x.sleep_s as number);
+  const nights = rows.filter((x) => daysAgo(x.date, today) < 3 && num(x.sleep_s)).map((x) => x.sleep_s as number);
   const avgNight = mean(nights);
   const historyScore = avgNight == null ? null : lerp(avgNight / 3600, 4, 0, 7.5, 100);
   const historyText = avgNight == null ? 'No sleep in the last 3 nights' : `${nights.length}-night average ${hours(avgNight)}`;
 
   // 6. stress history: intervals.icu's own 1–4 rating when the athlete fills it in (Garmin's 0–100 stress never arrives)
-  const stress = rows.filter((x) => dayMs(x.date) > todayMs - 3 * DAY && num(x.stress)).map((x) => x.stress as number);
+  const stress = rows.filter((x) => daysAgo(x.date, today) < 3 && num(x.stress)).map((x) => x.stress as number);
   const avgStress = mean(stress);
   const stressScore = avgStress == null ? null : lerp(avgStress, 1, 100, 4, 20);
   const stressText = avgStress == null ? 'Not rated' : `${avgStress.toFixed(1)} of 4 over ${stress.length} day${stress.length === 1 ? '' : 's'}`;
@@ -302,8 +303,8 @@ export function trainingStatus(inputs: MetricInputs, asOf?: string): Status {
   const form = ctl != null && atl != null ? ctl - atl : null;
   const rampRate = latestOf(rows, 'ramp_rate', today)?.value ?? null;
 
-  // the CTL four weeks ago: the closest reading in the week around that day
-  const then = rows.filter((r) => num(r.ctl) && Math.abs(dayMs(r.date) - (todayMs - 28 * DAY)) <= 4 * DAY).map((r) => r.ctl as number);
+  // the CTL four weeks ago: the readings in the week around that day
+  const then = rows.filter((r) => num(r.ctl) && Math.abs(daysAgo(r.date, today) - 28) <= 4).map((r) => r.ctl as number);
   const ctlThen = mean(then);
   let loadTrend: Trend = 'unknown';
   if (ctl != null && ctlThen != null) {
@@ -314,16 +315,16 @@ export function trainingStatus(inputs: MetricInputs, asOf?: string): Status {
   }
 
   const vo2Now = latestOf(rows, 'vo2max', today);
-  const vo2Then = mean(rows.filter((r) => num(r.vo2max) && dayMs(r.date) <= todayMs - 21 * DAY && dayMs(r.date) > todayMs - 42 * DAY).map((r) => r.vo2max as number));
+  const vo2Then = mean(rows.filter((r) => { const d = daysAgo(r.date, today); return num(r.vo2max) && d >= 21 && d < 42; }).map((r) => r.vo2max as number));
   const vo2Change = vo2Now && vo2Then != null ? Math.round((vo2Now.value - vo2Then) * 10) / 10 : null;
   const vo2Trend: Trend = vo2Change == null ? 'unknown' : vo2Change >= 0.5 ? 'rising' : vo2Change <= -0.5 ? 'falling' : 'steady';
 
   const load = acwr(acts);
   const at = <T extends { x: number }>(ps: T[]) => ps.filter((p) => p.x <= todayMs).pop() ?? null;
   const loadRatio = at(load.ratio)?.y ?? null;
-  const acuteLoad = acts.filter((a) => dayMs(a.start_time_local.slice(0, 10)) > todayMs - 7 * DAY).reduce((s, a) => s + (a.load ?? 0), 0);
-  const recent14 = acts.filter((a) => dayMs(a.start_time_local.slice(0, 10)) > todayMs - 14 * DAY);
-  const sinceLast = acts.length ? (todayMs - dayMs(acts[acts.length - 1].start_time_local.slice(0, 10))) / DAY : null;
+  const acuteLoad = acts.filter((a) => daysAgo(a.start_time_local.slice(0, 10), today) < 7).reduce((s, a) => s + (a.load ?? 0), 0);
+  const recent14 = acts.filter((a) => daysAgo(a.start_time_local.slice(0, 10), today) < 14);
+  const sinceLast = acts.length ? daysAgo(acts[acts.length - 1].start_time_local.slice(0, 10), today) : null;
   const hrv = hrvStatus({ ...inputs, wellness: rows }, today);
 
   const base = { loadTrend, vo2Trend, vo2Change, acuteLoad: Math.round(acuteLoad), loadRatio, ctl, atl, form, rampRate };
@@ -375,6 +376,5 @@ export function readinessSeries(inputs: MetricInputs, days: number): { date: str
 
 /** Whether there is a run in the window, for pages that want to say "no runs this week". */
 export function runsIn(inputs: MetricInputs, days: number): number {
-  const cutoff = dayMs(inputs.today) - days * DAY;
-  return inputs.activities.filter((a) => isRun(a.type) && dayMs(a.start_time_local.slice(0, 10)) > cutoff).length;
+  return inputs.activities.filter((a) => isRun(a.type) && daysAgo(a.start_time_local.slice(0, 10), inputs.today) < days).length;
 }

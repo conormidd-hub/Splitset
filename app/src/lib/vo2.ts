@@ -136,10 +136,10 @@ export function raceTimes(vdot: number): { label: string; distanceM: number; pb:
 
 // ---------------------------------------------------------------- trend
 
+/** Mean of the readings between `fromDays` and `toDays` ago, counted in calendar days. */
 function meanAround(rows: WellnessDay[], fromDays: number, toDays: number, today: string): number | null {
-  const cutoffHi = dayMs(today) - fromDays * 86_400_000;
-  const cutoffLo = dayMs(today) - toDays * 86_400_000;
-  const vals = rows.filter((r) => typeof r.vo2max === 'number' && dayMs(r.date) <= cutoffHi && dayMs(r.date) > cutoffLo).map((r) => r.vo2max as number);
+  const daysAgo = (date: string) => Math.round((dayMs(today) - dayMs(date)) / 86_400_000);
+  const vals = rows.filter((r) => { const d = daysAgo(r.date); return typeof r.vo2max === 'number' && d >= fromDays && d < toDays; }).map((r) => r.vo2max as number);
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 }
 

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { keys } from './keys';
 import { useUserId } from '@/lib/session';
+import { connectProgressKey, storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/types/database';
 
@@ -71,7 +72,11 @@ export function useDisconnectIntervals() {
       const { error } = await supabase.rpc('disconnect_intervals');
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.connection(uid) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.connection(uid) });
+      // the connect wizard must not come back saying "connected" after this
+      storage.removeItem(connectProgressKey(uid)).catch(() => {});
+    },
   });
 }
 
@@ -202,7 +207,10 @@ export function useVerifyConnection() {
           return;
         }
         if (Date.now() - began > VERIFY_GIVE_UP_MS) {
-          set({ state: 'failed', message: 'intervals.icu is taking too long to answer. Your key is saved; try the check again in a minute.' });
+          // a pasted key is only stored once it checks out, so say so
+          set({ state: 'failed', message: key
+            ? 'intervals.icu is taking too long to answer. Nothing is saved yet; try Check and connect again in a minute.'
+            : 'intervals.icu is taking too long to answer. Your key is still saved; try the check again in a minute.' });
           return;
         }
       }

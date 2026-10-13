@@ -421,10 +421,14 @@ export function dailyValues(id: MetricId, inputs: MetricInputs): { date: string;
   if (id === 'form') {
     return inputs.wellness.map((r) => ({ date: r.date, value: num(r.ctl) && num(r.atl) ? r.ctl - r.atl : null }));
   }
-  if (id === 'acute_load' || id === 'load_ratio') {
-    const load = acwr(inputs.activities);
-    const pts = id === 'acute_load' ? load.acute.map((p) => ({ x: p.x, y: p.y == null ? null : p.y * 7 })) : load.ratio;
-    return pts.map((p) => ({ date: isoDate(new Date(p.x)), value: p.y }));
+  if (id === 'acute_load') {
+    // the last seven days' load added up, day by day; days before the first activity count as zero,
+    // so a new account's first week reads as the sum it is rather than a mean scaled up
+    const load = acwr(inputs.activities).load;
+    return load.map((p, i) => ({ date: isoDate(new Date(p.x)), value: load.slice(Math.max(0, i - 6), i + 1).reduce((s, q) => s + (q.y ?? 0), 0) }));
+  }
+  if (id === 'load_ratio') {
+    return acwr(inputs.activities).ratio.map((p) => ({ date: isoDate(new Date(p.x)), value: p.y }));
   }
   const d = DAILY[id];
   if (!d) return [];
@@ -454,8 +458,8 @@ function trailingMean(values: { date: string; value: number | null }[], date: st
 }
 
 function sparkOf(values: { date: string; value: number | null }[], today: string, days = 14): Point[] {
-  const cutoff = dayMs(today) - days * DAY;
-  return values.filter((v) => dayMs(v.date) > cutoff).map((v) => ({ x: dayMs(v.date), y: v.value }));
+  const from = isoDate(new Date(dayMs(today) - (days - 1) * DAY));
+  return values.filter((v) => v.date >= from && v.date <= today).map((v) => ({ x: dayMs(v.date), y: v.value }));
 }
 
 /** Per-week sums for the activity metrics, oldest first, one entry per week that had anything. */

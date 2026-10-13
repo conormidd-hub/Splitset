@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, Segmented } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
+import { NumberInput } from '@/components/ui/NumberInput';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
@@ -18,6 +19,11 @@ import { useTheme, type ThemeChoice } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 const STATUS_TONE = { active: 'pos', paused: 'mut', auth_failed: 'neg', disconnected: 'mut' } as const;
+
+type Sex = 'male' | 'female' | 'none';
+const THIS_YEAR = new Date().getFullYear();
+
+const sexOf = (v: string | null | undefined): Sex => (v === 'male' || v === 'female' ? v : 'none');
 
 export default function Settings() {
   const { session, signOut } = useSession();
@@ -30,15 +36,31 @@ export default function Settings() {
   // Inputs show the saved value until the user edits them; edits live here until saved.
   const [nameEdit, setNameEdit] = useState<string | null>(null);
   const [tzEdit, setTzEdit] = useState<string | null>(null);
+  const [yearEdit, setYearEdit] = useState<number | null | undefined>(undefined);
+  const [sexEdit, setSexEdit] = useState<Sex | undefined>(undefined);
   const name = nameEdit ?? profile.data?.display_name ?? '';
   const tz = tzEdit ?? profile.data?.timezone ?? '';
-  const dirty = !!profile.data && (name.trim() !== profile.data.display_name || tz.trim() !== profile.data.timezone);
+  const year = yearEdit === undefined ? profile.data?.birth_year ?? null : yearEdit;
+  const sex = sexEdit ?? sexOf(profile.data?.sex);
+  const yearBad = year != null && (year < 1900 || year > THIS_YEAR);
+  const dirty = !!profile.data && (
+    name.trim() !== profile.data.display_name
+    || tz.trim() !== profile.data.timezone
+    || year !== (profile.data.birth_year ?? null)
+    || sex !== sexOf(profile.data.sex)
+  );
   const save = () =>
     update.mutate(
-      { display_name: name.trim() || profile.data?.display_name, timezone: tz.trim() || 'UTC' },
-      { onSuccess: () => { setNameEdit(null); setTzEdit(null); } },
+      {
+        display_name: name.trim() || profile.data?.display_name,
+        timezone: tz.trim() || 'UTC',
+        birth_year: year,
+        sex: sex === 'none' ? null : sex,
+      },
+      { onSuccess: () => { setNameEdit(null); setTzEdit(null); setYearEdit(undefined); setSexEdit(undefined); } },
     );
   const conn = connection.data;
+  const connected = !!conn && conn.status !== 'disconnected';
 
   const onDelete = async () => {
     const ok = await confirm('Delete account', 'This removes your account and every activity, wellness day, workout and plan session. It cannot be undone.', 'Delete everything', true);
@@ -48,19 +70,43 @@ export default function Settings() {
   return (
     <Screen title="Settings" subtitle={session?.user.email ?? ''}>
       <Card title="Data sources">
-        <ListRow
-          first
-          title="intervals.icu"
-          subtitle={conn ? `Athlete ${conn.athlete_id}` : 'Not connected'}
-          badge={conn ? <Badge label={conn.status.replace('_', ' ')} tone={STATUS_TONE[conn.status as keyof typeof STATUS_TONE] ?? 'mut'} /> : undefined}
-          onPress={() => router.push('/settings/connect')}
-        />
+        {connected && conn ? (
+          <ListRow
+            first
+            title="intervals.icu"
+            subtitle={`Athlete ${conn.athlete_id}`}
+            badge={<Badge label={conn.status.replace('_', ' ')} tone={STATUS_TONE[conn.status as keyof typeof STATUS_TONE] ?? 'mut'} />}
+            onPress={() => router.push('/settings/connect')}
+          />
+        ) : (
+          <ListRow first title="Connect your watch" subtitle="intervals.icu · not connected" onPress={() => router.push('/settings/connect')} />
+        )}
+      </Card>
+
+      <Card title="Home screen">
+        <ListRow first title="Edit In focus and At a glance" subtitle="Choose, reorder and remove the tiles on Today" onPress={() => router.push({ pathname: '/', params: { edit: '1' } })} />
+        <ListRow title="Run the setup again" subtitle="The step-by-step connect guide" onPress={() => router.push('/welcome')} />
       </Card>
 
       <Card title="Profile">
         <View style={{ gap: space.md }}>
           <TextField label="Display name" value={name} onChangeText={setNameEdit} autoCapitalize="words" />
           <TextField label="Time zone" value={tz} onChangeText={setTzEdit} autoCapitalize="none" hint="An IANA name such as Australia/Melbourne." />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
+            <View style={{ flex: 1 }}>
+              <T variant="label" tone="mut">Birth year</T>
+              <T variant="small" tone={yearBad ? 'neg' : 'mut'}>{yearBad ? 'A four-digit year, please.' : 'For the fitness level on the VO2 max page.'}</T>
+            </View>
+            <NumberInput value={year} onChange={setYearEdit} integer width={96} placeholder="1990" />
+          </View>
+          <View>
+            <T variant="label" tone="mut" style={{ marginBottom: space.xs }}>Sex</T>
+            <Segmented<Sex>
+              options={[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'none', label: 'Not set' }]}
+              value={sex}
+              onChange={setSexEdit}
+            />
+          </View>
           <View>
             <T variant="label" tone="mut" style={{ marginBottom: space.xs }}>Units</T>
             <Segmented
@@ -70,7 +116,7 @@ export default function Settings() {
             />
           </View>
           {dirty ? (
-            <Button title="Save" small loading={update.isPending} onPress={save} />
+            <Button title="Save" small loading={update.isPending} disabled={yearBad} onPress={save} />
           ) : null}
           <ErrorBanner message={update.error ? errorMessage(update.error) : null} />
         </View>
