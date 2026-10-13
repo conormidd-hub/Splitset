@@ -3,13 +3,13 @@ import { View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 import { T } from '@/components/ui/T';
-import { HEAT_WORDS, heatExtent, heatTier, type HeatTier } from '@/lib/streaks';
-import { heat, space } from '@/theme/tokens';
+import { heatExtent, heatTier, type HeatTier } from '@/lib/streaks';
+import { heat } from '@/theme/tokens';
 
 type Props = {
   /** Sessions in the last seven days. */
   count: number;
-  /** The one-line caption under the flames; off for a bare line. */
+  /** The small "3/7 streak heat" under the flames; off for a bare line. */
   caption?: boolean;
   style?: ViewStyle;
 };
@@ -51,7 +51,7 @@ export function StreakHeat({ count, caption = true, style }: Props) {
   const litWidth = burning ? Math.min(width, (burning - 1) * SLOT + FLAME_W) : 0;
 
   return (
-    <View style={[{ gap: space.xs }, style]} accessibilityRole="image" accessibilityLabel={`Streak heat: ${count} workout${count === 1 ? '' : 's'} in the last seven days. ${HEAT_WORDS[tier]}`}>
+    <View style={[{ gap: 2 }, style]} accessibilityRole="image" accessibilityLabel={`Streak heat ${Math.min(7, count)} out of 7: ${count} workout${count === 1 ? '' : 's'} in the last seven days`}>
       <View onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={{ height: FLAMES_H + LINE_H }}>
         <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: LINE_H, borderRadius: 1, backgroundColor: heat.cold, opacity: 0.3 }} />
         {litWidth > 0 ? (
@@ -62,8 +62,8 @@ export function StreakHeat({ count, caption = true, style }: Props) {
         ))}
       </View>
       {caption ? (
-        <T variant="tiny" tone="mut">
-          Streak heat · {count} workout{count === 1 ? '' : 's'} in 7 days · {HEAT_WORDS[tier]}
+        <T variant="tiny" tone="mut" align="right" style={{ fontVariant: ['tabular-nums'] }}>
+          {Math.min(7, count)}/7 streak heat
         </T>
       ) : null}
     </View>

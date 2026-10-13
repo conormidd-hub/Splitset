@@ -15,8 +15,8 @@ import { useWellness } from '@/api/wellness';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
 import { InFocusCard } from '@/components/home/InFocusCard';
+import { StreakButton } from '@/components/home/StreakButton';
 import { StreakHeat } from '@/components/home/StreakHeat';
-import { StreakRow } from '@/components/home/StreakRow';
 import { PbButton } from '@/components/pbs/PbButton';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
@@ -170,13 +170,18 @@ export default function Today() {
     <Screen
       title={name ? `${greeting()}, ${name}` : greeting()}
       subtitle={longDate(new Date().toISOString())}
-      right={<PbButton />}
+      right={
+        <View style={{ alignItems: 'flex-end', gap: space.xs }}>
+          <PbButton />
+          {training.isSuccess ? <StreakButton streak={streak} /> : null}
+        </View>
+      }
       refreshing={refreshing}
       onRefresh={refresh}
       scrollEnabled={!dragging}
       scrollRef={scrollRef}
       onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
-      {training.isSuccess ? <StreakHeat count={heatCount} /> : null}
+      {training.isSuccess ? <StreakHeat count={heatCount} style={{ marginTop: -space.sm }} /> : null}
       {connection.isSuccess && !conn ? (
         <Card tone="accent" title="Connect your watch" subtitle="Two minutes: an intervals.icu account, your Garmin, and one key." onPress={() => router.push('/settings/connect')}>
           <Button title="Connect" small onPress={() => router.push('/settings/connect')} />
@@ -285,8 +290,6 @@ export default function Today() {
       </Card>
 
       <TrophyCabinet units={units} />
-
-      {training.isSuccess ? <StreakRow streak={streak} last7={heatCount} /> : null}
 
       <SyncNowBar />
 
