@@ -10,10 +10,13 @@ import { useWorkouts } from '@/api/lifting';
 import { useRunPbs } from '@/api/pbs';
 import { planTypeLabel, usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
+import { useTrainingSessions } from '@/api/streaks';
 import { useWellness } from '@/api/wellness';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
 import { InFocusCard } from '@/components/home/InFocusCard';
+import { StreakHeat } from '@/components/home/StreakHeat';
+import { StreakRow } from '@/components/home/StreakRow';
 import { PbButton } from '@/components/pbs/PbButton';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
@@ -27,6 +30,7 @@ import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
 import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
+import { sessionsFrom, sessionsLast7, weekStreak } from '@/lib/streaks';
 import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { space } from '@/theme/tokens';
@@ -54,6 +58,7 @@ export default function Today() {
   const wellness = useWellness(90);
   const workouts = useWorkouts(60);
   const runPbs = useRunPbs();
+  const training = useTrainingSessions();
   const today = todayIso();
   const plan = usePlanRange(today, today);
   const active = useActiveWorkout((s) => s.workout);
@@ -71,11 +76,20 @@ export default function Today() {
     today,
   }), [wellness.data, recent.data, workouts.data, runPbs.data, profile.data, units, today]);
 
+  // the streak and the heat line read two years of workouts, lightly
+  const sessions = useMemo(
+    () => sessionsFrom(training.data?.activities ?? [], training.data?.workouts ?? [], units),
+    [training.data, units],
+  );
+  const heatCount = sessionsLast7(sessions, today);
+  const streak = weekStreak(sessions, today, training.data?.oldest);
+
   const refreshing = recent.isFetching || wellness.isFetching;
   const refresh = () => {
     recent.refetch();
     wellness.refetch();
     workouts.refetch();
+    training.refetch();
     qc.invalidateQueries({ queryKey: ['pbs'] });
     syncRuns.refetch();
     connection.refetch();
@@ -162,6 +176,7 @@ export default function Today() {
       scrollEnabled={!dragging}
       scrollRef={scrollRef}
       onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
+      {training.isSuccess ? <StreakHeat count={heatCount} /> : null}
       {connection.isSuccess && !conn ? (
         <Card tone="accent" title="Connect your watch" subtitle="Two minutes: an intervals.icu account, your Garmin, and one key." onPress={() => router.push('/settings/connect')}>
           <Button title="Connect" small onPress={() => router.push('/settings/connect')} />
@@ -270,6 +285,8 @@ export default function Today() {
       </Card>
 
       <TrophyCabinet units={units} />
+
+      {training.isSuccess ? <StreakRow streak={streak} last7={heatCount} /> : null}
 
       <SyncNowBar />
 

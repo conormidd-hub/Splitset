@@ -149,6 +149,19 @@ greyed out and explained rather than hidden. **Change** on the In focus card pic
 change saves to `profiles.home_layout` (and a copy on the device), so every phone shows the same
 home.
 
+### Streaks
+
+Two Strava-style nudges on Today. Under the trophy cabinet, a flame with the number of weeks in a
+row (Monday to Sunday) with at least one workout: any activity the watch recorded plus any gym
+workout logged in the app that the watch did not also record. This week counts as soon as it has
+one; an empty current week does not break the streak until it ends. Tap it for a calendar, month
+by month, with the first workout's icon on each day and "+2" when there were more; tap a day for
+its workouts. Under the greeting, **streak heat**: a thin line of fire in the night green that
+burns by the last seven days. One workout lights a seventh of it, each one more lights more and
+burns hotter (two a little, three or four well, five or six hot), seven and the whole line is
+ablaze; nothing in seven days and it goes cold. The flames flicker on the UI thread and hold
+still when the system asks for reduced motion.
+
 ### Metric pages
 
 Tap any tile for its page: the latest value with its verdict, then **Day** (a timeline of the last

@@ -73,6 +73,16 @@ export const palettes: Record<ThemeName, Palette> = {
   },
 };
 
+/**
+ * The streak heat line burns in the night palette's green whatever the theme: it is a signature
+ * mark, not a surface, and the same flame in both modes is the point.
+ */
+export const heat = {
+  flame: palettes.night.accent,
+  core: '#d6ffe9',
+  cold: palettes.night.mut,
+} as const;
+
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const radius = { sm: 10, md: 14, lg: 18, pill: 999 } as const;
 export const fontSize = { display: 34, h1: 24, h2: 18, h3: 16, body: 15, small: 13, tiny: 11 } as const;

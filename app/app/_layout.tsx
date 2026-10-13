@@ -77,6 +77,8 @@ function RootNavigator() {
           <Stack.Screen name="pbs" options={{ headerShown: true, title: 'Personal bests', ...header }} />
           {/* one metric, opened from an In focus or At a glance tile; the page sets its own title */}
           <Stack.Screen name="metric/[id]" options={{ headerShown: true, title: '', ...header }} />
+          {/* the week streak's calendar, from the flame on Today */}
+          <Stack.Screen name="streak" options={{ headerShown: true, title: 'Training streak', ...header }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />
