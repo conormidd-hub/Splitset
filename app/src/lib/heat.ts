@@ -1,10 +1,11 @@
 import type { RunRoute } from '../api/activities';
+import { palettes, type ThemeName } from '../theme/tokens.ts';
 import { bboxOf, decodeRoute, mercX, mercY, type Bbox, type MapView } from './geo.ts';
 import { groupRoutes, type RouteGroup } from './routeSimilarity.ts';
 
 /**
  * The heat map's data model: every run with a trace, weighted by how often the user runs that
- * route. Weight 0 is a route run once, 1 the most-run route; the colour ramp below maps it.
+ * route. Weight 0 is a route run once, 1 the most-run route; the theme's ramp below maps it.
  */
 
 export type DecodedRun = RunRoute & {
@@ -14,7 +15,13 @@ export type DecodedRun = RunRoute & {
   mx: Float64Array;
   my: Float64Array;
 };
-export type HeatRoute = DecodedRun & { count: number; weight: number; group: string };
+export type HeatRoute = DecodedRun & {
+  count: number;
+  weight: number;
+  group: string;
+  /** The route's most typical run: the trace the heat map draws for the whole route. */
+  typical: boolean;
+};
 
 /** Runs with a usable trace, decoded once. */
 export function decodeRuns(routes: RunRoute[] | undefined): DecodedRun[] {
@@ -61,7 +68,13 @@ export function weightRoutesWithGroups(runs: DecodedRun[]): { routes: HeatRoute[
     .map((r) => {
       const g = groupOf.get(r.activity_id);
       const c = g?.count ?? 1;
-      return { ...r, count: c, weight: scale > 0 ? Math.log(c) / scale : 0, group: g?.key ?? r.activity_id };
+      return {
+        ...r,
+        count: c,
+        weight: scale > 0 ? Math.log(c) / scale : 0,
+        group: g?.key ?? r.activity_id,
+        typical: !g || g.representative.id === r.activity_id,
+      };
     })
     .sort((a, b) => a.weight - b.weight);
   return { routes, groups };
@@ -69,6 +82,21 @@ export function weightRoutesWithGroups(runs: DecodedRun[]): { routes: HeatRoute[
 
 export function weightRoutes(runs: DecodedRun[]): HeatRoute[] {
   return weightRoutesWithGroups(runs).routes;
+}
+
+/**
+ * One trace per route, for drawing: the route's most typical run when it is in the list, else
+ * whichever of its runs is (a date filter can drop the typical one). Stacking every lap of a
+ * route only smears GPS drift into a ragged band, and the colour already says how often it is
+ * run. Order is kept, so the least-run routes still go down first.
+ */
+export function oneTracePerRoute(routes: HeatRoute[]): HeatRoute[] {
+  const pick = new Map<string, HeatRoute>();
+  for (const r of routes) {
+    const cur = pick.get(r.group);
+    if (!cur || (r.typical && !cur.typical)) pick.set(r.group, r);
+  }
+  return routes.filter((r) => pick.get(r.group) === r);
 }
 
 /** Projects a run's points with the camera a tap was measured against; see nearestRoute. */
@@ -104,27 +132,50 @@ export function nearestRoute(routes: HeatRoute[], project: Projector, view: MapV
   return best;
 }
 
-/** Cool to hot: a route run once is blue, the most-run route red. Fixed hex so it reads on light and dark tiles. */
-export const HEAT_RAMP = ['#3b82f6', '#22c55e', '#eab308', '#f97316', '#dc2626'];
+/**
+ * The theme's accent by how often a route is run: faded for a once-off route, the accent itself
+ * halfway up, then a deep, intense shade for the staples. The fade is opacity (see heatOpacity);
+ * the colour runs once → mid → often. Light mode holds the purple until halfway; dark mode starts
+ * from a pale mint so the scale walks the whole green family, ending dark but saturated enough to
+ * stay clear on the dark map.
+ */
+export type HeatRamp = { once: string; mid: string; often: string };
+export const HEAT_RAMPS: Record<ThemeName, HeatRamp> = {
+  race: { once: palettes.race.accent, mid: palettes.race.accent, often: '#2e1c80' },
+  night: { once: '#9eeecb', mid: palettes.night.accent, often: '#009452' },
+};
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** The ramp colour for a weight in [0, 1]. */
-export function heatColour(weight: number): string {
-  const t = Math.min(1, Math.max(0, weight)) * (HEAT_RAMP.length - 1);
-  const i = Math.min(HEAT_RAMP.length - 2, Math.floor(t));
-  const f = t - i;
-  const a = hexToRgb(HEAT_RAMP[i]), b = hexToRgb(HEAT_RAMP[i + 1]);
+const clamp01 = (w: number) => Math.min(1, Math.max(0, w));
+
+/** The ramp colour for a weight in [0, 1]: once to mid over the first half, mid to often over the second. */
+export function heatColour(weight: number, ramp: HeatRamp): string {
+  const w = clamp01(weight);
+  const [from, to, f] = w <= 0.5 ? [ramp.once, ramp.mid, 2 * w] : [ramp.mid, ramp.often, 2 * w - 1];
+  const a = hexToRgb(from), b = hexToRgb(to);
   const c = a.map((v, k) => Math.round(v + (b[k] - v) * f));
   return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** Faint for a once-off route, solid for a staple. */
+/** Faded right back for a once-off route, solid from halfway up. */
 export function heatOpacity(weight: number): number {
-  return 0.35 + 0.55 * Math.min(1, Math.max(0, weight));
+  return Math.min(1, 0.25 + 1.5 * clamp01(weight));
+}
+
+/**
+ * Thin lines that thin further as the map zooms out, the way a road map draws its streets: from
+ * zoom 10 (a whole city) to 16 (street level) a once-off route goes 0.6 to 1 px and a staple
+ * 1 to 1.75 px, so a zoomed-out city of runs stays a fine web instead of a tangle.
+ */
+export function heatWidth(weight: number, zoom: number): number {
+  const k = clamp01((zoom - 10) / 6);
+  const once = 0.6 + 0.4 * k;
+  const staple = 1 + 0.75 * k;
+  return once + (staple - once) * clamp01(weight);
 }
 
 /** The run's box grown by its own width and height on every side, so the run sits in the middle third. */

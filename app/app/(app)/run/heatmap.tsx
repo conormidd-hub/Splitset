@@ -224,8 +224,8 @@ export default function Maps() {
               {highlight ? <Button title="Clear" variant="ghost" small onPress={clearHighlight} /> : null}
             </View>
             <TileMap bounds={highlightBox ?? focusBox ?? cluster.fit} view={view} onViewChange={setView} interactive>
-              {(project, size) => (
-                <HeatLayer routes={routes} project={project} size={size} highlight={highlightPts} palette={palette} />
+              {(project, size, cam) => (
+                <HeatLayer routes={routes} project={project} size={size} zoom={cam.zoom} highlight={highlightPts} palette={palette} />
               )}
             </TileMap>
             {highlight ? (
