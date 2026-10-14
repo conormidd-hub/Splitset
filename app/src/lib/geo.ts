@@ -153,6 +153,29 @@ export function pathD(points: Pt[], minStep = 1.5): string {
   return out.join(' ');
 }
 
+/**
+ * Like pathD, but drawn as a smooth curve: each kept point becomes the control point of a
+ * quadratic from the midpoint before it to the midpoint after it, which irons out GPS zigzag
+ * without moving the line off the road. For thin lines, where every wobble shows.
+ */
+export function smoothPathD(points: Pt[], minStep = 2.5): string {
+  if (points.length < 2) return '';
+  const kept: Pt[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i], last = kept[kept.length - 1];
+    if (i < points.length - 1 && Math.abs(p.x - last.x) < minStep && Math.abs(p.y - last.y) < minStep) continue;
+    kept.push(p);
+  }
+  const f = (n: number) => n.toFixed(1);
+  if (kept.length === 2) return `M${f(kept[0].x)} ${f(kept[0].y)} L${f(kept[1].x)} ${f(kept[1].y)}`;
+  const mid = (a: Pt, b: Pt) => `${f((a.x + b.x) / 2)} ${f((a.y + b.y) / 2)}`;
+  const out: string[] = [`M${f(kept[0].x)} ${f(kept[0].y)}`, `L${mid(kept[0], kept[1])}`];
+  for (let i = 1; i < kept.length - 1; i++) out.push(`Q${f(kept[i].x)} ${f(kept[i].y)} ${mid(kept[i], kept[i + 1])}`);
+  const end = kept[kept.length - 1];
+  out.push(`L${f(end.x)} ${f(end.y)}`);
+  return out.join(' ');
+}
+
 // ---------------------------------------------------------------- basemap tiles
 
 /**

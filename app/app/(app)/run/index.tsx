@@ -128,8 +128,8 @@ export default function RunHome() {
           <ErrorBanner message={errorMessage(routesQ.error)} />
         ) : bounds ? (
           <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
-            {(project, size) => (
-              <HeatLayer routes={heat} project={project} size={size} highlight={highlight} palette={palette} />
+            {(project, size, cam) => (
+              <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
             )}
           </TileMap>
         ) : (
