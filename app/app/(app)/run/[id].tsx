@@ -1,10 +1,12 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import { isRun, typeLabel, useActivity } from '@/api/activities';
 import { useUnits } from '@/api/profile';
-import { LineChart } from '@/components/charts/LineChart';
-import { RouteSvg } from '@/components/map/RouteSvg';
+import { useRunEfforts, useTrack } from '@/api/segments';
+import { RouteCard } from '@/components/run/RouteCard';
+import { SegmentsCard } from '@/components/run/SegmentsCard';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
@@ -29,28 +31,21 @@ export default function ActivityDetail() {
   const { palette } = useTheme();
   const q = useActivity(id);
   const a = q.data;
+  const run = isRun(a?.type);
+  // The track is the cached decode of activity_details that the segment scans reuse.
+  const trackQ = useTrack(id);
+  const effortsQ = useRunEfforts(run ? id : undefined);
+  // A finger scrubbing a profile chart freezes the page scroll until it lifts.
+  const [scrubbing, setScrubbing] = useState(false);
 
   if (q.isLoading) return <Screen><Loading label="Loading activity" /></Screen>;
   if (q.error || !a) return <Screen><ErrorBanner message={errorMessage(q.error) || 'Activity not found'} /></Screen>;
 
-  const run = isRun(a.type);
   const pace = secPerKm(a.distance_m, a.moving_time_s);
   const details = a.activity_details;
   const splits = (details?.splits as Split[] | null) ?? [];
-  const efforts = (details?.best_efforts as Record<string, number> | null) ?? null;
-  const raw = details?.samples as { t: number[]; d: number[]; hr: (number | null)[] | null; alt: (number | null)[] | null } | null;
-  const samples = raw && raw.t.length > 2 ? (() => {
-    const hr = raw.t.map((t, i) => ({ x: t * 1000, y: raw.hr ? raw.hr[i] : null }));
-    const pace = raw.t.map((t, i) => {
-      if (i === 0) return { x: 0, y: null };
-      const dd = raw.d[i] - raw.d[i - 1];
-      const dt = t - raw.t[i - 1];
-      const secPerKmHere = dd > 0 ? dt / (dd / 1000) : null;
-      const shown = secPerKmHere == null || secPerKmHere > 900 ? null : (units === 'imperial' ? secPerKmHere * 1.609344 : secPerKmHere) / 60;
-      return { x: t * 1000, y: shown };
-    });
-    return { hr, pace };
-  })() : null;
+  const bestEfforts = (details?.best_efforts as Record<string, number> | null) ?? null;
+  const segmentEfforts = effortsQ.data ?? [];
   const zoneTimes = a.hr_zone_times ?? [];
   const zoneTotal = zoneTimes.reduce((s, v) => s + v, 0);
   const zoneColours = [palette.mut, palette.blue, palette.aqua, palette.amber, palette.orange, palette.neg, palette.neg];
@@ -58,7 +53,7 @@ export default function ActivityDetail() {
   return (
     <>
       <Stack.Screen options={{ title: typeLabel(a.type) }} />
-      <Screen>
+      <Screen scrollEnabled={!scrubbing}>
         <View style={{ gap: space.xs }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
             <T variant="h1" style={{ flexShrink: 1 }}>{a.name ?? typeLabel(a.type)}</T>
@@ -66,6 +61,24 @@ export default function ActivityDetail() {
           </View>
           <T tone="mut">{longDate(a.start_time_local)} · {shortTime(a.start_time_local)}{a.device ? ` · ${a.device}` : ''}</T>
         </View>
+
+        {trackQ.isLoading ? (
+          <Card title="Route"><Loading label="Loading route" /></Card>
+        ) : trackQ.error ? (
+          <Card title="Route"><ErrorBanner message={errorMessage(trackQ.error)} /></Card>
+        ) : trackQ.data ? (
+          <RouteCard
+            activityId={id}
+            track={trackQ.data}
+            units={units}
+            hrZones={a.hr_zones}
+            efforts={segmentEfforts}
+            canCreateSegment={run}
+            onScrubbingChange={setScrubbing}
+          />
+        ) : null}
+
+        {run ? <SegmentsCard activityId={id} units={units} trackReady={!trackQ.isLoading} /> : null}
 
         <Card>
           <Grid>
@@ -129,35 +142,15 @@ export default function ActivityDetail() {
           </Card>
         ) : null}
 
-        {efforts && Object.keys(efforts).length ? (
+        {bestEfforts && Object.keys(bestEfforts).length ? (
           <Card title="Best efforts" subtitle="Fastest stretch inside this run">
             <Grid>
-              {Object.entries(efforts)
+              {Object.entries(bestEfforts)
                 .sort((x, y) => Number(x[0]) - Number(y[0]))
                 .map(([m, s]) => (
                   <StatTile key={m} label={EFFORT_LABELS[m] ?? `${m} m`} value={formatDuration(s)} sub={formatPace(s / (Number(m) / 1000), units)} />
                 ))}
             </Grid>
-          </Card>
-        ) : null}
-
-        {samples ? (
-          <Card title="Heart rate and pace" subtitle="Every 10 seconds">
-            <LineChart
-              height={180}
-              series={[
-                { name: 'bpm', color: palette.neg, points: samples.hr },
-                { name: units === 'imperial' ? 'min/mi' : 'min/km', color: palette.accent, points: samples.pace, dashed: true },
-              ]}
-              xFormat={(ms) => `${Math.round(ms / 60000)}m`}
-              yFormat={(v) => `${Math.round(v)}`}
-            />
-          </Card>
-        ) : null}
-
-        {details?.polyline ? (
-          <Card title="Route">
-            <RouteSvg encoded={details.polyline} />
           </Card>
         ) : null}
       </Screen>

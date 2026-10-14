@@ -259,6 +259,7 @@ export type Database = {
           consecutive_auth_failures: number
           created_at: string
           updated_at: string
+          push_plan: boolean
         }
         Insert: {
           user_id: string
@@ -272,6 +273,7 @@ export type Database = {
           consecutive_auth_failures?: number
           created_at?: string
           updated_at?: string
+          push_plan?: boolean
         }
         Update: {
           user_id?: string
@@ -285,6 +287,7 @@ export type Database = {
           consecutive_auth_failures?: number
           created_at?: string
           updated_at?: string
+          push_plan?: boolean
         }
         Relationships: [
           {
@@ -294,6 +297,28 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      plan_event_deletions: {
+        Row: {
+          id: number
+          user_id: string
+          event_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          event_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          event_id?: string
+          created_at?: string
+        }
+        Relationships: [
         ]
       }
       plan_sessions: {
@@ -578,6 +603,221 @@ export type Database = {
           },
         ]
       }
+      routes: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m: number | null
+          elev_loss_m: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat?: number
+          start_lng?: number
+          bbox?: number[]
+          kind?: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      segment_efforts: {
+        Row: {
+          id: string
+          user_id: string
+          segment_id: string
+          activity_id: string
+          elapsed_s: number
+          start_idx: number
+          end_idx: number
+          started_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          segment_id: string
+          activity_id: string
+          elapsed_s: number
+          start_idx: number
+          end_idx: number
+          started_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          segment_id?: string
+          activity_id?: string
+          elapsed_s?: number
+          start_idx?: number
+          end_idx?: number
+          started_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "segment_efforts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segment_efforts_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segment_efforts_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      segments: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          start_lat: number
+          start_lng: number
+          end_lat: number
+          end_lng: number
+          bbox: number[]
+          source_activity_id: string | null
+          scanned_through: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          start_lat: number
+          start_lng: number
+          end_lat: number
+          end_lng: number
+          bbox: number[]
+          source_activity_id?: string | null
+          scanned_through?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          start_lat?: number
+          start_lng?: number
+          end_lat?: number
+          end_lng?: number
+          bbox?: number[]
+          source_activity_id?: string | null
+          scanned_through?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "segments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segments_source_activity_id_fkey"
+            columns: ["source_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_requests: {
+        Row: {
+          id: number
+          user_id: string
+          kind: string
+          requested_at: string
+          net_request_id: number | null
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          kind: string
+          requested_at?: string
+          net_request_id?: number | null
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          kind?: string
+          requested_at?: string
+          net_request_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_runs: {
         Row: {
           id: number
@@ -596,6 +836,7 @@ export type Database = {
           wellness_days: number
           plan_links: number
           error: string | null
+          plan_pushed: number
         }
         Insert: {
           id?: never
@@ -614,6 +855,7 @@ export type Database = {
           wellness_days?: number
           plan_links?: number
           error?: string | null
+          plan_pushed?: number
         }
         Update: {
           id?: never
@@ -632,6 +874,7 @@ export type Database = {
           wellness_days?: number
           plan_links?: number
           error?: string | null
+          plan_pushed?: number
         }
         Relationships: [
           {
@@ -959,6 +1202,35 @@ export type Database = {
         }
         Relationships: []
       }
+      lift_pbs: {
+        Row: {
+          user_id: string | null
+          exercise_id: string | null
+          metric: string | null
+          period: string | null
+          value: number | null
+          weight_kg: number | null
+          reps: number | null
+          seconds: number | null
+          set_id: string | null
+          workout_id: string | null
+          achieved_at: string | null
+        }
+        Relationships: []
+      }
+      run_pbs: {
+        Row: {
+          user_id: string | null
+          pb: string | null
+          period: string | null
+          distance_m: number | null
+          seconds: number | null
+          activity_id: string | null
+          activity_name: string | null
+          start_time_local: string | null
+        }
+        Relationships: []
+      }
       workout_summaries: {
         Row: {
           id: string | null
@@ -996,6 +1268,18 @@ export type Database = {
       disconnect_intervals: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      request_sync: {
+        Args: {
+          p_kind?: string
+        }
+        Returns: Json
+      }
+      sync_request_status: {
+        Args: {
+          p_request: unknown
+        }
+        Returns: Json
       }
     }
     Enums: Record<string, never>

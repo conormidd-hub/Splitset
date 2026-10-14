@@ -15,6 +15,12 @@ export default function RunStack() {
       }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="[id]" options={{ title: '' }} />
+      <Stack.Screen name="heatmap" options={{ title: 'Maps' }} />
+      <Stack.Screen name="segments/index" options={{ title: 'Segments' }} />
+      <Stack.Screen name="segments/[id]" options={{ title: 'Segment' }} />
+      <Stack.Screen name="routes/index" options={{ title: 'Routes' }} />
+      <Stack.Screen name="routes/new" options={{ title: 'New route' }} />
+      <Stack.Screen name="routes/[id]" options={{ title: 'Route' }} />
     </Stack>
   );
 }

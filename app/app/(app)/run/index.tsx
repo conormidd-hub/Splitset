@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isRun, typeLabel, useActivities, type ActivityFilter, type ActivityListRow } from '@/api/activities';
 import { useUnits } from '@/api/profile';
+import { Button } from '@/components/ui/Button';
 import { Badge, Chip, ChipRow } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
 import { EmptyState, Loading } from '@/components/ui/States';
@@ -56,9 +57,12 @@ export default function RunList() {
         contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}
         ListHeaderComponent={
           <View style={{ gap: space.md, marginBottom: space.md }}>
-            <View>
-              <T variant="label" tone="mut">Activities</T>
-              <T variant="display">Run</T>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md }}>
+              <View>
+                <T variant="label" tone="mut">Activities</T>
+                <T variant="display">Run</T>
+              </View>
+              <Button title="Maps" variant="secondary" small onPress={() => router.push('/run/heatmap')} />
             </View>
             <ChipRow>
               {FILTERS.map((f) => (

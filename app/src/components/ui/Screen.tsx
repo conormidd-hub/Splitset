@@ -13,6 +13,8 @@ type Props = {
   subtitle?: string;
   right?: ReactNode;
   scroll?: boolean;
+  /** Passed to the ScrollView; a chart turns this off while a finger is scrubbing it. */
+  scrollEnabled?: boolean;
   padded?: boolean;
   edges?: Edge[];
   refreshing?: boolean;
@@ -21,7 +23,7 @@ type Props = {
 };
 
 export function Screen({
-  children, title, subtitle, right, scroll = true, padded = true,
+  children, title, subtitle, right, scroll = true, scrollEnabled, padded = true,
   edges = ['left', 'right'], refreshing, onRefresh, style,
 }: Props) {
   const { palette } = useTheme();
@@ -48,6 +50,7 @@ export function Screen({
         <ScrollView
           contentContainerStyle={{ paddingBottom: space.xxl }}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={scrollEnabled}
           refreshControl={
             onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={palette.mut} /> : undefined
           }>

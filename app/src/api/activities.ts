@@ -76,7 +76,9 @@ export function useRecentActivities(days = 14) {
   });
 }
 
-export type ActivityWithDetails = Activity & { activity_details: ActivityDetails | null };
+/** The detail columns the run screen reads directly; polyline and samples come through useTrack instead. */
+export type ActivitySummaryDetails = Pick<ActivityDetails, 'has_streams' | 'splits' | 'best_efforts' | 'fetched_at'>;
+export type ActivityWithDetails = Activity & { activity_details: ActivitySummaryDetails | null };
 
 export function useActivity(id: string | undefined) {
   return useQuery({
@@ -85,7 +87,7 @@ export function useActivity(id: string | undefined) {
     queryFn: async (): Promise<ActivityWithDetails> => {
       const { data, error } = await supabase
         .from('activities')
-        .select('*, activity_details(*)')
+        .select('*, activity_details(has_streams, splits, best_efforts, fetched_at)')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -103,4 +105,78 @@ export function typeLabel(type: string | null | undefined): string {
   if (!type) return 'Activity';
   const spaced = type.replace(/([a-z])([A-Z])/g, '$1 $2');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
+/** A run's GPS trace with the few activity columns the heat map labels and filters on. */
+export type RunRoute = {
+  activity_id: string;
+  polyline: string;
+  bbox: [number, number, number, number] | null;
+  /** activity_details.fetched_at: the segment scan watermark compares against this. */
+  fetched_at: string;
+  type: string;
+  name: string | null;
+  start_time_local: string;
+  distance_m: number | null;
+  moving_time_s: number | null;
+};
+
+type RunRouteRow = {
+  activity_id: string;
+  polyline: string;
+  bbox: number[] | null;
+  fetched_at: string;
+  activities: {
+    type: string;
+    name: string | null;
+    start_time_local: string;
+    distance_m: number | null;
+    moving_time_s: number | null;
+  };
+};
+
+const ROUTE_PAGE = 500;
+
+/**
+ * Every run that has a route, oldest first. Fetched in pages of 500 so the Supabase row cap never
+ * truncates it; a season of running is a few megabytes of polylines, cached for the session.
+ */
+export function useRunRoutes() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: keys.runRoutes(uid),
+    enabled: !!uid,
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<RunRoute[]> => {
+      const out: RunRoute[] = [];
+      for (let from = 0; ; from += ROUTE_PAGE) {
+        const { data, error } = await supabase
+          .from('activity_details')
+          .select(
+            'activity_id, polyline, bbox, fetched_at, activities!inner(type, name, start_time_local, distance_m, moving_time_s)',
+          )
+          .eq('user_id', uid)
+          .not('polyline', 'is', null)
+          .in('activities.type', RUN_TYPES)
+          .order('activity_id')
+          .range(from, from + ROUTE_PAGE - 1);
+        if (error) throw error;
+        for (const row of data as unknown as RunRouteRow[]) {
+          out.push({
+            activity_id: row.activity_id,
+            polyline: row.polyline,
+            bbox: row.bbox && row.bbox.length === 4 ? (row.bbox as [number, number, number, number]) : null,
+            fetched_at: row.fetched_at,
+            type: row.activities.type,
+            name: row.activities.name,
+            start_time_local: row.activities.start_time_local,
+            distance_m: row.activities.distance_m,
+            moving_time_s: row.activities.moving_time_s,
+          });
+        }
+        if (data.length < ROUTE_PAGE) break;
+      }
+      return out.sort((a, b) => a.start_time_local.localeCompare(b.start_time_local));
+    },
+  });
 }

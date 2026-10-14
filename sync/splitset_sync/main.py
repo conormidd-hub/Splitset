@@ -6,6 +6,13 @@
     splitset-sync dump --email E [--oldest] [--newest] [--out DIR]
     splitset-sync link [--user ID|EMAIL] [--since YYYY-MM-DD | --days N]
     splitset-sync backfill-garmin --email E PATH [--dry-run]
+    splitset-sync refresh-details [--user ID|EMAIL] [--max N] [--missing-cadence] [--dry-run]
+
+refresh-details rebuilds existing activity_details rows from freshly downloaded streams, newest
+first, for every active connection (it needs the API key). `run` never refetches a row once it
+exists, so this is how a change to the derivation (the cadence series and per-point route_d
+distances added in October 2026) reaches old activities. --missing-cadence limits the work to rows
+whose samples have no cad key, so the backfill can be repeated until it reports nothing to do.
 """
 
 from __future__ import annotations
@@ -26,7 +33,7 @@ from .config import Settings, env
 from .intervals_client import IntervalsAuthError, IntervalsClient, IntervalsError, normalise_athlete_id
 from .garmin_export import backfill, find_root, parse_export
 from .linking import link_plan_sessions, link_workouts
-from .normalise import normalise_activity
+from .normalise import is_run_type, normalise_activity
 from .streams import derive_details
 from .wellness import normalise_wellness
 
@@ -121,7 +128,7 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
                     ulog.info("streams: would fetch %d of %d pending", len(todo), pending_total)
                 else:
                     ulog.info("streams: fetching %d of %d pending", len(todo), pending_total)
-                    for n, act_id in enumerate(todo, 1):
+                    for n, (act_id, act_type) in enumerate(todo, 1):
                         try:
                             streams = client.fetch_streams(act_id)
                         except IntervalsAuthError:
@@ -129,7 +136,8 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
                         except IntervalsError as e:
                             ulog.warning("  [%d/%d] %s: %s - will retry next sync", n, len(todo), act_id, e)
                             continue
-                        rec = derive_details(streams, act_id, settings.sample_every_s)
+                        rec = derive_details(streams, act_id, settings.sample_every_s,
+                                             is_run=is_run_type(act_type))
                         db.upsert_details(conn, uid, rec)
                         counts["streams_fetched"] += 1
                         tag = "no streams" if not rec["has_streams"] else (
@@ -193,6 +201,88 @@ def cmd_run(args: argparse.Namespace) -> int:
         for c in connections:
             if not run_user(conn, c, args, settings):
                 failed += 1
+    if failed:
+        log.error("%d of %d connection(s) failed", failed, len(connections))
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------- refresh-details
+
+def refresh_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, settings: Settings) -> bool:
+    """Refetch streams and rebuild activity_details for one user's selected activities."""
+    uid = connection["user_id"]
+    ulog = UserLog(log, {"user": connection.get("email") or str(uid)})
+    if not connection.get("api_key"):
+        ulog.error("no API key in the vault for this connection; reconnect in the app")
+        return False
+
+    todo = db.activities_for_refresh(conn, uid, args.max, args.missing_cadence)
+    scope = "without a cadence series" if args.missing_cadence else "with streams"
+    if not todo:
+        ulog.info("refresh: no detail rows %s to rebuild", scope)
+        return True
+    if args.dry_run:
+        ulog.info("refresh: would refetch %d activit%s %s (newest %s)", len(todo),
+                  "y" if len(todo) == 1 else "ies", scope, todo[0][0])
+        return True
+
+    ulog.info("refresh: refetching %d activit%s %s", len(todo), "y" if len(todo) == 1 else "ies", scope)
+    rebuilt = failed = 0
+    try:
+        with IntervalsClient(connection["athlete_id"], connection["api_key"],
+                             timeout=settings.request_timeout_s) as client:
+            for n, (act_id, act_type) in enumerate(todo, 1):
+                try:
+                    streams = client.fetch_streams(act_id)
+                except IntervalsAuthError:
+                    raise
+                except IntervalsError as e:
+                    ulog.warning("  [%d/%d] %s: %s - left as it was", n, len(todo), act_id, e)
+                    failed += 1
+                    continue
+                if streams is None:
+                    # 404 or an unexpected payload: never replace a good row with an empty one
+                    ulog.warning("  [%d/%d] %s: no streams returned - left as it was", n, len(todo), act_id)
+                    failed += 1
+                    continue
+                rec = derive_details(streams, act_id, settings.sample_every_s, is_run=is_run_type(act_type))
+                if not rec["has_streams"]:
+                    ulog.warning("  [%d/%d] %s: streams too short to rebuild - left as it was", n, len(todo), act_id)
+                    failed += 1
+                    continue
+                db.upsert_details(conn, uid, rec)
+                rebuilt += 1
+                ulog.debug("  [%d/%d] %s: %s", n, len(todo), act_id,
+                           ("cad" if (rec["samples"] or {}).get("cad") else "no cad")
+                           + (", route" if rec["polyline"] else ", no route"))
+                if n % 20 == 0:
+                    conn.commit()
+                    ulog.info("  %d/%d rebuilt", n, len(todo))
+                time.sleep(settings.stream_sleep_s)
+        conn.commit()
+        ulog.info("refresh done: %d rebuilt, %d left as they were", rebuilt, failed)
+        return failed == 0
+
+    except IntervalsAuthError as e:
+        conn.commit()          # rows rebuilt before the key stopped working are good
+        ulog.error("auth failed after %d rebuilt: %s", rebuilt, e)
+        return False
+
+    except Exception as e:  # noqa: BLE001 - one user's failure must not stop the others
+        conn.rollback()
+        ulog.exception("refresh failed after %d rebuilt: %s", rebuilt, e)
+        return False
+
+
+def cmd_refresh_details(args: argparse.Namespace) -> int:
+    settings = Settings.load()
+    with db.connect(settings.db_url) as conn:
+        connections = db.active_connections(conn, args.user)
+        if not connections:
+            log.warning("no active intervals.icu connections%s", f" matching {args.user!r}" if args.user else "")
+            return 0
+        failed = sum(1 for c in connections if not refresh_user(conn, c, args, settings))
     if failed:
         log.error("%d of %d connection(s) failed", failed, len(connections))
         return 1
@@ -330,6 +420,15 @@ def build_parser() -> argparse.ArgumentParser:
     gar.add_argument("path", help="the unzipped export's DI_CONNECT folder (or its parent)")
     gar.add_argument("--dry-run", action="store_true", help="parse and report, write nothing")
     gar.set_defaults(func=cmd_backfill_garmin)
+
+    ref = sub.add_parser("refresh-details",
+                         help="refetch streams and rebuild existing activity_details rows (cadence, route_d)")
+    ref.add_argument("--user", help="only this user id or email")
+    ref.add_argument("--max", type=int, default=None, help="stop after N activities per user, newest first (default: all)")
+    ref.add_argument("--missing-cadence", action="store_true",
+                     help="only rows whose samples have no cad series (safe to repeat until nothing is left)")
+    ref.add_argument("--dry-run", action="store_true", help="count and report, write nothing")
+    ref.set_defaults(func=cmd_refresh_details)
     return p
 
 
