@@ -14,8 +14,13 @@ export type ProfileSeries = {
   /** One value per entry of `x`; null leaves a gap. */
   values: (number | null)[];
   kind: 'line' | 'area';
-  /** Which y axis the series is scaled to; left by default. The left axis is labelled with the first left series' format, the right one with the first right series'. */
-  axis?: 'left' | 'right';
+  /**
+   * Which y axis the series is scaled to; left by default. The left axis is labelled with the first
+   * left series' format, the right one with the first right series'. 'own' scales the series to
+   * its own range with no axis, so several metrics in different units can overlay one plot and
+   * are read exactly at the cursor instead.
+   */
+  axis?: 'left' | 'right' | 'own';
   /** Flip the axis so smaller values sit higher (pace: faster is up, as on a watch). Applies to the whole axis. */
   invert?: boolean;
   format?: (v: number) => string;
@@ -125,7 +130,7 @@ function buildGeometry(x: number[], series: ProfileSeries[], width: number, heig
   if (plotBottom <= plotTop) return null;
 
   const xs = scaleLinear().domain([x0, x1]).range([plotLeft, plotRight]);
-  const leftSeries = series.filter((s) => s.axis !== 'right');
+  const leftSeries = series.filter((s) => s.axis !== 'right' && s.axis !== 'own');
   const rightSeries = series.filter((s) => s.axis === 'right');
   const leftExt = extentOf(leftSeries.map((s) => s.values));
   const rightExt = extentOf(rightSeries.map((s) => s.values));
@@ -133,7 +138,11 @@ function buildGeometry(x: number[], series: ProfileSeries[], width: number, heig
   const rightRange: [number, number] = rightSeries.some((s) => s.invert) ? [plotTop, plotBottom] : [plotBottom, plotTop];
   const yLeft = leftExt ? scaleLinear().domain(padded(leftExt)).range(leftRange) : null;
   const yRight = rightExt ? scaleLinear().domain(padded(rightExt)).range(rightRange) : null;
-  const yScales = series.map((s) => (s.axis === 'right' ? yRight : yLeft));
+  const ownScale = (s: ProfileSeries) => {
+    const ext = extentOf([s.values]);
+    return ext ? scaleLinear().domain(padded(ext)).range(s.invert ? [plotTop, plotBottom] : [plotBottom, plotTop]) : null;
+  };
+  const yScales = series.map((s) => (s.axis === 'right' ? yRight : s.axis === 'own' ? ownScale(s) : yLeft));
 
   const n = Math.max(2, Math.min(MAX_POINTS, Math.round(plotW)));
   const grid = evenGrid(x0, x1, n);

@@ -16,6 +16,10 @@ type Props = {
   accent: string;
   /** Points closer than this many pixels to the last kept one are skipped. */
   minStep?: number;
+  /** Stroke width; the halo is drawn a little wider. */
+  width?: number;
+  /** Shift the line this many pixels to the side of the path (negative = the other side), so several metrics can run alongside the route. */
+  offsetPx?: number;
 };
 
 const MAX_BINS = 12;
@@ -49,8 +53,30 @@ function thin(screen: { x: number; y: number }[], minStep: number): number[] {
   return kept;
 }
 
-function buildPaths(track: Track, project: Projector, metric: Metric | null, scale: ColourScale | null, minStep: number): Paths {
-  const screen = track.pts.map(([lat, lng]) => project(lat, lng));
+/**
+ * Move every point sideways by `d` pixels along the average normal of its two edges, so a copy
+ * of the trail runs beside the original. Small offsets (a few pixels) need no mitre handling.
+ */
+function offsetScreen(screen: { x: number; y: number }[], d: number): { x: number; y: number }[] {
+  const n = screen.length;
+  if (n < 2 || d === 0) return screen;
+  const normals: { x: number; y: number }[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = screen[i + 1].x - screen[i].x, dy = screen[i + 1].y - screen[i].y;
+    const len = Math.hypot(dx, dy) || 1;
+    normals.push({ x: -dy / len, y: dx / len });
+  }
+  return screen.map((p, i) => {
+    const a = normals[Math.max(0, i - 1)], b = normals[Math.min(n - 2, i)];
+    let nx = a.x + b.x, ny = a.y + b.y;
+    const len = Math.hypot(nx, ny);
+    if (len < 1e-6) { nx = b.x; ny = b.y; } else { nx /= len; ny /= len; }
+    return { x: p.x + nx * d, y: p.y + ny * d };
+  });
+}
+
+function buildPaths(track: Track, project: Projector, metric: Metric | null, scale: ColourScale | null, minStep: number, offsetPx: number): Paths {
+  const screen = offsetScreen(track.pts.map(([lat, lng]) => project(lat, lng)), offsetPx);
   const kept = thin(screen, minStep);
   if (kept.length < 2) return { halo: '', bins: [] };
 
@@ -141,19 +167,20 @@ function medianBins(edgeBin: Int16Array, window: number): Int16Array {
  * once per [track, project, metric, scale], so panning and cursor moves on the parent do not
  * rebuild it.
  */
-export const Trail = memo(function Trail({ track, project, metric, scale, halo, accent, minStep = 1.5 }: Props) {
+export const Trail = memo(function Trail({ track, project, metric, scale, halo, accent, minStep = 1.5, width = LINE_WIDTH, offsetPx = 0 }: Props) {
   const { palette } = useTheme();
-  const paths = useMemo(() => buildPaths(track, project, metric, scale, minStep), [track, project, metric, scale, minStep]);
+  const paths = useMemo(() => buildPaths(track, project, metric, scale, minStep, offsetPx), [track, project, metric, scale, minStep, offsetPx]);
   if (!paths.halo) return <></>;
+  const haloWidth = width + (HALO_WIDTH - LINE_WIDTH);
   return (
     <>
-      <Path d={paths.halo} fill="none" stroke={halo ?? palette.surface} strokeOpacity={0.9} strokeWidth={HALO_WIDTH} strokeLinejoin="round" strokeLinecap="round" />
+      <Path d={paths.halo} fill="none" stroke={halo ?? palette.surface} strokeOpacity={0.9} strokeWidth={haloWidth} strokeLinejoin="round" strokeLinecap="round" />
       {paths.bins.length ? (
         paths.bins.map((b, i) => (
-          <Path key={i} d={b.d} fill="none" stroke={b.colour} strokeWidth={LINE_WIDTH} strokeLinejoin="round" strokeLinecap="round" />
+          <Path key={i} d={b.d} fill="none" stroke={b.colour} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
         ))
       ) : (
-        <Path d={paths.halo} fill="none" stroke={accent} strokeWidth={LINE_WIDTH} strokeLinejoin="round" strokeLinecap="round" />
+        <Path d={paths.halo} fill="none" stroke={accent} strokeWidth={width} strokeLinejoin="round" strokeLinecap="round" />
       )}
     </>
   );

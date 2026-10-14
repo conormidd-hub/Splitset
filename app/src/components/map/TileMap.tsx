@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  Animated, Image, PanResponder, Platform, Pressable, View, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle,
+  Animated, Easing, Image, PanResponder, Platform, Pressable, View, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle,
 } from 'react-native';
 import Svg from 'react-native-svg';
 
@@ -28,8 +28,8 @@ type Props = {
   interactive?: boolean;
   padding?: number;
   style?: ViewStyle;
-  /** A tap on the map, in map-local pixels (the same frame `project` returns). A drag never fires it. */
-  onPress?: (pt: Pt) => void;
+  /** A tap in map-local pixels, with the projector and camera it was measured against. A drag never fires it. */
+  onPress?: (pt: Pt, project: Projector, view: MapView) => void;
   /** SVG children drawn over the tiles. */
   children?: (project: Projector, size: Size, view: MapView) => ReactNode;
 };
@@ -88,6 +88,89 @@ class PressGate {
     if (p && at && Math.hypot(p.x - at.x, p.y - at.y) > TAP_SLOP) return null;
     return p ?? at;
   }
+
+  private lastTapAt = 0;
+  private lastTapPt: Pt | null = null;
+  /** True when this tap lands within 300 ms and 24 px of the previous one: a double tap. */
+  doubleTap(p: Pt, now: number): boolean {
+    const last = this.lastTapPt;
+    const dbl = now - this.lastTapAt < 300 && !!last && Math.hypot(p.x - last.x, p.y - last.y) < 24;
+    this.lastTapAt = dbl ? 0 : now;
+    this.lastTapPt = dbl ? null : p;
+    return dbl;
+  }
+}
+
+/** Camera jumps beyond this are snapped, not animated: the scaled tiles would be a blur. */
+const MAX_ANIMATED_ZOOM_STEP = 4;
+const CAMERA_ANIM_MS = 450;
+
+/**
+ * Eases the map from the camera it last showed to a new one. The new scene is rendered at once
+ * but starts under a transform that makes it line up with the old view, then that transform
+ * eases to identity, so the map pans and zooms to the new place instead of jumping. Web Mercator
+ * at zoom z1 is the zoom-z0 picture scaled by 2^(z1-z0), so one scale-and-translate is exact.
+ * Held in state like the Animated value (not a ref) because the compiler lint forbids handing
+ * ref-reading closures to PanResponder.create.
+ */
+class CameraAnim {
+  readonly scale = new Animated.Value(1);
+  readonly tx = new Animated.Value(0);
+  readonly ty = new Animated.Value(0);
+  private prev: { cam: MapView; size: Size } | null = null;
+  private manual = false;
+  private running: Animated.CompositeAnimation | null = null;
+
+  /** The next camera came from a drag, which already moved the picture: do not animate it. */
+  markManual() {
+    this.manual = true;
+  }
+
+  /** Called whenever the rendered camera or the size changes. */
+  onCamera(cam: MapView, size: Size) {
+    const prev = this.prev;
+    // the same camera again (a parent re-render): leave any ease in flight alone
+    if (prev && prev.size.width === size.width && prev.size.height === size.height
+      && Math.abs(cam.zoom - prev.cam.zoom) < 1e-9
+      && Math.abs(cam.center.lat - prev.cam.center.lat) < 1e-9 && Math.abs(cam.center.lng - prev.cam.center.lng) < 1e-9) return;
+    this.prev = { cam, size };
+    const manual = this.manual;
+    this.manual = false;
+    this.running?.stop();
+    this.running = null;
+    const snap = () => {
+      this.scale.setValue(1);
+      this.tx.setValue(0);
+      this.ty.setValue(0);
+    };
+    if (!prev || manual || prev.size.width !== size.width || prev.size.height !== size.height) return snap();
+    const dz = cam.zoom - prev.cam.zoom;
+    if (Math.abs(dz) > MAX_ANIMATED_ZOOM_STEP) return snap();
+
+    // screen1 = k * screen0 + t, so the old view is the new scene scaled by 1/k and moved by -t/k
+    const k = 2 ** dz;
+    const w0 = 2 ** prev.cam.zoom, w1 = 2 ** cam.zoom;
+    const tl0 = { x: mercX(prev.cam.center.lng) * w0 - size.width / 2, y: mercY(prev.cam.center.lat) * w0 - size.height / 2 };
+    const tl1 = { x: mercX(cam.center.lng) * w1 - size.width / 2, y: mercY(cam.center.lat) * w1 - size.height / 2 };
+    const t = { x: k * tl0.x - tl1.x, y: k * tl0.y - tl1.y };
+    const span = 4 * Math.max(size.width, size.height) * Math.max(1, k);
+    if (Math.hypot(t.x, t.y) > span) return snap();
+    const s0 = 1 / k;
+    // the view scales about its centre, so fold the centre back into the translation
+    const c = { x: size.width / 2, y: size.height / 2 };
+    this.scale.setValue(s0);
+    this.tx.setValue(-t.x / k - (1 - s0) * c.x);
+    this.ty.setValue(-t.y / k - (1 - s0) * c.y);
+    const cfg = { duration: CAMERA_ANIM_MS, easing: Easing.inOut(Easing.cubic), useNativeDriver: false };
+    this.running = Animated.parallel([
+      Animated.timing(this.scale, { toValue: 1, ...cfg }),
+      Animated.timing(this.tx, { toValue: 0, ...cfg }),
+      Animated.timing(this.ty, { toValue: 0, ...cfg }),
+    ]);
+    this.running.start(() => {
+      this.running = null;
+    });
+  }
 }
 
 /**
@@ -100,6 +183,7 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
   const tileStyle: TileStyle = name === 'night' ? 'dark' : 'light';
   const [size, setSize] = useState<Size>({ width: 0, height: height ?? 0 });
   const [pan] = useState(() => new Animated.ValueXY());
+  const [camAnim] = useState(() => new CameraAnim());
   const [gate] = useState(() => new PressGate());
 
   const cam: MapView | null = useMemo(() => {
@@ -129,15 +213,22 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
         tiles.push({ key: `${z}/${tx}/${ty}`, uris: tileLayers(tileStyle, z, wx, ty), left, top, width: right - left, height: bottom - top });
       }
     }
-    return { project, tiles, world };
+    return { project, tiles, world, tlx, tly };
   }, [cam, size.width, size.height, tileStyle]);
 
   // The drag offset is applied as a transform while the finger is down. On release the parent
-  // gets the new centre; once that camera has rendered, the transform snaps back to zero.
-  // A layout effect so the reset lands in the same frame as the new camera, never one frame late.
+  // gets the new centre; once that camera has rendered, the transform snaps back to zero and any
+  // other camera change starts its ease from the previous view. A layout effect so both land in
+  // the same frame as the new scene, never one frame late.
   useLayoutEffect(() => {
     pan.setValue({ x: 0, y: 0 });
-  }, [cam, pan]);
+    if (cam && size.width && size.height) camAnim.onCamera(cam, size);
+  }, [cam, size, pan, camAnim]);
+
+  const transform = useMemo(
+    () => [{ translateX: Animated.add(pan.x, camAnim.tx) }, { translateY: Animated.add(pan.y, camAnim.ty) }, { scale: camAnim.scale }],
+    [pan, camAnim],
+  );
 
   const responder = useMemo(() => {
     if (!interactive) return null;
@@ -153,11 +244,12 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
         const world = 2 ** cam.zoom;
         const cx = mercX(cam.center.lng) * world - g.dx;
         const cy = mercY(cam.center.lat) * world - g.dy;
+        camAnim.markManual();
         onViewChange({ center: { lat: unMercY(cy / world), lng: unMercX(cx / world) }, zoom: cam.zoom });
       },
       onPanResponderTerminate: () => pan.setValue({ x: 0, y: 0 }),
     });
-  }, [interactive, cam, onViewChange, pan, gate]);
+  }, [interactive, cam, onViewChange, pan, gate, camAnim]);
 
   const zoomBy = (d: number) => {
     if (!cam || !onViewChange) return;
@@ -172,9 +264,15 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
   const onPressIn = (e: GestureResponderEvent) => gate.begin(localPoint(e));
 
   const onPressed = (e: GestureResponderEvent) => {
-    if (!onPress) return;
     const p = gate.resolve(localPoint(e));
-    if (p) onPress(p);
+    if (!p || !scene || !cam) return;
+    if (interactive && onViewChange && gate.doubleTap(p, Date.now())) {
+      // a double tap zooms in a level on the spot under the finger
+      const lat = unMercY((p.y + scene.tly) / scene.world), lng = unMercX((p.x + scene.tlx) / scene.world);
+      onViewChange({ center: { lat, lng }, zoom: clamp(Math.round(cam.zoom + 1), MIN_ZOOM, MAX_ZOOM) });
+      return;
+    }
+    onPress?.(p, scene.project, cam);
   };
 
   return (
@@ -192,11 +290,11 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
         // The Pressable is the only thing under the finger: tiles and SVG ignore pointer events,
         // so a press reports map-local coordinates on every platform.
         <Pressable
-          disabled={!onPress}
+          disabled={!onPress && !(interactive && onViewChange)}
           onPressIn={onPressIn}
           onPress={onPressed}
           style={{ position: 'absolute', left: 0, top: 0, width: size.width, height: size.height }}>
-          <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, pointerEvents: 'none', transform: pan.getTranslateTransform() }}>
+          <Animated.View style={{ position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, pointerEvents: 'none', transform }}>
             <TileLayer tiles={scene.tiles} />
             <Svg width={size.width} height={size.height} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
               {children?.(scene.project, size, cam)}
