@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo } from 'react';
+import { View } from 'react-native';
 
 import { useAllEfforts, useRunEfforts, useScanRun, type RunEffort, type SegmentEffort } from '@/api/segments';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +11,7 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { medalFor, rankEfforts } from '@/lib/segments';
 import { formatDistance, formatDuration, formatPace, type Units } from '@/lib/units';
+import { space } from '@/theme/tokens';
 
 /**
  * The run detail's Segments card: every saved segment this run passed through, with the time,
@@ -81,9 +83,11 @@ type Props = {
   units: Units;
   /** The Route card has the run's track cached (or gave up), so a check reuses it instead of fetching twice. */
   trackReady: boolean;
+  /** Starts create-segment mode on the Route card; absent when the run has no trace to cut. */
+  onCut?: () => void;
 };
 
-export function SegmentsCard({ activityId, units, trackReady }: Props) {
+export function SegmentsCard({ activityId, units, trackReady, onCut }: Props) {
   const efforts = useRunEfforts(activityId);
   const all = useAllEfforts();
   const scan = useScanRun();
@@ -103,7 +107,12 @@ export function SegmentsCard({ activityId, units, trackReady }: Props) {
     <Card
       title="Segments"
       subtitle="Saved stretches this run passed through"
-      right={<Button title="Check segments" variant="secondary" small loading={scan.isPending} onPress={() => check({ activityId })} />}>
+>
+      {/* actions under the title rather than beside it, so a phone-width title keeps its line */}
+      <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.sm }}>
+        {onCut ? <Button title="Cut a segment" variant="secondary" small style={{ flexGrow: 1 }} onPress={onCut} /> : null}
+        <Button title="Check segments" variant="secondary" small style={{ flexGrow: 1 }} loading={scan.isPending} onPress={() => check({ activityId })} />
+      </View>
       <ErrorBanner message={error} />
       {efforts.isLoading ? (
         <Loading />

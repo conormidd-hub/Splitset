@@ -8,14 +8,13 @@ import { TileMap, type Projector } from '@/components/map/TileMap';
 import { Trail } from '@/components/map/Trail';
 import { MetricLegend } from '@/components/run/MetricLegend';
 import { RouteMarkers, SegmentBands, type Selection } from '@/components/run/RouteOverlay';
-import { StatsStrip } from '@/components/run/StatsStrip';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
-import { bboxOf, type Pt } from '@/lib/geo';
+import { bboxOf, type MapView, type Pt } from '@/lib/geo';
 import { METRICS, colourScale, formatMetric, hasMetric, metricValues, nearestIndex, type Metric, type Track } from '@/lib/runAnalysis';
 import { MIN_SEGMENT_M, subTrack } from '@/lib/segments';
 import { KM_PER_MILE, formatDistance, formatElevation, formatPace, type Units } from '@/lib/units';
@@ -51,7 +50,7 @@ function lineColour(m: Metric, palette: Palette): string {
   }
 }
 
-function metricSeries(track: Track, m: Metric, units: Units, colour: string, axis: 'left' | 'right'): ProfileSeries {
+function metricSeries(track: Track, m: Metric, units: Units, colour: string, axis: 'left' | 'right' | 'own'): ProfileSeries {
   const label = METRICS.find((x) => x.key === m)?.label ?? m;
   return {
     // pace ticks are short "4:41" strings on a 44 px axis, so the unit moves into the name
@@ -66,14 +65,20 @@ function metricSeries(track: Track, m: Metric, units: Units, colour: string, axi
   };
 }
 
-/** Elevation as an area (when known) plus one metric as a line on the other axis. */
-function chartSeries(track: Track, m: Metric | null, units: Units, palette: Palette): ProfileSeries[] {
+/**
+ * Elevation as an area (when known) plus the chosen metrics as lines. One metric gets a labelled
+ * axis of its own; several overlay the plot each on its own scale, since pace, heart rate and
+ * cadence share no unit, and the cursor header reads their exact values.
+ */
+function chartSeries(track: Track, metrics: Metric[], units: Units, palette: Palette): ProfileSeries[] {
   const out: ProfileSeries[] = [];
   if (track.hasAlt) {
     out.push({ name: 'Elevation', color: palette.mut, values: track.alt, kind: 'area', format: (v) => formatElevation(v, units) });
   }
-  if (m && m !== 'alt' && hasMetric(track, m)) {
-    out.push(metricSeries(track, m, units, lineColour(m, palette), track.hasAlt ? 'right' : 'left'));
+  const lines = metrics.filter((m) => m !== 'alt' && hasMetric(track, m));
+  for (const m of lines) {
+    const axis = lines.length === 1 ? (track.hasAlt ? 'right' : 'left') : 'own';
+    out.push(metricSeries(track, m, units, lineColour(m, palette), axis));
   }
   return out;
 }
@@ -86,21 +91,24 @@ type Props = {
   hrZones: number[] | null;
   /** This run's matched segment efforts, drawn as labelled bands on the map. */
   efforts: RunEffort[];
-  /** Runs only: a segment cut from a ride would never be matched, since scans only look at runs. */
-  canCreateSegment: boolean;
+  /** The inspected point, shared with the sticky stats bar above the card. */
+  cursor: number | null;
+  onCursor: (index: number | null) => void;
+  /** Create-segment mode, started from the Segments card; the card ends it on Cancel or Save. */
+  creating: boolean;
+  onCreatingChange: (creating: boolean) => void;
   /** True while a finger is down on a chart; the screen freezes its scroll meanwhile. */
   onScrubbingChange: (scrubbing: boolean) => void;
 };
 
-export function RouteCard({ activityId, track, units, hrZones, efforts, canCreateSegment, onScrubbingChange }: Props) {
+export function RouteCard({ activityId, track, units, hrZones, efforts, cursor, onCursor, creating, onCreatingChange, onScrubbingChange }: Props) {
   const { palette } = useTheme();
-  const { metric: preferred, showCharts, setMetric, setShowCharts } = useMapPrefs();
+  const { metrics: preferred, toggleMetric } = useMapPrefs();
   const save = useSaveSegment();
   const scan = useScanSegment();
 
-  const [cursor, setCursor] = useState<number | null>(null);
+  const [view, setView] = useState<MapView | null>(null);
   const [projector, setProjector] = useState<Projector | null>(null);
-  const [creating, setCreating] = useState(false);
   const [startIdx, setStartIdx] = useState<number | null>(null);
   const [endIdx, setEndIdx] = useState<number | null>(null);
   const [name, setName] = useState('');
@@ -111,17 +119,14 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
   const bounds = useMemo(() => bboxOf(track.pts), [track]);
   const mapBounds = track.pts.length >= 2 ? bounds : null;
   const available = useMemo(() => METRICS.map((m) => m.key).filter((k) => hasMetric(track, k)), [track]);
-  const metric: Metric | null = available.includes(preferred) ? preferred : available[0] ?? null;
-  const scale = useMemo(
-    () => (metric ? colourScale(metricValues(track, metric), metric, { hrZones, units }) : null),
-    [track, metric, hrZones, units],
+  // the toggled metrics this run can show, in the order they were chosen; one colours the trail
+  // itself, several run as thin lines beside it
+  const layers = useMemo(
+    () => preferred.filter((m) => available.includes(m)).map((m) => ({ metric: m, scale: colourScale(metricValues(track, m), m, { hrZones, units }) })),
+    [preferred, available, track, hrZones, units],
   );
-  const mainSeries = useMemo(() => chartSeries(track, metric, units, palette), [track, metric, units, palette]);
-  const extraMetrics = useMemo(() => available.filter((m) => m !== metric && m !== 'alt'), [available, metric]);
-  const extraCharts = useMemo(
-    () => (showCharts ? extraMetrics.map((m) => ({ key: m, series: chartSeries(track, m, units, palette) })) : []),
-    [showCharts, extraMetrics, track, units, palette],
-  );
+  const selected = useMemo(() => layers.map((l) => l.metric), [layers]);
+  const mainSeries = useMemo(() => chartSeries(track, selected, units, palette), [track, selected, units, palette]);
   const xFormat = units === 'imperial' ? xMi : xKm;
 
   const selection = useMemo<Selection | null>(
@@ -140,7 +145,7 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
   const onProject = useCallback((p: Projector) => setProjector(() => p), []);
   const onMapPress = (pt: Pt) => {
     if (!projector) return;
-    setCursor(nearestIndex(track.pts.map(([lat, lng]) => projector(lat, lng)), pt.x, pt.y));
+    onCursor(nearestIndex(track.pts.map(([lat, lng]) => projector(lat, lng)), pt.x, pt.y));
   };
   const scrubStart = () => onScrubbingChange(true);
   const scrubEnd = () => onScrubbingChange(false);
@@ -156,7 +161,7 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
   };
 
   const exitCreate = () => {
-    setCreating(false);
+    onCreatingChange(false);
     setStartIdx(null);
     setEndIdx(null);
     setName('');
@@ -196,7 +201,7 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
   const subtitle = creating
     ? 'Cut a segment from this run'
     : mapBounds
-      ? 'Tap the map or drag the chart to inspect a point'
+      ? 'Tap the map or the chart to inspect a point; double-tap the map to zoom'
       : 'Drag the chart to inspect a point';
 
   return (
@@ -205,39 +210,61 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
         {!creating && available.length > 1 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
             {available.map((k) => (
-              <Chip key={k} label={METRICS.find((m) => m.key === k)?.label ?? k} selected={k === metric} onPress={() => setMetric(k)} />
+              <Chip key={k} label={METRICS.find((m) => m.key === k)?.label ?? k} selected={layers.some((l) => l.metric === k)} onPress={() => toggleMetric(k)} />
             ))}
           </ScrollView>
         ) : null}
 
         {mapBounds ? (
-          <TileMap bounds={mapBounds} height={MAP_HEIGHT} onPress={onMapPress}>
+          <View onTouchStart={scrubStart} onTouchEnd={scrubEnd} onTouchCancel={scrubEnd}>
+          <TileMap bounds={mapBounds} height={MAP_HEIGHT} padding={34} onPress={onMapPress} view={view} onViewChange={setView} interactive>
             {(project) => (
               <>
                 <SegmentBands track={track} project={project} efforts={efforts} />
-                <Trail track={track} project={project} metric={creating ? null : metric} scale={scale} accent={palette.accent} />
-                <RouteMarkers track={track} project={project} efforts={efforts} cursor={cursor} selection={selection} onProject={onProject} />
+                {creating || layers.length === 0 ? (
+                  <Trail track={track} project={project} metric={null} scale={null} accent={palette.accent} />
+                ) : layers.length === 1 ? (
+                  <Trail track={track} project={project} metric={layers[0].metric} scale={layers[0].scale} accent={palette.accent} />
+                ) : (
+                  <>
+                    <Trail track={track} project={project} metric={null} scale={null} accent={palette.mut} width={2} />
+                    {layers.map((l, i) => (
+                      <Trail
+                        key={l.metric}
+                        track={track}
+                        project={project}
+                        metric={l.metric}
+                        scale={l.scale}
+                        accent={palette.accent}
+                        width={2.5}
+                        offsetPx={Math.ceil((i + 1) / 2) * 5.5 * (i % 2 === 0 ? 1 : -1)}
+                      />
+                    ))}
+                  </>
+                )}
+                <RouteMarkers track={track} project={project} efforts={efforts} cursor={cursor} selection={selection} onProject={onProject} units={units} />
               </>
             )}
           </TileMap>
+          </View>
         ) : null}
 
-        {mapBounds && !creating && metric && scale ? <MetricLegend scale={scale} metric={metric} /> : null}
+        {mapBounds && !creating
+          ? layers.map((l) => (l.scale ? <MetricLegend key={l.metric} scale={l.scale} metric={l.metric} /> : null))
+          : null}
 
         {mainSeries.length ? (
           <ProfileChart
             x={track.dist}
             series={mainSeries}
             cursorIndex={cursor}
-            onCursor={setCursor}
+            onCursor={onCursor}
             height={CHART_HEIGHT}
             xFormat={xFormat}
             onScrubStart={scrubStart}
             onScrubEnd={scrubEnd}
           />
         ) : null}
-
-        <StatsStrip track={track} index={cursor} units={units} onClear={() => setCursor(null)} />
 
         {creating ? (
           <View style={{ gap: space.sm }}>
@@ -275,39 +302,7 @@ export function RouteCard({ activityId, track, units, hrZones, efforts, canCreat
               )}
             </View>
           </View>
-        ) : (
-          <View style={{ flexDirection: 'row', gap: space.sm }}>
-            <Button
-              title="Heat map"
-              variant="secondary"
-              small
-              style={ROW_BUTTON}
-              onPress={() => router.push(mapBounds ? `/run/heatmap?focus=${activityId}` : '/run/heatmap')}
-            />
-            {mapBounds && canCreateSegment ? (
-              <Button title="Create segment" variant="secondary" small style={ROW_BUTTON} onPress={() => setCreating(true)} />
-            ) : null}
-            {extraMetrics.length ? (
-              <Button title={showCharts ? 'Fewer charts' : 'More charts'} variant="secondary" small style={ROW_BUTTON} onPress={() => setShowCharts(!showCharts)} />
-            ) : null}
-          </View>
-        )}
-
-        {!creating
-          ? extraCharts.map((c) => (
-              <ProfileChart
-                key={c.key}
-                x={track.dist}
-                series={c.series}
-                cursorIndex={cursor}
-                onCursor={setCursor}
-                height={CHART_HEIGHT}
-                xFormat={xFormat}
-                onScrubStart={scrubStart}
-                onScrubEnd={scrubEnd}
-              />
-            ))
-          : null}
+        ) : null}
       </View>
     </Card>
   );

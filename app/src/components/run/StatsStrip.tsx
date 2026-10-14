@@ -14,6 +14,10 @@ type Props = {
   units: Units;
   /** Shown as a small × while a cursor is pinned. */
   onClear?: () => void;
+  /** Colour of the numbers; the sticky bar on the run screen uses the accent. */
+  valueTone?: 'ink' | 'accent';
+  /** Larger numbers and a little more padding, for the pinned bar. */
+  size?: 'compact' | 'large';
 };
 
 type Cell = { label: string; value: string };
@@ -21,6 +25,8 @@ type Cell = { label: string; value: string };
 const DASH = '–';
 /** Below this width seven columns would clip "1:02:33"; the strip wraps to two rows instead. */
 const WRAP_BELOW = 340;
+/** The large size needs more room per column, so it wraps on phones. */
+const WRAP_BELOW_LARGE = 390;
 
 const num = (v: number | null | undefined, decimals: number): string =>
   typeof v === 'number' && Number.isFinite(v) ? v.toFixed(decimals) : DASH;
@@ -45,7 +51,7 @@ const gradeValue = (g: number | null | undefined): string =>
  * read at the cursor when there is one and summarising the whole run otherwise. Units sit in
  * the labels; on narrow phones the seven cells wrap into two rows rather than clipping.
  */
-export function StatsStrip({ track, index, units, onClear }: Props) {
+export function StatsStrip({ track, index, units, onClear, valueTone = 'ink', size = 'compact' }: Props) {
   const { palette } = useTheme();
   const [width, setWidth] = useState(0);
   const distUnit = units === 'imperial' ? 'mi' : 'km';
@@ -80,19 +86,20 @@ export function StatsStrip({ track, index, units, onClear }: Props) {
       ]
     : summary;
 
-  const wrap = width > 0 && width < WRAP_BELOW;
+  const large = size === 'large';
+  const wrap = width > 0 && width < (large ? WRAP_BELOW_LARGE : WRAP_BELOW);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
     setWidth((prev) => (prev === w ? prev : w));
   };
 
   return (
-    <View onLayout={onLayout} style={{ backgroundColor: palette.surface2, borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.xs }}>
+    <View onLayout={onLayout} style={{ backgroundColor: palette.surface2, borderRadius: radius.md, paddingVertical: large ? space.md : space.sm, paddingHorizontal: space.xs }}>
       <View style={{ flexDirection: 'row', flexWrap: wrap ? 'wrap' : 'nowrap', alignItems: 'center', rowGap: space.sm }}>
         {cells.map((c) => (
           <View key={c.label} style={wrap ? { flexBasis: '25%', alignItems: 'center', gap: 1 } : { flex: 1, alignItems: 'center', gap: 1 }}>
             <T variant="tiny" tone="mut" numberOfLines={1}>{c.label}</T>
-            <T variant="small" weight="600" numberOfLines={1} style={{ fontVariant: ['tabular-nums'] }}>{c.value}</T>
+            <T variant={large ? 'h3' : 'small'} weight="700" tone={valueTone} numberOfLines={1} style={{ fontVariant: ['tabular-nums'] }}>{c.value}</T>
           </View>
         ))}
       </View>

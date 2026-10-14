@@ -1,12 +1,14 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, ScrollView, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { isRun, typeLabel, useActivity } from '@/api/activities';
 import { useUnits } from '@/api/profile';
 import { useRunEfforts, useTrack } from '@/api/segments';
 import { RouteCard } from '@/components/run/RouteCard';
 import { SegmentsCard } from '@/components/run/SegmentsCard';
+import { StatsStrip } from '@/components/run/StatsStrip';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
@@ -37,6 +39,11 @@ export default function ActivityDetail() {
   const effortsQ = useRunEfforts(run ? id : undefined);
   // A finger scrubbing a profile chart freezes the page scroll until it lifts.
   const [scrubbing, setScrubbing] = useState(false);
+  /** The inspected point: set from the map or the chart, read by the sticky stats bar. */
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  /** Past the name row: the pinned bar shows its own back chevron. */
+  const [scrolled, setScrolled] = useState(false);
 
   if (q.isLoading) return <Screen><Loading label="Loading activity" /></Screen>;
   if (q.error || !a) return <Screen><ErrorBanner message={errorMessage(q.error) || 'Activity not found'} /></Screen>;
@@ -50,35 +57,85 @@ export default function ActivityDetail() {
   const zoneTotal = zoneTimes.reduce((s, v) => s + v, 0);
   const zoneColours = [palette.mut, palette.blue, palette.aqua, palette.amber, palette.orange, palette.neg, palette.neg];
 
+  const track = trackQ.data ?? null;
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/run');
+  };
+  const canCut = run && !!track && track.pts.length >= 2;
+
   return (
     <>
-      <Stack.Screen options={{ title: typeLabel(a.type) }} />
-      <Screen scrollEnabled={!scrubbing}>
-        <View style={{ gap: space.xs }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-            <T variant="h1" style={{ flexShrink: 1 }}>{a.name ?? typeLabel(a.type)}</T>
-            <Badge label={typeLabel(a.type)} tone={run ? 'accent' : 'mut'} />
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
+        <ScrollView
+          scrollEnabled={!scrubbing}
+          stickyHeaderIndices={[1]}
+          scrollEventThrottle={32}
+          onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+            const past = e.nativeEvent.contentOffset.y > 20;
+            setScrolled((cur) => (cur === past ? cur : past));
+          }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: space.xxl }}>
+          {/* the name scrolls away under the pinned stats bar */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingLeft: space.sm, paddingRight: space.lg, paddingTop: space.sm }}>
+            <Pressable onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, paddingHorizontal: space.sm })}>
+              <T variant="h1" tone="ink">‹</T>
+            </Pressable>
+            <T variant="h1" numberOfLines={1} style={{ flex: 1 }}>{a.name ?? typeLabel(a.type)}</T>
           </View>
-          <T tone="mut">{longDate(a.start_time_local)} · {shortTime(a.start_time_local)}{a.device ? ` · ${a.device}` : ''}</T>
-        </View>
 
-        {trackQ.isLoading ? (
-          <Card title="Route"><Loading label="Loading route" /></Card>
-        ) : trackQ.error ? (
-          <Card title="Route"><ErrorBanner message={errorMessage(trackQ.error)} /></Card>
-        ) : trackQ.data ? (
-          <RouteCard
-            activityId={id}
-            track={trackQ.data}
-            units={units}
-            hrZones={a.hr_zones}
-            efforts={segmentEfforts}
-            canCreateSegment={run}
-            onScrubbingChange={setScrubbing}
-          />
-        ) : null}
+          {/* the stats bar: pinned at the top once the name has scrolled under it */}
+          <View style={{ backgroundColor: palette.bg, flexDirection: 'row', alignItems: 'center', paddingLeft: space.sm, paddingRight: space.lg, paddingTop: space.xs, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: palette.hair }}>
+            <Pressable
+              onPress={goBack}
+              disabled={!scrolled}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              accessibilityElementsHidden={!scrolled}
+              importantForAccessibility={scrolled ? 'auto' : 'no-hide-descendants'}
+              style={({ pressed }) => ({ width: 24, alignItems: 'center', opacity: scrolled ? (pressed ? 0.6 : 1) : 0 })}>
+              <T variant="h2" tone="ink">‹</T>
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              {track ? (
+                <StatsStrip track={track} index={cursor} units={units} onClear={() => setCursor(null)} valueTone="accent" size="large" />
+              ) : trackQ.isLoading ? (
+                <Loading />
+              ) : (
+                <T variant="small" tone="mut">No detail streams for this activity yet.</T>
+              )}
+            </View>
+          </View>
 
-        {run ? <SegmentsCard activityId={id} units={units} trackReady={!trackQ.isLoading} /> : null}
+          <View style={{ padding: space.lg, gap: space.md }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+              <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+                {longDate(a.start_time_local)} · {shortTime(a.start_time_local)}{a.device ? ` · ${a.device}` : ''}
+              </T>
+              <Badge label={typeLabel(a.type)} tone={run ? 'accent' : 'mut'} />
+            </View>
+
+            {trackQ.error ? (
+              <Card title="Route"><ErrorBanner message={errorMessage(trackQ.error)} /></Card>
+            ) : track ? (
+              <RouteCard
+                activityId={id}
+                track={track}
+                units={units}
+                hrZones={a.hr_zones}
+                efforts={segmentEfforts}
+                cursor={cursor}
+                onCursor={setCursor}
+                creating={creating}
+                onCreatingChange={setCreating}
+                onScrubbingChange={setScrubbing}
+              />
+            ) : null}
+
+            {run ? <SegmentsCard activityId={id} units={units} trackReady={!trackQ.isLoading} onCut={canCut ? () => setCreating(true) : undefined} /> : null}
 
         <Card>
           <Grid>
@@ -156,7 +213,9 @@ export default function ActivityDetail() {
             </Grid>
           </Card>
         ) : null}
-      </Screen>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     </>
   );
 }
