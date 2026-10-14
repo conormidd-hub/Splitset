@@ -273,6 +273,32 @@ sends every path to the app, so links and reloads land on the right screen.
    screen, or turn Deployment Protection off to keep a preview there too (your data still sits
    behind the Splitset sign-in).
 
+### Demo athlete for preview builds
+
+Preview deployments show a "Sign in as the demo athlete" card above the email form, so the
+app can be reviewed without an inbox. The account is an ordinary Supabase user with a
+password instead of an emailed code, and it only exists in the project where the seed has run:
+
+```bash
+cd sync
+uv run python ../supabase/seed_demo.py     # creates or rebuilds the demo athlete and a year of data
+```
+
+The seed reads `EXPO_PUBLIC_DEMO_EMAIL` and `EXPO_PUBLIC_DEMO_PASSWORD` from the root `.env`
+(any long random password). Give the same two values to Vercel for the **Preview** environment
+only: the sign-in screen shows the card whenever both are present at build time, production
+has neither, and `app/scripts/vercel-build.mjs` (the build command in `app/vercel.json`) strips
+them from production builds as a backstop. To try it locally, copy the two lines into `app/.env`
+and restart the dev server.
+
+What the demo athlete has: a year of runs with splits, best efforts, routes and heart-rate
+traces, two gym sessions a week logged set by set against four routines, daily wellness with
+fitness and fatigue derived from that training, a plan covering the last three weeks and the
+next two, and a half marathon six weeks ago. It lives in `splitset-dev` next to real data, which
+row-level security keeps apart. Re-running the seed wipes and rebuilds the account, which is
+also how to undo anything a reviewer logged. Its intervals.icu connection is `paused` so the
+sync job never picks it up, and the Delete account button is hidden for it.
+
 Until invite-only sign-up lands (M12), anyone with the address can make an empty account of
 their own (row-level security keeps your data yours). Once everyone who should have an account
 has one, turn off "Allow new users to sign up" in Authentication, Sign In / Providers.

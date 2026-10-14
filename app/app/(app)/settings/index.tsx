@@ -14,6 +14,7 @@ import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { confirm } from '@/lib/confirm';
+import { isDemoUser } from '@/lib/demo';
 import { useSession } from '@/lib/session';
 import { useTheme, type ThemeChoice } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
@@ -133,7 +134,11 @@ export default function Settings() {
       <Card title="Account">
         <View style={{ gap: space.sm }}>
           <Button title="Sign out" variant="secondary" onPress={() => signOut()} />
-          <Button title="Delete account and all data" variant="danger" loading={del.isPending} onPress={onDelete} />
+          {isDemoUser(session?.user.email) ? (
+            <T variant="small" tone="mut">This is the demo athlete. Its data is sample data and is rebuilt by supabase/seed_demo.py.</T>
+          ) : (
+            <Button title="Delete account and all data" variant="danger" loading={del.isPending} onPress={onDelete} />
+          )}
           <ErrorBanner message={del.error ? errorMessage(del.error) : null} />
         </View>
       </Card>

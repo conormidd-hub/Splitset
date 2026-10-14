@@ -8,6 +8,7 @@ import { Screen } from '@/components/ui/Screen';
 import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
+import { demoAccount } from '@/lib/demo';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { space } from '@/theme/tokens';
 
@@ -41,6 +42,7 @@ export default function SignIn() {
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sendCode = async () => {
@@ -88,6 +90,16 @@ export default function SignIn() {
     setError(null);
   };
 
+  // Preview builds only: the demo athlete has a password, so no code is emailed.
+  const signInAsDemo = async () => {
+    if (!demoAccount) return;
+    setDemoBusy(true);
+    setError(null);
+    const { error: err } = await supabase.auth.signInWithPassword(demoAccount);
+    setDemoBusy(false);
+    if (err) setError(errorMessage(err));
+  };
+
   return (
     <Screen edges={['top', 'left', 'right', 'bottom']} scroll={false} style={{ flex: 1, justifyContent: 'center' }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -100,6 +112,21 @@ export default function SignIn() {
 
           {!supabaseConfigured ? (
             <ErrorBanner message="The app has no Supabase keys. Copy app/.env.example to app/.env and restart the dev server." />
+          ) : null}
+
+          {demoAccount && stage === 'email' ? (
+            <Card
+              tone="accent"
+              title="Preview build"
+              subtitle="Skip the email code and look around as the demo athlete: a year of sample runs, lifts and wellness.">
+              <Button
+                title="Sign in as the demo athlete"
+                variant="secondary"
+                loading={demoBusy}
+                disabled={busy || !supabaseConfigured}
+                onPress={signInAsDemo}
+              />
+            </Card>
           ) : null}
 
           {stage === 'email' ? (
@@ -138,7 +165,7 @@ export default function SignIn() {
                   onSubmitEditing={sendCode}
                   hint="We email you a six-digit code. No password, nothing to remember."
                 />
-                <Button title="Send code" onPress={sendCode} loading={busy} disabled={!supabaseConfigured} />
+                <Button title="Send code" onPress={sendCode} loading={busy} disabled={!supabaseConfigured || demoBusy} />
               </View>
             ) : (
               <View style={{ gap: space.md }}>
