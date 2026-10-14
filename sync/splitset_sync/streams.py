@@ -2,10 +2,19 @@
 
 Pure functions, ported from reference/sync.py: best rolling efforts, kilometre splits, a thinned
 route as a Google encoded polyline with its bounding box, plus a coarse downsample of the
-time/distance/heart-rate/altitude series for charts.
+time/distance/heart-rate/altitude/cadence series for charts.
 
 intervals.icu returns streams as a list of {type, data, data2}. A two-valued stream is split across
 data/data2: for latlng that is latitude in "data" and longitude in "data2", not [lat, lng] pairs.
+
+The samples object always carries the keys t, d, hr, alt and cad (a missing series is null, never
+absent) and, whenever a polyline was built, route_d: the watch distance in metres at each polyline
+point, so the app can place per-sample metrics on the map without re-measuring the track.
+
+Cadence unit: some watches report running cadence per leg (~85) and others in full steps per
+minute (~170). The choice is made once per activity, so one stream is never half doubled: when
+`is_run` and the median of the non-zero cadence samples is below 120 the whole stream is doubled,
+matching the activity-level rule in normalise.py. Rides are left as they are.
 """
 
 from __future__ import annotations
@@ -44,8 +53,13 @@ def encode_polyline(coords: list[tuple[float, float]], precision: int = 5) -> st
     return "".join(out)
 
 
-def simplify_route(latlng: list[tuple[float, float]], dist: np.ndarray) -> list[tuple[float, float]]:
-    """Thin the GPS track: keep a point roughly every ROUTE_SPACING_M, capped at ROUTE_MAX_POINTS."""
+def simplify_route_indices(latlng: list[tuple[float, float]], dist: np.ndarray) -> list[int]:
+    """Indices of the points to keep when thinning a GPS track.
+
+    Keeps a point roughly every ROUTE_SPACING_M of watch distance plus the last one, then
+    index-subsamples when that still exceeds ROUTE_MAX_POINTS. The result is strictly increasing,
+    so anything indexed by it (positions, distances) stays in track order.
+    """
     keep = [0]
     last_d = dist[0]
     for i in range(1, len(latlng)):
@@ -57,7 +71,12 @@ def simplify_route(latlng: list[tuple[float, float]], dist: np.ndarray) -> list[
     if len(keep) > ROUTE_MAX_POINTS:
         step = len(keep) / ROUTE_MAX_POINTS
         keep = [keep[int(i * step)] for i in range(ROUTE_MAX_POINTS)] + [keep[-1]]
-    return [latlng[i] for i in keep]
+    return keep
+
+
+def simplify_route(latlng: list[tuple[float, float]], dist: np.ndarray) -> list[tuple[float, float]]:
+    """Thin the GPS track: keep a point roughly every ROUTE_SPACING_M, capped at ROUTE_MAX_POINTS."""
+    return [latlng[i] for i in simplify_route_indices(latlng, dist)]
 
 
 def best_efforts(dist: np.ndarray, tsec: np.ndarray) -> dict[str, float]:
@@ -130,8 +149,10 @@ def km_splits(dist: np.ndarray, tsec: np.ndarray,
 
 
 def downsample(tsec: np.ndarray, dist: np.ndarray, hr: np.ndarray | None, alt: np.ndarray | None,
-               every_s: int) -> dict[str, list[Any]] | None:
-    """One sample every `every_s` seconds: t (s), d (m), hr (bpm or null), alt (m or null)."""
+               every_s: int, cad: np.ndarray | None = None) -> dict[str, list[Any]] | None:
+    """One sample every `every_s` seconds: t (s), d (m), hr (bpm or null), alt (m or null),
+    cad (steps or rpm, null when absent or zero). Every key is present even when its series is null.
+    """
     if every_s <= 0 or len(tsec) < 2:
         return None
     marks = np.arange(0, float(tsec[-1]) + every_s, every_s)
@@ -145,11 +166,24 @@ def downsample(tsec: np.ndarray, dist: np.ndarray, hr: np.ndarray | None, alt: n
         vals = a[idx]
         return [None if np.isnan(v) else round(float(v), nd) for v in vals]
 
+    def ints(a: np.ndarray | None, zero_is_null: bool) -> list[Any] | None:
+        if a is None:
+            return None
+        out: list[Any] = []
+        for v in a[idx]:
+            if np.isnan(v):
+                out.append(None)
+                continue
+            iv = int(round(float(v)))
+            out.append(None if zero_is_null and iv <= 0 else iv)
+        return out
+
     return {
         "t": [int(round(float(v))) for v in tsec[idx]],
         "d": [int(round(float(v))) for v in dist[idx]],
-        "hr": [None if v is None else int(v) for v in series(hr, 0)] if hr is not None else None,
+        "hr": ints(hr, zero_is_null=False),
         "alt": series(alt, 1),
+        "cad": ints(cad, zero_is_null=True),
     }
 
 
@@ -160,9 +194,28 @@ def _aligned(values: Any, n: int) -> np.ndarray | None:
     return np.asarray([np.nan if v is None else v for v in values], dtype=float)
 
 
+CADENCE_PER_LEG_MAX = 120   # a running cadence stream whose non-zero median is below this is per leg
+
+
+def normalise_run_cadence(cad: np.ndarray | None, is_run: bool) -> np.ndarray | None:
+    """Full steps per minute for runs: double a per-leg stream (median of non-zero samples < 120).
+
+    Decided once for the whole stream so a run is never half doubled. Rides come back untouched.
+    """
+    if cad is None or not is_run:
+        return cad
+    nz = cad[~np.isnan(cad) & (cad > 0)]
+    if len(nz) and float(np.median(nz)) < CADENCE_PER_LEG_MAX:
+        return cad * 2
+    return cad
+
+
 def derive_details(streams: list[dict[str, Any]] | None, activity_id: str,
-                   sample_every_s: int = 10) -> dict[str, Any]:
-    """Everything activity_details stores for one activity."""
+                   sample_every_s: int = 10, is_run: bool = False) -> dict[str, Any]:
+    """Everything activity_details stores for one activity.
+
+    `is_run` only affects the cadence unit (see normalise_run_cadence).
+    """
     empty = {"activity_id": activity_id, "has_streams": False, "splits": None,
              "best_efforts": None, "polyline": None, "bbox": None, "samples": None}
     if not streams:
@@ -181,6 +234,7 @@ def derive_details(streams: list[dict[str, Any]] | None, activity_id: str,
     n = len(tsec)
     hr = _aligned(by_type.get("heartrate"), n)
     alt = _aligned(by_type.get("altitude"), n)
+    cad = normalise_run_cadence(_aligned(by_type.get("cadence"), n), is_run)
 
     out: dict[str, Any] = {
         "activity_id": activity_id,
@@ -189,7 +243,7 @@ def derive_details(streams: list[dict[str, Any]] | None, activity_id: str,
         "splits": km_splits(dist, tsec, hr, alt) or None,
         "polyline": None,
         "bbox": None,
-        "samples": downsample(tsec, dist, hr, alt, sample_every_s),
+        "samples": downsample(tsec, dist, hr, alt, sample_every_s, cad=cad),
     }
 
     lats, lngs = by_type.get("latlng"), by_type2.get("latlng")
@@ -197,10 +251,16 @@ def derive_details(streams: list[dict[str, Any]] | None, activity_id: str,
         valid_idx = [i for i in range(n) if lats[i] is not None and lngs[i] is not None]
         if len(valid_idx) > MIN_SAMPLES:
             pts = [(float(lats[i]), float(lngs[i])) for i in valid_idx]
-            route = simplify_route(pts, dist[valid_idx])
+            valid_dist = dist[valid_idx]
+            keep = simplify_route_indices(pts, valid_dist)
+            route = [pts[i] for i in keep]
             rlat = [p[0] for p in route]
             rlng = [p[1] for p in route]
             out["polyline"] = encode_polyline(route)
             out["bbox"] = [round(min(rlat), 5), round(min(rlng), 5),
                            round(max(rlat), 5), round(max(rlng), 5)]
+            # watch distance at each polyline point, one entry per decoded point. Only when samples
+            # exist (sample_every_s <= 0 disables them, and route_d has nowhere else to live).
+            if out["samples"] is not None:
+                out["samples"]["route_d"] = [int(valid_dist[i]) for i in keep]
     return out

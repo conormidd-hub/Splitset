@@ -6,8 +6,11 @@ the athlete's API key as the password. Athlete ids carry a leading "i" (i123456)
 Endpoints used:
     GET /athlete/{id}/activities?oldest=YYYY-MM-DD&newest=YYYY-MM-DD
     GET /athlete/{id}/wellness?oldest=YYYY-MM-DD&newest=YYYY-MM-DD
-    GET /activity/{id}/streams?types=time,distance,latlng,heartrate,altitude
+    GET /activity/{id}/streams?types=time,distance,latlng,heartrate,altitude,cadence
     POST, PUT, DELETE /athlete/{id}/events[/{event id}]   planned workouts (see planpush.py)
+
+Cadence arrives in the device's own unit (rpm for rides, steps per minute per leg or in full
+on runs); streams.derive_details normalises runs to full steps per minute.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 API_ROOT = "https://intervals.icu/api/v1"
-STREAM_TYPES = "time,distance,latlng,heartrate,altitude"
+STREAM_TYPES = "time,distance,latlng,heartrate,altitude,cadence"
 USER_AGENT = "splitset-sync/0.1 (+https://github.com/conormidd-hub/Splitset)"
 
 

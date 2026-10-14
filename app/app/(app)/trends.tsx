@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
 import { T } from '@/components/ui/T';
-import { useNowSeconds } from '@/lib/clock';
+import { useNowHour } from '@/lib/clock';
 import { weekStartIso } from '@/lib/dates';
 import { acwr, dayMs, rolling, runPoints, weeklyRunKm, weeklySum, wellnessSeries } from '@/lib/trends';
 import { KM_PER_MILE, LB_PER_KG } from '@/lib/units';
@@ -30,8 +30,8 @@ export default function Trends() {
   const wellness = useWellness(days);
   const activities = useRecentActivities(days);
   const workouts = useWorkouts(400);
-  // hour-granular "now" so the memo below is pure and recomputes at most hourly
-  const nowHour = Math.floor(useNowSeconds() / 3600) * 3600 * 1000;
+  // hour-granular "now" so the memo below is pure and the screen re-renders at most hourly
+  const nowHour = useNowHour();
 
   const distUnit = units === 'imperial' ? 'mi' : 'km';
   const massUnit = units === 'imperial' ? 'lb' : 'kg';

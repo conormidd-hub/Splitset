@@ -164,10 +164,12 @@ def upsert_activities(conn: psycopg.Connection[Any], rows: list[dict[str, Any]])
     return len(rows)
 
 
-def activities_needing_details(conn: psycopg.Connection[Any], user_id: UUID, limit: int) -> list[str]:
+def activities_needing_details(conn: psycopg.Connection[Any], user_id: UUID,
+                               limit: int) -> list[tuple[str, str | None]]:
+    """(id, type) of activities with no detail row yet, newest first. The type decides the cadence unit."""
     rows = conn.execute(
         """
-        select a.id
+        select a.id, a.type
           from public.activities a
           left join public.activity_details d on d.activity_id = a.id
          where a.user_id = %s and d.activity_id is null and coalesce(a.distance_m, 0) >= 500
@@ -176,7 +178,32 @@ def activities_needing_details(conn: psycopg.Connection[Any], user_id: UUID, lim
         """,
         (user_id, limit),
     ).fetchall()
-    return [r["id"] for r in rows]
+    return [(r["id"], r["type"]) for r in rows]
+
+
+def activities_for_refresh(conn: psycopg.Connection[Any], user_id: UUID, limit: int | None,
+                           missing_cadence: bool) -> list[tuple[str, str | None]]:
+    """(id, type) of activities whose detail row should be rebuilt from fresh streams, newest first.
+
+    Only rows that had streams are candidates (a has_streams=false row would 404 again). With
+    `missing_cadence` the list shrinks to rows whose samples predate the cad series, so a backfill
+    can be re-run until it reports nothing to do. `limit` None means every matching activity.
+    """
+    q = """
+        select a.id, a.type
+          from public.activity_details d
+          join public.activities a on a.id = d.activity_id
+         where a.user_id = %s and d.has_streams
+    """
+    params: list[Any] = [user_id]
+    if missing_cadence:
+        q += " and (d.samples is null or not (d.samples ? 'cad'))"
+    q += " order by a.start_time desc"
+    if limit is not None:
+        q += " limit %s"
+        params.append(limit)
+    rows = conn.execute(q, params).fetchall()
+    return [(r["id"], r["type"]) for r in rows]
 
 
 def count_pending_details(conn: psycopg.Connection[Any], user_id: UUID) -> int:

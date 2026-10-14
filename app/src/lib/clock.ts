@@ -37,3 +37,13 @@ const getSnapshot = () => nowSeconds;
 export function useNowSeconds(): number {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
+
+const getHourSnapshot = () => Math.floor(nowSeconds / 3600) * 3600 * 1000;
+
+/**
+ * The current hour as epoch milliseconds, re-rendering the caller only when the hour changes.
+ * For date cut-offs on heavy screens (the heat map re-projects every route on each render).
+ */
+export function useNowHour(): number {
+  return useSyncExternalStore(subscribe, getHourSnapshot, getHourSnapshot);
+}

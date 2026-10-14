@@ -303,6 +303,48 @@ Until invite-only sign-up lands (M12), anyone with the address can make an empty
 their own (row-level security keeps your data yours). Once everyone who should have an account
 has one, turn off "Allow new users to sign up" in Authentication, Sign In / Providers.
 
+### Web on Vercel
+
+The web build is a static export hosted on Vercel straight from GitHub. One-off setup in the
+Vercel dashboard (Add New → Project → import `conormidd-hub/Splitset`):
+
+| Setting | Value |
+|---|---|
+| Root Directory | `app` |
+| Framework Preset | Other. `app/vercel.json` supplies the build command, output folder and the single-page rewrite. |
+| Node.js version | 22.x |
+| Environment variables, all environments | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, the same values as `app/.env` |
+| Environment variables, **Preview only** | `EXPO_PUBLIC_DEMO_EMAIL`, `EXPO_PUBLIC_DEMO_PASSWORD`, see below |
+
+Every push to `main` becomes the production deployment; every other branch and pull request
+gets its own preview URL. Leave Deployment Protection on its default (Vercel Authentication),
+so previews are only visible to people signed in to the Vercel account.
+
+### Demo athlete for preview builds
+
+Preview deployments show a "Sign in as the demo athlete" card above the email form, so the
+app can be reviewed without an inbox. The account is an ordinary Supabase user with a
+password instead of an emailed code, and it only exists in the project where the seed has run:
+
+```bash
+cd sync
+uv run python ../supabase/seed_demo.py     # creates or rebuilds the demo athlete and a year of data
+```
+
+The seed reads `EXPO_PUBLIC_DEMO_EMAIL` and `EXPO_PUBLIC_DEMO_PASSWORD` from the root `.env`
+(any long random password). Give the same two values to Vercel for the Preview environment
+only: the sign-in screen shows the card whenever both are present at build time, production
+has neither, and `app/scripts/vercel-build.mjs` strips them from production builds as a
+backstop. To try it locally, copy the two lines into `app/.env` and restart the dev server.
+
+What the demo athlete has: a year of runs with splits, best efforts, routes and heart-rate
+traces, two gym sessions a week logged set by set against four routines, daily wellness with
+fitness and fatigue derived from that training, a plan covering the last three weeks and the
+next two, and a half marathon six weeks ago. It lives in `splitset-dev` next to real data, which
+row-level security keeps apart. Re-running the seed wipes and rebuilds the account, which is
+also how to undo anything a reviewer logged. Its intervals.icu connection is `paused` so the
+sync job never picks it up, and the Delete account button is hidden for it.
+
 ## Credits
 
 The shape of the sync job, the intervals.icu field mapping and the stream maths (best efforts,

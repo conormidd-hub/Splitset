@@ -647,6 +647,189 @@ export type Database = {
           },
         ]
       }
+      routes: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m: number | null
+          elev_loss_m: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat?: number
+          start_lng?: number
+          bbox?: number[]
+          kind?: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      segment_efforts: {
+        Row: {
+          id: string
+          user_id: string
+          segment_id: string
+          activity_id: string
+          elapsed_s: number
+          start_idx: number
+          end_idx: number
+          started_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          segment_id: string
+          activity_id: string
+          elapsed_s: number
+          start_idx: number
+          end_idx: number
+          started_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          segment_id?: string
+          activity_id?: string
+          elapsed_s?: number
+          start_idx?: number
+          end_idx?: number
+          started_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "segment_efforts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segment_efforts_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segment_efforts_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      segments: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          start_lat: number
+          start_lng: number
+          end_lat: number
+          end_lng: number
+          bbox: number[]
+          source_activity_id: string | null
+          scanned_through: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          start_lat: number
+          start_lng: number
+          end_lat: number
+          end_lng: number
+          bbox: number[]
+          source_activity_id?: string | null
+          scanned_through?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          start_lat?: number
+          start_lng?: number
+          end_lat?: number
+          end_lng?: number
+          bbox?: number[]
+          source_activity_id?: string | null
+          scanned_through?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "segments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segments_source_activity_id_fkey"
+            columns: ["source_activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_requests: {
         Row: {
           id: number
