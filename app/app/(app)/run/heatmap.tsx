@@ -1,11 +1,11 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { memo, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, View } from 'react-native';
-import { Circle, Path } from 'react-native-svg';
 
-import { useRunRoutes, type RunRoute } from '@/api/activities';
+import { useRunRoutes } from '@/api/activities';
 import { useUnits } from '@/api/profile';
-import { TileMap, type Projector, type Size } from '@/components/map/TileMap';
+import { HeatLayer, HeatLegend } from '@/components/map/HeatLayer';
+import { TileMap } from '@/components/map/TileMap';
 import { Button } from '@/components/ui/Button';
 import { Chip, ChipRow, Segmented } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
@@ -14,11 +14,12 @@ import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/
 import { T } from '@/components/ui/T';
 import { useNowHour } from '@/lib/clock';
 import { isoDate, relativeDay } from '@/lib/dates';
-import { bboxCenter, bboxOf, clusterByLocation, decodeRoute, pathD, type Bbox, type LatLng, type MapView } from '@/lib/geo';
+import { bboxCenter, bboxOf, clusterByLocation, type Bbox, type LatLng, type MapView } from '@/lib/geo';
+import { decodeRuns, focusBounds, newestFirst, weightRoutes } from '@/lib/heat';
 import { groupRoutes, type RouteGroup } from '@/lib/routeSimilarity';
 import { formatDistance, formatDuration } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
-import { radius, space, type Palette } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 
 const RANGES = [
   { days: 90, label: '90d' },
@@ -33,66 +34,12 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'routes', label: 'Frequent routes' },
 ];
 
-type Decoded = RunRoute & { pts: [number, number][]; box: Bbox };
-
 function monthYear(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
-/** The run's box grown by its own width and height on every side, so the run sits in the middle third. */
-function focusBounds(b: Bbox): Bbox {
-  const dLat = b[2] - b[0];
-  const dLng = b[3] - b[1];
-  return [b[0] - dLat, b[1] - dLng, b[2] + dLat, b[3] + dLng];
-}
-
 function containsPoint(b: Bbox, p: LatLng): boolean {
   return p.lat >= b[0] && p.lat <= b[2] && p.lng >= b[1] && p.lng <= b[3];
-}
-
-/** One translucent stroke per run; where routes repeat, the strokes stack up and the road glows. */
-function heatPaths(routes: Decoded[], project: Projector, size: Size, color: string, alpha: number) {
-  const m = 40;
-  return routes.map((r) => {
-    const a = project(r.box[0], r.box[1]);
-    const b = project(r.box[2], r.box[3]);
-    if (Math.max(a.x, b.x) < -m || Math.min(a.x, b.x) > size.width + m) return null;
-    if (Math.max(a.y, b.y) < -m || Math.min(a.y, b.y) > size.height + m) return null;
-    const d = pathD(r.pts.map(([lat, lng]) => project(lat, lng)), 1.5);
-    if (!d) return null;
-    return <Path key={r.activity_id} d={d} fill="none" stroke={color} strokeOpacity={alpha} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />;
-  });
-}
-
-/**
- * Every route's stroke plus the optional bold representative, rebuilt only when the camera, the
- * routes or the highlight change, so re-renders of the screen (chips, summary) cost nothing here.
- */
-const HeatLayer = memo(function HeatLayer({ routes, project, size, alpha, highlight, palette }: {
-  routes: Decoded[]; project: Projector; size: Size; alpha: number; highlight: [number, number][] | null; palette: Palette;
-}) {
-  return (
-    <>
-      {heatPaths(routes, project, size, palette.accent, alpha)}
-      {highlight ? boldPath(highlight, project, palette) : null}
-    </>
-  );
-});
-
-/** A frequent route's representative run drawn bold over the heat: a halo, the stroke, then start and finish dots. */
-function boldPath(pts: [number, number][], project: Projector, palette: Palette) {
-  const d = pathD(pts.map(([lat, lng]) => project(lat, lng)), 1);
-  if (!d) return null;
-  const start = project(pts[0][0], pts[0][1]);
-  const end = project(pts[pts.length - 1][0], pts[pts.length - 1][1]);
-  return (
-    <>
-      <Path d={d} fill="none" stroke={palette.surface} strokeOpacity={0.9} strokeWidth={7} strokeLinejoin="round" strokeLinecap="round" />
-      <Path d={d} fill="none" stroke={palette.ink} strokeWidth={3.5} strokeLinejoin="round" strokeLinecap="round" />
-      <Circle cx={start.x} cy={start.y} r={5.5} fill={palette.pos} stroke={palette.surface} strokeWidth={2} />
-      <Circle cx={end.x} cy={end.y} r={5.5} fill={palette.neg} stroke={palette.surface} strokeWidth={2} />
-    </>
-  );
 }
 
 /**
@@ -119,20 +66,15 @@ export default function Maps() {
   // hour-granular "now" so the memo below is pure and the screen re-renders at most hourly
   const nowHour = useNowHour();
 
-  const decoded = useMemo<Decoded[]>(
-    () => (q.data ?? []).flatMap((r) => {
-      const pts = decodeRoute(r.polyline);
-      const box = r.bbox ?? bboxOf(pts);
-      return pts.length >= 2 && box ? [{ ...r, pts, box }] : [];
-    }),
-    [q.data],
-  );
+  const decoded = useMemo(() => decodeRuns(q.data), [q.data]);
+  // frequency weights over the whole history, so a range chip never recolours the routes
+  const weighted = useMemo(() => weightRoutes(decoded), [decoded]);
 
   const routes = useMemo(() => {
-    if (!days) return decoded;
+    if (!days) return weighted;
     const cutoff = `${isoDate(new Date(nowHour - days * 86_400_000))}T00:00:00`;
-    return decoded.filter((r) => r.start_time_local >= cutoff);
-  }, [decoded, days, nowHour]);
+    return weighted.filter((r) => r.start_time_local >= cutoff);
+  }, [weighted, days, nowHour]);
 
   const clusters = useMemo(() => clusterByLocation(routes, (r) => r.box), [routes]);
 
@@ -151,8 +93,8 @@ export default function Maps() {
   // Newest first so the latest run anchors each group. Only computed once the tab has been opened.
   const groups = useMemo(() => {
     if (!groupsWanted) return [];
-    const newestFirst = [...routes].reverse();
-    return groupRoutes(newestFirst.map((r) => ({
+    // the same newest-first order weightRoutes groups with, so both screens agree on the groups
+    return groupRoutes(newestFirst(routes).map((r) => ({
       id: r.activity_id, pts: r.pts, distance_m: r.distance_m, moving_time_s: r.moving_time_s, start_time_local: r.start_time_local,
     })));
   }, [groupsWanted, routes]);
@@ -165,10 +107,10 @@ export default function Maps() {
   }, [groups, cluster]);
 
   const highlightBox = useMemo(() => (highlight ? bboxOf(highlight.representative.pts) : null), [highlight]);
+  // a stable array, or the map would rebuild every route on each render
+  const highlightPts = useMemo(() => (highlight ? [highlight.representative.pts] : null), [highlight]);
 
   const totalM = useMemo(() => routes.reduce((s, r) => s + (r.distance_m ?? 0), 0), [routes]);
-  // faint with hundreds of runs so hot spots still separate, bolder when there are only a few
-  const alpha = Math.min(0.6, Math.max(0.12, 1.6 / Math.sqrt(Math.max(1, routes.length))));
 
   const span = routes.length
     ? (() => {
@@ -283,12 +225,14 @@ export default function Maps() {
             </View>
             <TileMap bounds={highlightBox ?? focusBox ?? cluster.fit} view={view} onViewChange={setView} interactive>
               {(project, size) => (
-                <HeatLayer routes={routes} project={project} size={size} alpha={alpha} highlight={highlight?.representative.pts ?? null} palette={palette} />
+                <HeatLayer routes={routes} project={project} size={size} highlight={highlightPts} palette={palette} />
               )}
             </TileMap>
-            <T variant="tiny" tone="mut" align="center">
-              {highlight ? 'The bold line is the most typical run of this route.' : 'Drag to pan. Brighter lines are roads you run most.'}
-            </T>
+            {highlight ? (
+              <T variant="tiny" tone="mut" align="center">The bold line is the most typical run of this route. Drag to pan.</T>
+            ) : (
+              <HeatLegend />
+            )}
           </View>
         )}
       </Screen>

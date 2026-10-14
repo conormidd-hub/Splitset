@@ -119,6 +119,8 @@ export type RunRoute = {
   start_time_local: string;
   distance_m: number | null;
   moving_time_s: number | null;
+  avg_hr: number | null;
+  elev_gain_m: number | null;
 };
 
 type RunRouteRow = {
@@ -132,6 +134,8 @@ type RunRouteRow = {
     start_time_local: string;
     distance_m: number | null;
     moving_time_s: number | null;
+    avg_hr: number | null;
+    elev_gain_m: number | null;
   };
 };
 
@@ -153,7 +157,7 @@ export function useRunRoutes() {
         const { data, error } = await supabase
           .from('activity_details')
           .select(
-            'activity_id, polyline, bbox, fetched_at, activities!inner(type, name, start_time_local, distance_m, moving_time_s)',
+            'activity_id, polyline, bbox, fetched_at, activities!inner(type, name, start_time_local, distance_m, moving_time_s, avg_hr, elev_gain_m)',
           )
           .eq('user_id', uid)
           .not('polyline', 'is', null)
@@ -172,6 +176,8 @@ export function useRunRoutes() {
             start_time_local: row.activities.start_time_local,
             distance_m: row.activities.distance_m,
             moving_time_s: row.activities.moving_time_s,
+            avg_hr: row.activities.avg_hr,
+            elev_gain_m: row.activities.elev_gain_m,
           });
         }
         if (data.length < ROUTE_PAGE) break;
