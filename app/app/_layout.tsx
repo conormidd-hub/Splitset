@@ -57,24 +57,26 @@ function RootNavigator() {
 
   if (isLoading) return null;
 
+  const header = {
+    headerStyle: { backgroundColor: palette.bg },
+    headerShadowVisible: false,
+    headerTintColor: palette.ink,
+    headerTitleStyle: { fontWeight: '700' as const },
+    headerBackButtonDisplayMode: 'minimal' as const,
+  };
+
   return (
     <NavThemeProvider value={navTheme}>
       <StatusBar style={name === 'night' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(app)" />
+          {/* the first-run wizard: Today sends a new account here until it connects or skips */}
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
           {/* above the tabs: reached from Today, Lift and the workout sheet alike */}
-          <Stack.Screen
-            name="pbs"
-            options={{
-              headerShown: true,
-              title: 'Personal bests',
-              headerStyle: { backgroundColor: palette.bg },
-              headerShadowVisible: false,
-              headerTintColor: palette.ink,
-              headerTitleStyle: { fontWeight: '700' },
-            }}
-          />
+          <Stack.Screen name="pbs" options={{ headerShown: true, title: 'Personal bests', ...header }} />
+          {/* one metric, opened from an In focus or At a glance tile; the page sets its own title */}
+          <Stack.Screen name="metric/[id]" options={{ headerShown: true, title: '', ...header }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />

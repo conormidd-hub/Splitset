@@ -9,12 +9,16 @@ def test_full_record_maps_every_column():
     rec = {"id": "2026-09-21", "restingHR": 47, "hrv": 61.5, "hrvSDNN": 88.0, "weight": 71.4,
            "bodyFat": 12.1, "sleepSecs": 26100, "sleepScore": 81, "sleepQuality": 3, "vo2max": 52.3,
            "ctl": 41.2, "atl": 48.9, "rampRate": 1.1, "steps": 9800, "stress": 22, "respiration": 14.2,
-           "spO2": 97, "readiness": 74}
+           "spO2": 97, "readiness": 74, "BodyBatteryMax": 88, "BodyBatteryMin": 23.0, "floorsClimbed": 12,
+           "avgSleepingHR": 49.5}
     row = normalise_wellness(rec, USER)
     assert row["user_id"] == USER and row["date"] == date(2026, 9, 21)
     assert row["resting_hr"] == 47 and row["sleep_s"] == 26100 and row["steps"] == 9800
     assert row["sleep_quality"] == 3
     assert row["hrv"] == 61.5 and row["hrv_sdnn"] == 88.0 and row["spo2"] == 97
+    # the custom Body Battery fields and the newer record fields
+    assert row["body_battery_max"] == 88 and row["body_battery_min"] == 23 and row["floors"] == 12
+    assert row["avg_sleeping_hr"] == 49.5
     assert row["source"] == "intervals"
     for col in WELLNESS_COLUMNS:
         assert col in row, col

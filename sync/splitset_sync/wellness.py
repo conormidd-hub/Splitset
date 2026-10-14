@@ -1,8 +1,10 @@
 """Turn an intervals.icu wellness record into a row for public.wellness.
 
 Each record's `id` is the date. The field list is the reference project's WELLNESS_FIELDS
-extended with what intervals.icu also passes through from Garmin (HRV SDNN, sleep quality,
-body fat, SpO2, stress, respiration, readiness, ramp rate). The full record is kept in `raw`.
+extended with the rest of the intervals.icu wellness record (HRV SDNN, sleep quality, body fat,
+SpO2, stress, respiration, readiness, ramp rate, floors, sleeping HR) and the two custom Body
+Battery fields. Not all of it is Garmin's: `stress` is intervals.icu's own 1-4 rating and
+`readiness` is filled by Oura, not Garmin. The full record is kept in `raw`.
 """
 
 from __future__ import annotations
@@ -29,9 +31,14 @@ WELLNESS_FIELDS: dict[str, list[str]] = {
     "respiration":   ["respiration"],
     "spo2":          ["spO2"],
     "readiness":     ["readiness"],
+    # Garmin Body Battery only reaches intervals.icu as custom wellness fields with these codes
+    "body_battery_max": ["BodyBatteryMax"],
+    "body_battery_min": ["BodyBatteryMin"],
+    "floors":        ["floorsClimbed"],
+    "avg_sleeping_hr": ["avgSleepingHR"],
 }
 
-INT_COLS = {"resting_hr", "sleep_s", "sleep_quality", "steps"}
+INT_COLS = {"resting_hr", "sleep_s", "sleep_quality", "steps", "body_battery_max", "body_battery_min", "floors"}
 WELLNESS_COLUMNS: list[str] = list(WELLNESS_FIELDS)
 
 

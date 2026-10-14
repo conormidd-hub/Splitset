@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import type { Tables, TablesUpdate } from '@/types/database';
 
 export type Profile = Tables<'profiles'>;
+/** The columns a signed-in user may change (profiles grants update on exactly these). */
+export type ProfilePatch = Pick<TablesUpdate<'profiles'>, 'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout'>;
 
 export function useProfile() {
   const uid = useUserId();
@@ -31,7 +33,7 @@ export function useUpdateProfile() {
   const uid = useUserId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (patch: Pick<TablesUpdate<'profiles'>, 'display_name' | 'timezone' | 'units'>) => {
+    mutationFn: async (patch: ProfilePatch) => {
       const { error } = await supabase.from('profiles').update(patch).eq('id', uid);
       if (error) throw error;
     },

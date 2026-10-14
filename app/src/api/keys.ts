@@ -7,4 +7,5 @@ export const keys = {
   activity: (id: string) => ['activity', id] as const,
   recentActivities: (uid: string, days: number) => ['recentActivities', uid, days] as const,
   wellness: (uid: string, days: number) => ['wellness', uid, days] as const,
+  sessions: (uid: string) => ['sessions', uid] as const,
 };
