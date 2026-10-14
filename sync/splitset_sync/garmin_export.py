@@ -112,10 +112,12 @@ def backfill(conn: psycopg.Connection[Any], user_id: UUID, days: dict[str, dict[
     """Upsert the parsed days. Returns (days written, days that were new)."""
     if not days:
         return 0, 0
-    before = conn.execute(
-        "select count(*) from public.wellness where user_id = %s and date = any(%s::date[])",
+    row = conn.execute(
+        "select count(*) as n from public.wellness where user_id = %s and date = any(%s::date[])",
         (user_id, [date.fromisoformat(d[:10]) for d in days]),
-    ).fetchone()[0]
+    ).fetchone()
+    # db.connect() uses dict rows; accept tuple rows too
+    before = row["n"] if isinstance(row, dict) else row[0]
     with conn.cursor() as cur:
         cur.executemany(
             UPSERT,

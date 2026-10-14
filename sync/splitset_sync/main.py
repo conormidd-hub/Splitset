@@ -5,6 +5,7 @@
     splitset-sync connect --email E [--athlete-id i123456] [--api-key K] [--oldest YYYY-MM-DD]
     splitset-sync dump --email E [--oldest] [--newest] [--out DIR]
     splitset-sync link [--user ID|EMAIL] [--since YYYY-MM-DD | --days N]
+    splitset-sync push-plan [--user ID|EMAIL] [--dry-run]
     splitset-sync backfill-garmin --email E PATH [--dry-run]
     splitset-sync refresh-details [--user ID|EMAIL] [--max N] [--missing-cadence] [--dry-run]
 
@@ -34,6 +35,7 @@ from .intervals_client import IntervalsAuthError, IntervalsClient, IntervalsErro
 from .garmin_export import backfill, find_root, parse_export
 from .linking import link_plan_sessions, link_workouts
 from .normalise import is_run_type, normalise_activity
+from .planpush import push_plan
 from .streams import derive_details
 from .wellness import normalise_wellness
 
@@ -74,7 +76,7 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
     ulog = UserLog(log, {"user": connection.get("email") or str(uid)})
     dry = args.dry_run
     counts: dict[str, int] = {k: 0 for k in ("activities_fetched", "activities_upserted", "streams_fetched",
-                                             "streams_pending", "wellness_days", "plan_links")}
+                                             "streams_pending", "wellness_days", "plan_links", "plan_pushed")}
 
     if not connection.get("api_key"):
         ulog.error("no API key in the vault for this connection; reconnect in the app")
@@ -151,6 +153,10 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
                     conn.commit()
                 counts["streams_pending"] = max(0, pending_total - counts["streams_fetched"])
 
+            # ---- planned runs to intervals.icu, and from there to the watch
+            if connection.get("push_plan"):
+                counts["plan_pushed"] = push_plan(conn, client, uid, connection["local_today"], dry, ulog)
+
         # ---- plan and workout links
         if not dry:
             since = date.fromisoformat(oldest)
@@ -161,9 +167,9 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
             db.record_success(conn, uid)
             db.finish_sync_run(conn, run_id, "ok", counts)
             conn.commit()
-        ulog.info("done: activities %d/%d, wellness %d days, streams %d fetched/%d pending, links %d",
+        ulog.info("done: activities %d/%d, wellness %d days, streams %d fetched/%d pending, links %d, plan pushed %d",
                   counts["activities_upserted"], counts["activities_fetched"], counts["wellness_days"],
-                  counts["streams_fetched"], counts["streams_pending"], counts["plan_links"])
+                  counts["streams_fetched"], counts["streams_pending"], counts["plan_links"], counts["plan_pushed"])
         return True
 
     except IntervalsAuthError as e:
@@ -192,6 +198,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.max_streams is None:
         args.max_streams = settings.default_max_streams
     with db.connect(settings.db_url) as conn:
+        if not args.dry_run and db.drop_orphan_tombstones(conn):
+            conn.commit()
         connections = db.active_connections(conn, args.user)
         if not connections:
             log.warning("no active intervals.icu connections%s", f" matching {args.user!r}" if args.user else "")
@@ -199,7 +207,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         log.info("%d active connection(s)", len(connections))
         failed = 0
         for c in connections:
-            if not run_user(conn, c, args, settings):
+            with db.athlete_lock(conn, "sync", c["user_id"]):
+                ok = run_user(conn, c, args, settings)
+            if not ok:
                 failed += 1
     if failed:
         log.error("%d of %d connection(s) failed", failed, len(connections))
@@ -354,6 +364,32 @@ def cmd_link(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_push_plan(args: argparse.Namespace) -> int:
+    """Only the planned-workout push, for connections that turned it on. Quick: no downloads."""
+    settings = Settings.load()
+    failed = 0
+    with db.connect(settings.db_url) as conn:
+        users = [c for c in db.active_connections(conn, args.user) if c.get("push_plan")]
+        if not users:
+            log.warning("no active connections with push_plan on%s", f" matching {args.user!r}" if args.user else "")
+            return 0
+        for c in users:
+            ulog = UserLog(log, {"user": c.get("email") or str(c["user_id"])})
+            if not c.get("api_key"):
+                ulog.error("no API key in the vault for this connection; reconnect in the app")
+                failed += 1
+                continue
+            try:
+                with IntervalsClient(c["athlete_id"], c["api_key"], timeout=settings.request_timeout_s) as client:
+                    n = push_plan(conn, client, c["user_id"], c["local_today"], args.dry_run, ulog)
+                ulog.info("plan: %d change(s) sent", n)
+            except IntervalsError as e:
+                conn.rollback()
+                ulog.error("plan push failed: %s", e)
+                failed += 1
+    return 1 if failed else 0
+
+
 # ---------------------------------------------------------------- garmin export
 
 def cmd_backfill_garmin(args: argparse.Namespace) -> int:
@@ -414,6 +450,11 @@ def build_parser() -> argparse.ArgumentParser:
     link.add_argument("--since", help="YYYY-MM-DD; default is --days ago")
     link.add_argument("--days", type=int, default=30)
     link.set_defaults(func=cmd_link)
+
+    pp = sub.add_parser("push-plan", help="send planned runs to intervals.icu (and so the watch) now")
+    pp.add_argument("--user", help="only this user id or email")
+    pp.add_argument("--dry-run", action="store_true", help="show the changes, send nothing")
+    pp.set_defaults(func=cmd_push_plan)
 
     gar = sub.add_parser("backfill-garmin", help="fill wellness history from a Garmin account export")
     gar.add_argument("--email", required=True)

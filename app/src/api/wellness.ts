@@ -8,12 +8,15 @@ import type { Tables } from '@/types/database';
 
 export type WellnessRow = Tables<'wellness'>;
 
+/** Every metric column: the whole row minus the payload. */
 export const WELLNESS_COLUMNS =
-  'date, resting_hr, hrv, weight_kg, sleep_s, sleep_score, vo2max, ctl, atl, ramp_rate, steps, readiness, respiration' as const;
+  'date, resting_hr, hrv, hrv_sdnn, hrv_baseline_low, hrv_baseline_high, weight_kg, body_fat_pct, sleep_s, sleep_score, sleep_quality, vo2max, ctl, atl, ramp_rate, steps, stress, respiration, spo2, readiness, body_battery_max, body_battery_min, floors, avg_sleeping_hr, source' as const;
 
 export type WellnessDay = Pick<
   WellnessRow,
-  'date' | 'resting_hr' | 'hrv' | 'weight_kg' | 'sleep_s' | 'sleep_score' | 'vo2max' | 'ctl' | 'atl' | 'ramp_rate' | 'steps' | 'readiness' | 'respiration'
+  | 'date' | 'resting_hr' | 'hrv' | 'hrv_sdnn' | 'hrv_baseline_low' | 'hrv_baseline_high' | 'weight_kg' | 'body_fat_pct'
+  | 'sleep_s' | 'sleep_score' | 'sleep_quality' | 'vo2max' | 'ctl' | 'atl' | 'ramp_rate' | 'steps' | 'stress' | 'respiration'
+  | 'spo2' | 'readiness' | 'body_battery_max' | 'body_battery_min' | 'floors' | 'avg_sleeping_hr' | 'source'
 >;
 
 /** The last N days of wellness, oldest first. */

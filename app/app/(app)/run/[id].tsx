@@ -131,8 +131,11 @@ export default function ActivityDetail() {
                 <View key={s.k} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
                   <T variant="mono" tone="mut" style={{ width: 40 }}>{s.k}</T>
                   <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-                    <View style={{ height: 8, borderRadius: 4, backgroundColor: palette.accent, opacity: 0.85, width: `${Math.round(35 + (1 - frac) * 60)}%` }} />
-                    <T variant="mono">{formatPace(s.t, units, false)}</T>
+                    {/* the bar lives in its own track so the fastest split's label never runs into the hr column */}
+                    <View style={{ flex: 1 }}>
+                      <View style={{ height: 8, borderRadius: 4, backgroundColor: palette.accent, opacity: 0.85, width: `${Math.round(35 + (1 - frac) * 65)}%` }} />
+                    </View>
+                    <T variant="mono" style={{ width: 48 }}>{formatPace(s.t, units, false)}</T>
                   </View>
                   <T variant="mono" tone="mut" style={{ width: 60, textAlign: 'right' }}>{s.hr ?? '–'}</T>
                   <T variant="mono" tone="mut" style={{ width: 60, textAlign: 'right' }}>{s.el != null ? `+${s.el}` : '–'}</T>

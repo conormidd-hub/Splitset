@@ -1,8 +1,10 @@
+import { addDays, parseISO } from 'date-fns';
+
 import type { ActivityListRow } from '@/api/activities';
 import { isRun } from '@/api/activities';
 import type { WellnessDay } from '@/api/wellness';
 import type { Point } from '@/components/charts/LineChart';
-import { weekStartIso } from './dates';
+import { isoDate, todayIso, weekStartIso } from './dates';
 
 export const dayMs = (iso: string) => Date.parse(`${iso}T12:00:00`);
 
@@ -67,11 +69,10 @@ export function acwr(rows: ActivityListRow[]): { load: Point[]; acute: Point[]; 
     byDay.set(d, (byDay.get(d) ?? 0) + (a.load ?? 0));
   }
   const days = [...byDay.keys()].sort();
-  const first = new Date(days[0]);
-  const last = new Date();
+  const last = todayIso();
   const load: Point[] = [];
-  for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-    const iso = d.toISOString().slice(0, 10);
+  // walk local calendar dates: mixing UTC parsing with local stepping repeats a day at a DST change
+  for (let d = parseISO(days[0]), iso = days[0]; iso <= last; d = addDays(d, 1), iso = isoDate(d)) {
     load.push({ x: dayMs(iso), y: byDay.get(iso) ?? 0 });
   }
   const mean = (n: number): Point[] => load.map((p, i) => {

@@ -17,4 +17,5 @@ export const keys = {
   routes: (uid: string) => ['routes', uid] as const,
   route: (id: string) => ['route', id] as const,
   routeHeights: (id: string) => ['routeHeights', id] as const,
+  sessions: (uid: string) => ['sessions', uid] as const,
 };

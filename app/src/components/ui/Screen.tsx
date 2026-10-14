@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { RefreshControl, ScrollView, View, type ViewStyle } from 'react-native';
+import type { ReactNode, RefObject } from 'react';
+import { RefreshControl, ScrollView, View, type NativeScrollEvent, type NativeSyntheticEvent, type ViewStyle } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { T } from './T';
@@ -13,19 +13,25 @@ type Props = {
   subtitle?: string;
   right?: ReactNode;
   scroll?: boolean;
-  /** Passed to the ScrollView; a chart turns this off while a finger is scrubbing it. */
-  scrollEnabled?: boolean;
   padded?: boolean;
   edges?: Edge[];
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** Off while something inside is being dragged, so the page holds still under the finger. */
+  scrollEnabled?: boolean;
+  /** For a child that scrolls the page itself (a drag near the edge). */
+  scrollRef?: RefObject<ScrollView | null>;
+  onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
   style?: ViewStyle;
 };
 
 export function Screen({
-  children, title, subtitle, right, scroll = true, scrollEnabled, padded = true,
-  edges = ['left', 'right'], refreshing, onRefresh, style,
+  children, title, subtitle, right, scroll = true, padded = true,
+  edges, refreshing, onRefresh, scrollEnabled = true, scrollRef, onScroll, style,
 }: Props) {
+  // a screen that draws its own title is a tab root with no navigation header above it, so it
+  // keeps clear of the status bar itself; under a header, the header already does
+  const safeEdges: Edge[] = edges ?? (title ? ['top', 'left', 'right'] : ['left', 'right']);
   const { palette } = useTheme();
   const header = title ? (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: space.sm }}>
@@ -45,12 +51,15 @@ export function Screen({
   );
 
   return (
-    <SafeAreaView edges={edges} style={{ flex: 1, backgroundColor: palette.bg }}>
+    <SafeAreaView edges={safeEdges} style={{ flex: 1, backgroundColor: palette.bg }}>
       {scroll ? (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={{ paddingBottom: space.xxl }}
           keyboardShouldPersistTaps="handled"
           scrollEnabled={scrollEnabled}
+          onScroll={onScroll}
+          scrollEventThrottle={onScroll ? 16 : undefined}
           refreshControl={
             onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={palette.mut} /> : undefined
           }>

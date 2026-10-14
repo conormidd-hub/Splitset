@@ -9,3 +9,8 @@ export const storage = {
   setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
   removeItem: (key: string) => AsyncStorage.removeItem(key),
 };
+
+/** Where the connect wizard keeps which step a person reached, per account. */
+export const connectProgressKey = (uid: string) => `splitset-connect-steps:${uid}`;
+/** The home screen layout as last saved on this device, per account. */
+export const homeLayoutKey = (uid: string) => `splitset-home-layout:${uid}`;

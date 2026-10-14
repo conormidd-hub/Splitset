@@ -7,6 +7,8 @@ connection; callers own commits and rollbacks.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID
@@ -25,6 +27,23 @@ def connect(db_url: str) -> psycopg.Connection[Any]:
                            application_name="splitset-sync")
 
 
+@contextmanager
+def athlete_lock(conn: psycopg.Connection[Any], scope: str, user_id: Any) -> Iterator[None]:
+    """One process at a time per athlete and scope, across runs: the scheduled sync, a Sync now
+    from the app and an instant plan push can all be going at once. A session-level advisory
+    lock, so it holds across the commits inside; it waits rather than skips, then the work reads
+    fresh state, which is what stops two runs sending the same planned run to the watch twice."""
+    key = f"splitset:{scope}:{user_id}"
+    conn.execute("select pg_advisory_lock(hashtextextended(%s, 0))", (key,))
+    try:
+        yield
+    finally:
+        if conn.info.transaction_status == psycopg.pq.TransactionStatus.INERROR:
+            conn.rollback()
+        conn.execute("select pg_advisory_unlock(hashtextextended(%s, 0))", (key,))
+        conn.commit()
+
+
 # ---------------------------------------------------------------- users and connections
 
 def user_id_for_email(conn: psycopg.Connection[Any], email: str) -> UUID | None:
@@ -35,10 +54,12 @@ def user_id_for_email(conn: psycopg.Connection[Any], email: str) -> UUID | None:
 def active_connections(conn: psycopg.Connection[Any], user_filter: str | None = None) -> list[dict[str, Any]]:
     """Active connections with their decrypted API keys. `user_filter` is a user id or email."""
     q = """
-        select c.user_id, c.athlete_id, c.oldest_date, c.status, c.consecutive_auth_failures,
-               s.decrypted_secret as api_key, u.email
+        select c.user_id, c.athlete_id, c.oldest_date, c.status, c.consecutive_auth_failures, c.push_plan,
+               s.decrypted_secret as api_key, u.email,
+               (now() at time zone p.timezone)::date as local_today
           from public.intervals_connections c
           join auth.users u on u.id = c.user_id
+          join public.profiles p on p.id = c.user_id
           left join vault.decrypted_secrets s on s.id = c.api_key_secret_id
          where c.status = 'active'
     """
@@ -268,14 +289,63 @@ def finish_sync_run(conn: psycopg.Connection[Any], run_id: int, status: str,
            set finished_at = now(), status = %s, error = %s,
                activities_fetched = %s, activities_upserted = %s,
                streams_fetched = %s, streams_pending = %s,
-               wellness_days = %s, plan_links = %s
+               wellness_days = %s, plan_links = %s, plan_pushed = %s
          where id = %s
         """,
         (
             status, error,
             counts.get("activities_fetched", 0), counts.get("activities_upserted", 0),
             counts.get("streams_fetched", 0), counts.get("streams_pending", 0),
-            counts.get("wellness_days", 0), counts.get("plan_links", 0),
+            counts.get("wellness_days", 0), counts.get("plan_links", 0), counts.get("plan_pushed", 0),
             run_id,
         ),
     )
+
+
+# ---------------------------------------------------------------- planned workouts on intervals.icu
+
+def sessions_for_push(conn: psycopg.Connection[Any], user_id: UUID, today: date) -> list[dict[str, Any]]:
+    """Sessions from today on, plus earlier ones whose event was sent for today or later (moved
+    into the past since, so their event has to go)."""
+    return conn.execute(
+        """
+        select id, date, type, subtype, title, target_distance_m, target_seconds, steps, status,
+               external_event_id, external_hash
+          from public.plan_sessions
+         where user_id = %s
+           and (date >= %s or (external_event_id is not null and split_part(external_hash, ':', 1) >= %s::text))
+         order by date, position
+        """,
+        (user_id, today, today),
+    ).fetchall()
+
+
+def set_session_event(conn: psycopg.Connection[Any], session_id: str, event_id: str | None,
+                      stamp: str | None) -> None:
+    # updated_at is left alone: this is bookkeeping, not an edit, and must not win over the app's
+    conn.execute(
+        "update public.plan_sessions set external_event_id = %s, external_hash = %s where id = %s",
+        (event_id, stamp, session_id),
+    )
+
+
+def event_tombstones(conn: psycopg.Connection[Any], user_id: UUID) -> list[dict[str, Any]]:
+    return conn.execute(
+        "select id, event_id from public.plan_event_deletions where user_id = %s order by id", (user_id,)
+    ).fetchall()
+
+
+def drop_event_tombstone(conn: psycopg.Connection[Any], tombstone_id: int) -> None:
+    conn.execute("delete from public.plan_event_deletions where id = %s", (tombstone_id,))
+
+
+def drop_orphan_tombstones(conn: psycopg.Connection[Any]) -> int:
+    """Events of deleted accounts can't be removed any more: there is no key left to do it with."""
+    cur = conn.execute(
+        """
+        delete from public.plan_event_deletions d
+         where not exists (select 1 from public.intervals_connections c
+                            where c.user_id = d.user_id and c.api_key_secret_id is not null)
+        """
+    )
+    return cur.rowcount

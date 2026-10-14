@@ -193,6 +193,38 @@ export type Database = {
           },
         ]
       }
+      connection_checks: {
+        Row: {
+          id: number
+          user_id: string
+          requested_at: string
+          net_request_id: number | null
+          stored_key: boolean
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          requested_at?: string
+          net_request_id?: number | null
+          stored_key?: boolean
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          requested_at?: string
+          net_request_id?: number | null
+          stored_key?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_checks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercises: {
         Row: {
           id: string
@@ -427,6 +459,10 @@ export type Database = {
           units: string
           created_at: string
           updated_at: string
+          home_layout: Json | null
+          onboarded_at: string | null
+          birth_year: number | null
+          sex: string | null
         }
         Insert: {
           id: string
@@ -435,6 +471,10 @@ export type Database = {
           units?: string
           created_at?: string
           updated_at?: string
+          home_layout?: Json | null
+          onboarded_at?: string | null
+          birth_year?: number | null
+          sex?: string | null
         }
         Update: {
           id?: string
@@ -443,6 +483,10 @@ export type Database = {
           units?: string
           created_at?: string
           updated_at?: string
+          home_layout?: Json | null
+          onboarded_at?: string | null
+          birth_year?: number | null
+          sex?: string | null
         }
         Relationships: [
         ]
@@ -912,6 +956,10 @@ export type Database = {
           source: string
           raw: Json | null
           updated_at: string
+          body_battery_max: number | null
+          body_battery_min: number | null
+          floors: number | null
+          avg_sleeping_hr: number | null
         }
         Insert: {
           user_id: string
@@ -938,6 +986,10 @@ export type Database = {
           source?: string
           raw?: Json | null
           updated_at?: string
+          body_battery_max?: number | null
+          body_battery_min?: number | null
+          floors?: number | null
+          avg_sleeping_hr?: number | null
         }
         Update: {
           user_id?: string
@@ -964,6 +1016,10 @@ export type Database = {
           source?: string
           raw?: Json | null
           updated_at?: string
+          body_battery_max?: number | null
+          body_battery_min?: number | null
+          floors?: number | null
+          avg_sleeping_hr?: number | null
         }
         Relationships: [
           {
@@ -1269,6 +1325,18 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      intervals_basic_auth: {
+        Args: {
+          p_api_key: string
+        }
+        Returns: string
+      }
+      intervals_verify_status: {
+        Args: {
+          p_check: number
+        }
+        Returns: Json
+      }
       request_sync: {
         Args: {
           p_kind?: string
@@ -1277,7 +1345,13 @@ export type Database = {
       }
       sync_request_status: {
         Args: {
-          p_request: unknown
+          p_request: number
+        }
+        Returns: Json
+      }
+      verify_intervals_key: {
+        Args: {
+          p_api_key?: string
         }
         Returns: Json
       }
