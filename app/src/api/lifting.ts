@@ -61,10 +61,14 @@ export function useCreateExercise() {
 // ---------------------------------------------------------------- routines
 
 export type RoutineWithStructure = Routine & {
-  routine_exercises: (RoutineExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure' | 'muscle_group'> | null; routine_sets: RoutineSet[] })[];
+  routine_exercises: (RoutineExercise & { exercise: RoutineExerciseFacts | null; routine_sets: RoutineSet[] })[];
 };
 
-const ROUTINE_SELECT = '*, routine_exercises(*, exercise:exercises(id, name, measure, muscle_group), routine_sets(*))';
+/** What a routine carries about each exercise: enough to start a workout that weighs its sets. */
+export type RoutineExerciseFacts = Pick<Exercise, 'id' | 'name' | 'measure' | 'muscle_group' | 'slug' | 'load_mode' | 'bw_factor' | 'is_unilateral' | 'is_bodyweight'>;
+
+const ROUTINE_SELECT =
+  '*, routine_exercises(*, exercise:exercises(id, name, measure, muscle_group, slug, load_mode, bw_factor, is_unilateral, is_bodyweight), routine_sets(*))';
 
 function sortRoutine(r: RoutineWithStructure): RoutineWithStructure {
   r.routine_exercises.sort((a, b) => a.position - b.position);
@@ -236,6 +240,7 @@ export function invalidateWorkoutData(qc: QueryClient, uid: string) {
   qc.invalidateQueries({ queryKey: ['plan'] });
   qc.invalidateQueries({ queryKey: ['planSession'] });
   qc.invalidateQueries({ queryKey: ['pbs'] });
+  qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
 }
 
 export function useDeleteWorkout() {
@@ -265,7 +270,7 @@ export function useRecords() {
   });
 }
 
-export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'completed_at'>;
+export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'e1rm' | 'completed_at'>;
 export type HistoryWorkout = { workoutId: string; name: string; startedAt: string; sets: HistorySet[]; bestWeight: number | null; volume: number };
 
 /** Completed sets of one exercise, grouped by workout, newest first. */
@@ -277,7 +282,7 @@ export function useExerciseHistory(exerciseId: string | undefined, workouts = 30
     queryFn: async (): Promise<HistoryWorkout[]> => {
       const { data, error } = await supabase
         .from('workout_sets')
-        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, completed_at, workout:workouts!inner(name, started_at, finished_at)')
+        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, e1rm, completed_at, workout:workouts!inner(name, started_at, finished_at)')
         .eq('user_id', uid)
         .eq('exercise_id', exerciseId!)
         .eq('completed', true)
@@ -311,9 +316,3 @@ export function usePreviousSets(exerciseId: string | undefined) {
   return { ...history, data: history.data?.[0]?.sets ?? [] };
 }
 
-export function epley(weightKg: number | null | undefined, reps: number | null | undefined): number | null {
-  if (weightKg == null || reps == null || reps <= 0) return null;
-  if (reps === 1) return weightKg;
-  if (reps > 12) return null;
-  return weightKg * (1 + reps / 30);
-}

@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { useRoutines, useWorkouts } from '@/api/lifting';
 import { useLiftPbs } from '@/api/pbs';
 import { useUnits } from '@/api/profile';
+import { useCurrentBodyweight } from '@/api/recovery';
 import { PbButton } from '@/components/pbs/PbButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -25,9 +26,12 @@ export default function LiftHome() {
   const routines = useRoutines();
   const workouts = useWorkouts(20);
   const lifts = useLiftPbs();
+  // the workout's bodyweight snapshot (D5); null until known, and the workout screen fills it in
+  const bodyweight = useCurrentBodyweight();
+  const snapshot = bodyweight.ready ? bodyweight.kg : null;
 
   const startEmpty = () => {
-    if (!active) start(uid);
+    if (!active) start(uid, null, undefined, snapshot);
     router.push('/lift/workout');
   };
 
@@ -73,7 +77,7 @@ export default function LiftHome() {
                 title="Start"
                 small
                 disabled={!!active}
-                onPress={() => { start(uid, r); router.push('/lift/workout'); }}
+                onPress={() => { start(uid, r, undefined, snapshot); router.push('/lift/workout'); }}
               />
               <Button title="Edit" small variant="secondary" onPress={() => router.push(`/lift/routines/${r.id}`)} />
             </View>

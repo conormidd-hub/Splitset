@@ -12,39 +12,40 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { Exercise, RoutineWithStructure } from '@/api/lifting';
+import { setRowPayload, usesBodyweight, type ExerciseFacts, type SetRow, type SetType, type Side } from '@/lib/lifting/setRow';
+import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
+import type { Thresholds } from '@/lib/recovery/thresholds';
 import { storage } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 
-export type SetType = 'warmup' | 'working' | 'drop' | 'failure';
+export type { SetRow, SetType, Side } from '@/lib/lifting/setRow';
 
-export type SetRow = {
+/** One exercise in the workout. The library facts (slug, load mode, bodyweight factor, sides)
+ *  let each saved set carry its e1RM; blocks saved before Phase 3 lack them. */
+export type ExerciseBlock = ExerciseFacts & {
   id: string;
-  workoutExerciseId: string;
-  exerciseId: string;
-  position: number;
-  setType: SetType;
-  weightKg: number | null;
-  reps: number | null;
-  rpe: number | null;
-  seconds: number | null;
-  completed: boolean;
-  completedAt: string | null;
-  notes: string | null;
-  updatedAt: string;
-};
-
-export type ExerciseBlock = {
-  id: string;
-  exerciseId: string;
   name: string;
-  measure: string;
   position: number;
   restSeconds: number | null;
   supersetGroup: number | null;
   notes: string | null;
   sets: SetRow[];
   updatedAt: string;
+  /** Logger switches: show the RPE cell; log one side per set (unilateral exercises). */
+  showRpe?: boolean;
+  perSide?: boolean;
 };
+
+/** The exercise columns the logger copies onto a block. */
+export type ExerciseForWorkout = Pick<Exercise, 'id' | 'name' | 'measure'> &
+  Partial<Pick<Exercise, 'slug' | 'load_mode' | 'bw_factor' | 'is_unilateral' | 'is_bodyweight'>>;
+
+const factsOf = (e: ExerciseForWorkout): Omit<ExerciseFacts, 'exerciseId' | 'measure'> => ({
+  slug: e.slug ?? null, loadMode: e.load_mode ?? null, bwFactor: e.bw_factor ?? null,
+  unilateral: e.is_unilateral ?? false, isBodyweight: e.is_bodyweight ?? false,
+});
+
+const otherSide = (side: Side | null | undefined): Side => (side === 'left' ? 'right' : 'left');
 
 export type ActiveWorkout = {
   id: string;
@@ -71,15 +72,22 @@ type State = {
   lastError: string | null;
   timer: RestTimer | null;
   defaultRestSeconds: number;
+  /** The signed-in user's thresholds, for the e1RM each saved set stores. Not persisted: the
+   *  workout screen sets it from useThresholds(). */
+  thresholds: Thresholds;
 
-  start: (userId: string, routine?: RoutineWithStructure | null, name?: string) => ActiveWorkout;
+  start: (userId: string, routine?: RoutineWithStructure | null, name?: string, bodyweightKg?: number | null) => ActiveWorkout;
   rename: (name: string) => void;
   setNotes: (notes: string) => void;
-  addExercise: (exercise: Pick<Exercise, 'id' | 'name' | 'measure'>, restSeconds?: number | null) => ExerciseBlock;
+  addExercise: (exercise: ExerciseForWorkout, restSeconds?: number | null) => ExerciseBlock;
+  setExerciseOptions: (blockId: string, options: { showRpe?: boolean; perSide?: boolean }) => void;
+  /** Snapshot bodyweight on the workout (D5); sets whose e1RM depends on it are saved again. */
+  setBodyweight: (kg: number) => void;
+  setThresholds: (thresholds: Thresholds) => void;
   removeExercise: (blockId: string) => void;
   setExerciseRest: (blockId: string, seconds: number | null) => void;
   addSet: (blockId: string) => SetRow | null;
-  updateSet: (setId: string, patch: Partial<Pick<SetRow, 'weightKg' | 'reps' | 'rpe' | 'seconds' | 'setType' | 'notes'>>) => void;
+  updateSet: (setId: string, patch: Partial<Pick<SetRow, 'weightKg' | 'reps' | 'rpe' | 'seconds' | 'side' | 'setType' | 'notes'>>) => void;
   toggleSet: (setId: string, completed?: boolean) => SetRow | null;
   removeSet: (setId: string) => void;
   finish: () => Promise<string | null>;
@@ -109,11 +117,9 @@ const rowOf = {
     id: b.id, workout_id: w.id, user_id: w.userId, exercise_id: b.exerciseId, position: b.position,
     superset_group: b.supersetGroup, rest_seconds: b.restSeconds, notes: b.notes, updated_at: now(),
   }),
-  set: (w: ActiveWorkout, s: SetRow) => ({
-    id: s.id, workout_exercise_id: s.workoutExerciseId, workout_id: w.id, exercise_id: s.exerciseId, user_id: w.userId,
-    position: s.position, set_type: s.setType, weight_kg: s.weightKg, reps: s.reps, rpe: s.rpe, seconds: s.seconds,
-    completed: s.completed, completed_at: s.completedAt, notes: s.notes, updated_at: now(),
-  }),
+  /** The set's row, with the e1RM its exercise and the workout's bodyweight give it (Phase 3). */
+  set: (c: Thresholds, w: ActiveWorkout, s: SetRow) =>
+    setRowPayload(c, w, w.exercises.find((b) => b.id === s.workoutExerciseId), s, now()),
 };
 
 export const useActiveWorkout = create<State>()(
@@ -140,17 +146,20 @@ export const useActiveWorkout = create<State>()(
         lastError: null,
         timer: null,
         defaultRestSeconds: 90,
+        thresholds: DEFAULT_THRESHOLDS,
 
-        start: (userId, routine, name) => {
+        start: (userId, routine, name, bodyweightKg) => {
           const startedAt = now();
+          const c = get().thresholds;
           const w: ActiveWorkout = {
             id: uuid(), userId, routineId: routine?.id ?? null,
-            name: name ?? routine?.name ?? 'Workout', startedAt, notes: null, bodyweightKg: null, exercises: [], updatedAt: startedAt,
+            name: name ?? routine?.name ?? 'Workout', startedAt, notes: null, bodyweightKg: bodyweightKg ?? null, exercises: [], updatedAt: startedAt,
           };
           const ops: Op[] = [{ kind: 'upsert', table: 'workouts', row: rowOf.workout(w) }];
           for (const re of routine?.routine_exercises ?? []) {
             const block: ExerciseBlock = {
               id: uuid(), exerciseId: re.exercise_id, name: re.exercise?.name ?? 'Exercise', measure: re.exercise?.measure ?? 'weight_reps',
+              ...(re.exercise ? factsOf(re.exercise) : {}),
               position: w.exercises.length, restSeconds: re.rest_seconds, supersetGroup: re.superset_group, notes: re.notes, sets: [], updatedAt: startedAt,
             };
             const targets = re.routine_sets.length ? re.routine_sets : [{ set_type: 'working', target_reps: null, target_weight_kg: null, target_seconds: null }];
@@ -163,7 +172,7 @@ export const useActiveWorkout = create<State>()(
             }
             w.exercises.push(block);
             ops.push({ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) });
-            for (const s of block.sets) ops.push({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, s) });
+            for (const s of block.sets) ops.push({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(c, w, s) });
           }
           set({ workout: w, timer: null, lastError: null });
           queue(...ops);
@@ -182,7 +191,7 @@ export const useActiveWorkout = create<State>()(
 
         addExercise: (exercise, restSeconds) => {
           const block: ExerciseBlock = {
-            id: uuid(), exerciseId: exercise.id, name: exercise.name, measure: exercise.measure, position: 0,
+            id: uuid(), exerciseId: exercise.id, name: exercise.name, measure: exercise.measure, ...factsOf(exercise), position: 0,
             restSeconds: restSeconds ?? get().defaultRestSeconds, supersetGroup: null, notes: null, sets: [], updatedAt: now(),
           };
           const w = mutate((x) => {
@@ -196,11 +205,46 @@ export const useActiveWorkout = create<State>()(
           if (w) {
             queue(
               { kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) },
-              ...block.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, s) })),
+              ...block.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, s) })),
             );
           }
           return block;
         },
+
+        setExerciseOptions: (blockId, options) => {
+          const changed: SetRow[] = [];
+          const w = mutate((x) => {
+            const b = x.exercises.find((e) => e.id === blockId);
+            if (!b) return;
+            if (options.showRpe !== undefined) b.showRpe = options.showRpe;
+            if (options.perSide !== undefined && options.perSide !== !!b.perSide) {
+              b.perSide = options.perSide;
+              // on: open sets without a side alternate left, right; off: one set covers both sides again
+              let side: Side | null | undefined = null;
+              for (const s of b.sets) {
+                if (options.perSide && !s.side && !s.completed) side = s.side = otherSide(side);
+                else if (options.perSide) { side = s.side; continue; }
+                else if (s.side) s.side = null;
+                else continue;
+                s.updatedAt = now();
+                changed.push(s);
+              }
+            }
+          });
+          if (w && changed.length) queue(...changed.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, s) })));
+        },
+
+        setBodyweight: (kg) => {
+          const w = mutate((x) => { x.bodyweightKg = kg; });
+          if (!w) return;
+          const c = get().thresholds;
+          queue(
+            { kind: 'upsert', table: 'workouts', row: rowOf.workout(w) },
+            ...w.exercises.filter(usesBodyweight).flatMap((b) => b.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(c, w, s) }))),
+          );
+        },
+
+        setThresholds: (thresholds) => set({ thresholds }),
 
         removeExercise: (blockId) => {
           const w = mutate((x) => {
@@ -233,11 +277,12 @@ export const useActiveWorkout = create<State>()(
               id: uuid(), workoutExerciseId: b.id, exerciseId: b.exerciseId, position: b.sets.length,
               setType: last?.setType === 'warmup' ? 'working' : (last?.setType ?? 'working'),
               weightKg: last?.weightKg ?? null, reps: last?.reps ?? null, rpe: null, seconds: last?.seconds ?? null,
+              side: b.perSide ? otherSide(last?.side) : null,
               completed: false, completedAt: null, notes: null, updatedAt: now(),
             };
             b.sets.push(created);
           });
-          if (w && created) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, created) });
+          if (w && created) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, created) });
           return created;
         },
 
@@ -252,7 +297,7 @@ export const useActiveWorkout = create<State>()(
               }
             }
           });
-          if (w && row) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, row) });
+          if (w && row) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, row) });
         },
 
         toggleSet: (setId, completed) => {
@@ -268,7 +313,7 @@ export const useActiveWorkout = create<State>()(
               }
             }
           });
-          if (w && row) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, row) });
+          if (w && row) queue({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, row) });
           return row;
         },
 
@@ -285,7 +330,7 @@ export const useActiveWorkout = create<State>()(
           if (w) {
             queue(
               { kind: 'delete', table: 'workout_sets', id: setId },
-              ...touched.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(w, s) })),
+              ...touched.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, s) })),
             );
           }
         },

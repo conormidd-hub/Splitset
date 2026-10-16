@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { useConnection } from '@/api/connections';
-import { useDeleteAccount, useProfile, useUpdateProfile } from '@/api/profile';
+import { useDeleteAccount, useProfile, useUnits, useUpdateProfile } from '@/api/profile';
+import { useCurrentBodyweight } from '@/api/recovery';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, Segmented } from '@/components/ui/Chip';
@@ -14,8 +15,11 @@ import { ErrorBanner, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { confirm } from '@/lib/confirm';
+import { relativeDay } from '@/lib/dates';
 import { isDemoUser } from '@/lib/demo';
+import { formatLoad } from '@/lib/pbs';
 import { useSession } from '@/lib/session';
+import { displayToKg, kgToDisplay } from '@/lib/units';
 import { useTheme, type ThemeChoice } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -25,6 +29,8 @@ type Sex = 'male' | 'female' | 'none';
 const THIS_YEAR = new Date().getFullYear();
 
 const sexOf = (v: string | null | undefined): Sex => (v === 'male' || v === 'female' ? v : 'none');
+/** profiles.bodyweight_kg is checked to this range. */
+const BODYWEIGHT_KG = { min: 20, max: 400 };
 
 export default function Settings() {
   const { session, signOut } = useSession();
@@ -33,22 +39,31 @@ export default function Settings() {
   const update = useUpdateProfile();
   const del = useDeleteAccount();
   const connection = useConnection();
+  const units = useUnits();
+  const bodyweight = useCurrentBodyweight();
 
   // Inputs show the saved value until the user edits them; edits live here until saved.
   const [nameEdit, setNameEdit] = useState<string | null>(null);
   const [tzEdit, setTzEdit] = useState<string | null>(null);
   const [yearEdit, setYearEdit] = useState<number | null | undefined>(undefined);
   const [sexEdit, setSexEdit] = useState<Sex | undefined>(undefined);
+  const [bwEdit, setBwEdit] = useState<number | null | undefined>(undefined);   // display units
   const name = nameEdit ?? profile.data?.display_name ?? '';
   const tz = tzEdit ?? profile.data?.timezone ?? '';
   const year = yearEdit === undefined ? profile.data?.birth_year ?? null : yearEdit;
   const sex = sexEdit ?? sexOf(profile.data?.sex);
   const yearBad = year != null && (year < 1900 || year > THIS_YEAR);
+  const savedBw = profile.data?.bodyweight_kg ?? null;
+  const bwShown = bwEdit === undefined ? (savedBw == null ? null : kgToDisplay(savedBw, units)) : bwEdit;
+  const bwKg = bwShown == null ? null : displayToKg(bwShown, units);
+  const bwBad = bwKg != null && (bwKg < BODYWEIGHT_KG.min || bwKg > BODYWEIGHT_KG.max);
+  const bwChanged = bwEdit !== undefined && (bwKg == null ? savedBw != null : savedBw == null || Math.abs(bwKg - savedBw) >= 0.05);
   const dirty = !!profile.data && (
     name.trim() !== profile.data.display_name
     || tz.trim() !== profile.data.timezone
     || year !== (profile.data.birth_year ?? null)
     || sex !== sexOf(profile.data.sex)
+    || bwChanged
   );
   const save = () =>
     update.mutate(
@@ -57,8 +72,9 @@ export default function Settings() {
         timezone: tz.trim() || 'UTC',
         birth_year: year,
         sex: sex === 'none' ? null : sex,
+        ...(bwChanged ? { bodyweight_kg: bwKg, bodyweight_updated_at: bwKg == null ? null : new Date().toISOString() } : {}),
       },
-      { onSuccess: () => { setNameEdit(null); setTzEdit(null); setYearEdit(undefined); setSexEdit(undefined); } },
+      { onSuccess: () => { setNameEdit(null); setTzEdit(null); setYearEdit(undefined); setSexEdit(undefined); setBwEdit(undefined); } },
     );
   const conn = connection.data;
   const connected = !!conn && conn.status !== 'disconnected';
@@ -100,6 +116,21 @@ export default function Settings() {
             </View>
             <NumberInput value={year} onChange={setYearEdit} integer width={96} placeholder="1990" />
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
+            <View style={{ flex: 1 }}>
+              <T variant="label" tone="mut">Bodyweight</T>
+              <T variant="small" tone={bwBad ? 'neg' : 'mut'}>
+                {bwBad
+                  ? `Between ${formatLoad(BODYWEIGHT_KG.min, units)} and ${formatLoad(BODYWEIGHT_KG.max, units)}, please.`
+                  : bodyweight.source === 'weigh-in'
+                    ? `For bodyweight exercises. Using your weigh-in of ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}), which is newer.`
+                    : bodyweight.source === 'default'
+                      ? `For bodyweight exercises, which use ${formatLoad(bodyweight.kg, units)} until you enter yours.`
+                      : 'For bodyweight exercises. A newer Garmin weigh-in takes over.'}
+              </T>
+            </View>
+            <NumberInput value={bwShown} onChange={setBwEdit} width={96} placeholder={units === 'imperial' ? 'lb' : 'kg'} />
+          </View>
           <View>
             <T variant="label" tone="mut" style={{ marginBottom: space.xs }}>Sex</T>
             <Segmented<Sex>
@@ -117,7 +148,7 @@ export default function Settings() {
             />
           </View>
           {dirty ? (
-            <Button title="Save" small loading={update.isPending} disabled={yearBad} onPress={save} />
+            <Button title="Save" small loading={update.isPending} disabled={yearBad || bwBad} onPress={save} />
           ) : null}
           <ErrorBanner message={update.error ? errorMessage(update.error) : null} />
         </View>

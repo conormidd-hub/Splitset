@@ -32,7 +32,7 @@ export default function ExercisePicker() {
 
   const choose = (e: Exercise) => {
     if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
-    else useActiveWorkout.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
+    else useActiveWorkout.getState().addExercise(e);
     router.back();
   };
 

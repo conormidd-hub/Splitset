@@ -395,6 +395,57 @@ export type Database = {
           },
         ]
       }
+      manual_pbs: {
+        Row: {
+          id: string
+          user_id: string
+          exercise_id: string
+          weight_kg: number
+          reps: number
+          e1rm: number
+          dated_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          exercise_id: string
+          weight_kg: number
+          reps: number
+          e1rm: number
+          dated_at: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          exercise_id?: string
+          weight_kg?: number
+          reps?: number
+          e1rm?: number
+          dated_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_pbs_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_pbs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       muscles: {
         Row: {
           id: string
@@ -549,6 +600,8 @@ export type Database = {
           onboarded_at: string | null
           birth_year: number | null
           sex: string | null
+          bodyweight_kg: number | null
+          bodyweight_updated_at: string | null
         }
         Insert: {
           id: string
@@ -561,6 +614,8 @@ export type Database = {
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
+          bodyweight_kg?: number | null
+          bodyweight_updated_at?: string | null
         }
         Update: {
           id?: string
@@ -573,6 +628,8 @@ export type Database = {
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
+          bodyweight_kg?: number | null
+          bodyweight_updated_at?: string | null
         }
         Relationships: [
         ]
@@ -1222,6 +1279,8 @@ export type Database = {
           completed_at: string | null
           notes: string | null
           updated_at: string
+          side: string | null
+          e1rm: number | null
         }
         Insert: {
           id?: string
@@ -1240,6 +1299,8 @@ export type Database = {
           completed_at?: string | null
           notes?: string | null
           updated_at?: string
+          side?: string | null
+          e1rm?: number | null
         }
         Update: {
           id?: string
@@ -1258,6 +1319,8 @@ export type Database = {
           completed_at?: string | null
           notes?: string | null
           updated_at?: string
+          side?: string | null
+          e1rm?: number | null
         }
         Relationships: [
           {
@@ -1386,6 +1449,23 @@ export type Database = {
           set_id: string | null
           workout_id: string | null
           achieved_at: string | null
+        }
+        Relationships: []
+      }
+      pb_history: {
+        Row: {
+          user_id: string | null
+          exercise_id: string | null
+          e1rm: number | null
+          at: string | null
+          source: string | null
+          weight_kg: number | null
+          reps: number | null
+          rpe: number | null
+          set_type: string | null
+          workout_id: string | null
+          set_id: string | null
+          manual_pb_id: string | null
         }
         Relationships: []
       }

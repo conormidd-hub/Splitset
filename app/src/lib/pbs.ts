@@ -1,6 +1,5 @@
 import { startOfMonth } from 'date-fns';
 
-import { epley } from '@/api/lifting';
 import type { LiftPb, Period, PbPeriods, RunPb } from '@/api/pbs';
 import type { SetRow } from '@/stores/activeWorkout';
 import { formatDistance, formatDuration, formatPace, LB_PER_KG, type Units } from './units';
@@ -79,9 +78,12 @@ export type SessionBest = { value: number; setId: string };
 
 /**
  * Bests from sets ticked in the workout on screen, by the same rules as the lift_pbs view, so
- * they can be merged with the stored PBs while the workout is still going.
+ * they can be merged with the stored PBs while the workout is still going. The 1RM is the e1RM
+ * each set stores (`e1rmOf`, the engine's, as the view reads it).
  */
-export function sessionBests(sets: SetRow[], measure: string, bodyweight: boolean): Partial<Record<LiftMetric, SessionBest>> {
+export function sessionBests(
+  sets: SetRow[], measure: string, bodyweight: boolean, e1rmOf: (s: SetRow) => number | null,
+): Partial<Record<LiftMetric, SessionBest>> {
   const out: Partial<Record<LiftMetric, SessionBest>> = {};
   const offer = (metric: LiftMetric, value: number | null, setId: string) => {
     if (value == null || !Number.isFinite(value) || value <= 0) return;
@@ -91,10 +93,8 @@ export function sessionBests(sets: SetRow[], measure: string, bodyweight: boolea
     if (!s.completed || s.setType === 'warmup') continue;
     const w = s.weightKg ?? 0;
     const r = s.reps ?? 0;
-    if (measure === 'weight_reps' && w > 0) {
-      offer('1rm', epley(w, r), s.id);
-      if (r >= 3) offer('3rm', w, s.id);
-    }
+    if (measure === 'weight_reps') offer('1rm', e1rmOf(s), s.id);
+    if (measure === 'weight_reps' && w > 0 && r >= 3) offer('3rm', w, s.id);
     if ((measure === 'reps' || (measure === 'weight_reps' && bodyweight && w === 0)) && r > 0) offer('reps', r, s.id);
     if (measure === 'duration') offer('time', s.seconds, s.id);
     if (measure === 'weight_duration') offer('weight', s.weightKg, s.id);
@@ -102,12 +102,16 @@ export function sessionBests(sets: SetRow[], measure: string, bodyweight: boolea
   return out;
 }
 
-/** Stored PBs for one metric with this session's best folded in: the session is this month and year. */
-export function mergeSession(stored: PbPeriods<LiftPb> | undefined, session: SessionBest | undefined) {
+/**
+ * Stored PBs for one metric with this session's best folded in: the session is this month and
+ * year. `manualAll` is the user's best manual entry, which also counts as the all-time best to
+ * beat (the "new PB" moment, spec §3.6).
+ */
+export function mergeSession(stored: PbPeriods<LiftPb> | undefined, session: SessionBest | undefined, manualAll?: number | null) {
   const s = session?.value;
   const month = bestOf(stored?.month?.value, s);
   const year = bestOf(stored?.year?.value, s);
-  const all = bestOf(stored?.all?.value, s);
-  const prevAll = stored?.all?.value ?? null;
+  const prevAll = bestOf(stored?.all?.value, manualAll);
+  const all = bestOf(prevAll, s);
   return { month, year, all, beatsAllTime: s != null && prevAll != null && s > prevAll };
 }
