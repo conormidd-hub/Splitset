@@ -577,6 +577,65 @@ export type Database = {
         Relationships: [
         ]
       }
+      routes: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m: number | null
+          elev_loss_m: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat?: number
+          start_lng?: number
+          bbox?: number[]
+          kind?: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       routine_exercises: {
         Row: {
           id: string
@@ -733,65 +792,6 @@ export type Database = {
           },
         ]
       }
-      routes: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          polyline: string
-          distance_m: number
-          elev_gain_m: number | null
-          elev_loss_m: number | null
-          start_lat: number
-          start_lng: number
-          bbox: number[]
-          kind: string
-          provider: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          polyline: string
-          distance_m: number
-          elev_gain_m?: number | null
-          elev_loss_m?: number | null
-          start_lat: number
-          start_lng: number
-          bbox: number[]
-          kind: string
-          provider?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          polyline?: string
-          distance_m?: number
-          elev_gain_m?: number | null
-          elev_loss_m?: number | null
-          start_lat?: number
-          start_lng?: number
-          bbox?: number[]
-          kind?: string
-          provider?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "routes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       segment_efforts: {
         Row: {
           id: string
@@ -828,10 +828,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "segment_efforts_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "segment_efforts_activity_id_fkey"
+            columns: ["activity_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
           {
@@ -842,10 +842,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "segment_efforts_activity_id_fkey"
-            columns: ["activity_id"]
+            foreignKeyName: "segment_efforts_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "activities"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -901,17 +901,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "segments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "segments_source_activity_id_fkey"
             columns: ["source_activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
