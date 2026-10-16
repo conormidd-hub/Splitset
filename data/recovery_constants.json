@@ -1,0 +1,95 @@
+{
+  "version": "2.0",
+  "_doc": "Every tunable number in docs/load-model-spec.md. Section numbers refer to that spec. Per-user overrides live in user_thresholds and shadow these keys; nothing in code may hard-code one of these values.",
+
+  "role_weights":    { "primary": 1.0, "secondary": 0.4, "tertiary": 0.2 },
+  "role_caps":       { "primary": 2,   "secondary": 2,   "tertiary": 3 },
+  "fatigue_factors": { "high": 1.2, "standard": 1.0, "low": 0.8 },
+
+  "e1rm": {
+    "_doc": "§3.1 Epley with reps-in-reserve. reps_used = min(reps + rir, max_reps); reps_used <= 1 means e1RM = weight.",
+    "epley_divisor": 30,
+    "max_reps": 20,
+    "rir_from_rpe": "10 - rpe, clamped 0..5",
+    "rir_default": 0
+  },
+
+  "intensity_cap": 0.95,
+
+  "pb": {
+    "_doc": "§3.4–§3.6 PB resolution before a session, in order: monthly, lapsed, estimated, calibration. manual_policy: max = a logged e1RM replaces a manual one only when higher; replace_on_log = any logged set dated after a manual entry retires it.",
+    "window_days": 30,
+    "lapsed_factor": 0.95,
+    "estimate_discount": 0.90,
+    "estimate_max_hops": 4,
+    "manual_policy": "max",
+    "calibration_rir": 2
+  },
+
+  "fixed_set": {
+    "_doc": "§4.3 load_mode = fixed. cost = clamp(base + per_rpe_point × (rpe − 8), min, max); base when no RPE.",
+    "base": 0.30,
+    "per_rpe_point": 0.05,
+    "min": 0.10,
+    "max": 0.40
+  },
+
+  "unilateral_side_factor": 0.5,
+  "bodyweight_default_kg": 75,
+
+  "recovery": {
+    "_doc": "§7 R = base_hours × clamp(intercept + slope × L, min_multiplier, max_multiplier)",
+    "intercept": 0.5,
+    "slope": 0.3,
+    "min_multiplier": 0.5,
+    "max_multiplier": 2.0
+  },
+
+  "base_recovery_hours": {
+    "default": 48,
+    "lower_back": 72,
+    "side_delts": 24,
+    "forearms": 24,
+    "abs": 24,
+    "obliques": 24,
+    "calves": 24
+  },
+
+  "fatigue": {
+    "_doc": "§8 decay and the weekly guard. The decay lookback is derived, not set: max base_recovery_hours × recovery.max_multiplier.",
+    "weekly_window_hours": 168,
+    "weekly_cap": 8.0,
+    "weekly_cap_min_level": 4
+  },
+
+  "levels": [
+    { "level": 0, "key": "ready",     "label": "Ready",     "min": 0.0,  "fill": null,      "fill_dark": null,      "advice": "Good to train" },
+    { "level": 1, "key": "low",       "label": "Low",       "min": 0.25, "fill": "#FFE58A", "fill_dark": "#FFE58A", "advice": "Good to train" },
+    { "level": 2, "key": "moderate",  "label": "Moderate",  "min": 0.75, "fill": "#FDBA4D", "fill_dark": "#FDBA4D", "advice": "Can train; expect slightly lower performance" },
+    { "level": 3, "key": "high",      "label": "High",      "min": 1.5,  "fill": "#F77B30", "fill_dark": "#F77B30", "advice": "Rest, or train it lightly" },
+    { "level": 4, "key": "very_high", "label": "Very high", "min": 2.5,  "fill": "#DE3A24", "fill_dark": "#E5432C", "advice": "Rest" },
+    { "level": 5, "key": "extreme",   "label": "Extreme",   "min": 4.0,  "fill": "#9C0E25", "fill_dark": "#C0182F", "advice": "Rest; well past a normal session" }
+  ],
+  "trainable_max_level": 2,
+  "ready_fill": "#D9DDE3",
+  "ready_fill_dark": "#3A3F47",
+  "silhouette_fill": "#EEF0F3",
+  "silhouette_fill_dark": "#262A31",
+  "region_stroke": "#FFFFFF",
+  "region_stroke_dark": "#16181C",
+
+  "cardio": {
+    "_doc": "Build phase 10 only. Equivalent sets are scored as fixed sets (fixed_set.base each, fatigue standard).",
+    "enabled_default": true,
+    "equiv_sets_per_10min_hard": 1.0,
+    "equiv_sets_per_10min_easy": 0.5,
+    "hard_hr_zone_min": 3,
+    "activity_muscles": {
+      "run":  { "primary": ["quads", "calves"],  "secondary": ["hamstrings", "glutes"], "tertiary": ["adductors"] },
+      "ride": { "primary": ["quads"],            "secondary": ["glutes", "calves"],     "tertiary": ["hamstrings"] },
+      "swim": { "primary": ["lats"],             "secondary": ["front_delts", "triceps"], "tertiary": ["traps"] },
+      "hike": { "primary": ["quads", "glutes"],  "secondary": ["calves"],               "tertiary": ["hamstrings"] },
+      "row":  { "primary": ["lats", "quads"],    "secondary": ["biceps", "lower_back"], "tertiary": ["glutes"] }
+    }
+  }
+}

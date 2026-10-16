@@ -1,0 +1,4556 @@
+{
+  "version": "2.0",
+  "_doc": "Exercises and muscles only. Weights, caps, fatigue factors and recovery hours live in data/recovery_constants.json.",
+  "muscles": [
+    {
+      "id": "chest",
+      "group": "Chest",
+      "name": "Chest",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "traps",
+      "group": "Back",
+      "name": "Traps & upper back",
+      "views": [
+        "front",
+        "back"
+      ]
+    },
+    {
+      "id": "lats",
+      "group": "Back",
+      "name": "Lats",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "lower_back",
+      "group": "Back",
+      "name": "Lower back",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "front_delts",
+      "group": "Shoulders",
+      "name": "Front delts",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "side_delts",
+      "group": "Shoulders",
+      "name": "Side delts",
+      "views": [
+        "front",
+        "back"
+      ]
+    },
+    {
+      "id": "rear_delts",
+      "group": "Shoulders",
+      "name": "Rear delts",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "biceps",
+      "group": "Arms",
+      "name": "Biceps",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "triceps",
+      "group": "Arms",
+      "name": "Triceps",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "forearms",
+      "group": "Arms",
+      "name": "Forearms",
+      "views": [
+        "front",
+        "back"
+      ]
+    },
+    {
+      "id": "abs",
+      "group": "Core",
+      "name": "Abs",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "obliques",
+      "group": "Core",
+      "name": "Obliques",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "glutes",
+      "group": "Legs",
+      "name": "Glutes",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "quads",
+      "group": "Legs",
+      "name": "Quads",
+      "views": [
+        "front"
+      ]
+    },
+    {
+      "id": "adductors",
+      "group": "Legs",
+      "name": "Adductors",
+      "views": [
+        "front",
+        "back"
+      ]
+    },
+    {
+      "id": "hamstrings",
+      "group": "Legs",
+      "name": "Hamstrings",
+      "views": [
+        "back"
+      ]
+    },
+    {
+      "id": "calves",
+      "group": "Legs",
+      "name": "Calves",
+      "views": [
+        "front",
+        "back"
+      ]
+    }
+  ],
+  "exercises": [
+    {
+      "slug": "bench_press_bb",
+      "name": "Bench press (barbell)",
+      "group": "Chest",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "triceps": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "bench_press_db",
+      "name": "Bench press (dumbbell)",
+      "group": "Chest",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.38
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "chest": 56,
+        "front_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "incline_bench_bb",
+      "name": "Incline bench press (barbell)",
+      "group": "Chest",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.8
+      },
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "front_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "incline_bench_db",
+      "name": "Incline bench press (dumbbell)",
+      "group": "Chest",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.32
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "chest": 56,
+        "front_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "decline_bench_bb",
+      "name": "Decline bench press (barbell)",
+      "group": "Chest",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps"
+      ],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 1.0
+      },
+      "note": "",
+      "load_split": {
+        "chest": 63,
+        "triceps": 25,
+        "front_delts": 12
+      }
+    },
+    {
+      "slug": "floor_press_bb",
+      "name": "Floor press (barbell)",
+      "group": "Chest",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps"
+      ],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.9
+      },
+      "note": "",
+      "load_split": {
+        "chest": 63,
+        "triceps": 25,
+        "front_delts": 12
+      }
+    },
+    {
+      "slug": "smith_bench",
+      "name": "Bench press (Smith machine)",
+      "group": "Chest",
+      "equipment": "smith",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "triceps": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "smith_incline_bench",
+      "name": "Incline bench press (Smith machine)",
+      "group": "Chest",
+      "equipment": "smith",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.78
+      },
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "front_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "chest_press_machine",
+      "name": "Chest press (machine)",
+      "group": "Chest",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps"
+      ],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 63,
+        "triceps": 25,
+        "front_delts": 12
+      }
+    },
+    {
+      "slug": "incline_chest_press_machine",
+      "name": "Incline chest press (machine)",
+      "group": "Chest",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts"
+      ],
+      "tertiary": [
+        "triceps"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 63,
+        "front_delts": 25,
+        "triceps": 12
+      }
+    },
+    {
+      "slug": "push_up",
+      "name": "Push-up",
+      "group": "Chest",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.64,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps"
+      ],
+      "tertiary": [
+        "front_delts",
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "triceps": 22,
+        "front_delts": 11,
+        "abs": 11
+      }
+    },
+    {
+      "slug": "incline_push_up",
+      "name": "Incline push-up",
+      "group": "Chest",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.45,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps"
+      ],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 63,
+        "triceps": 25,
+        "front_delts": 12
+      }
+    },
+    {
+      "slug": "decline_push_up",
+      "name": "Decline push-up",
+      "group": "Chest",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.7,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts",
+        "triceps"
+      ],
+      "tertiary": [
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 50,
+        "front_delts": 20,
+        "triceps": 20,
+        "abs": 10
+      }
+    },
+    {
+      "slug": "dip_chest",
+      "name": "Chest dip",
+      "group": "Chest",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "triceps",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 56,
+        "triceps": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "cable_fly",
+      "name": "Cable fly (mid)",
+      "group": "Chest",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 83,
+        "front_delts": 17
+      }
+    },
+    {
+      "slug": "cable_fly_low_high",
+      "name": "Cable fly (low to high)",
+      "group": "Chest",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 71,
+        "front_delts": 29
+      }
+    },
+    {
+      "slug": "cable_fly_high_low",
+      "name": "Cable fly (high to low)",
+      "group": "Chest",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 83,
+        "front_delts": 17
+      }
+    },
+    {
+      "slug": "db_fly",
+      "name": "Fly (dumbbell)",
+      "group": "Chest",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.18
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "chest": 83,
+        "front_delts": 17
+      }
+    },
+    {
+      "slug": "incline_db_fly",
+      "name": "Incline fly (dumbbell)",
+      "group": "Chest",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.16
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "chest": 83,
+        "front_delts": 17
+      }
+    },
+    {
+      "slug": "pec_deck",
+      "name": "Pec deck",
+      "group": "Chest",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "chest"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "chest": 83,
+        "front_delts": 17
+      }
+    },
+    {
+      "slug": "deadlift",
+      "name": "Deadlift (conventional)",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "glutes",
+        "lower_back"
+      ],
+      "secondary": [
+        "hamstrings",
+        "traps"
+      ],
+      "tertiary": [
+        "adductors",
+        "quads",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 1.2
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 29,
+        "lower_back": 29,
+        "hamstrings": 12,
+        "traps": 12,
+        "adductors": 6,
+        "quads": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "sumo_deadlift",
+      "name": "Sumo deadlift",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "glutes",
+        "adductors"
+      ],
+      "secondary": [
+        "quads",
+        "lower_back"
+      ],
+      "tertiary": [
+        "hamstrings",
+        "traps",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 1.0
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 29,
+        "adductors": 29,
+        "quads": 12,
+        "lower_back": 12,
+        "hamstrings": 6,
+        "traps": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "trap_bar_deadlift",
+      "name": "Trap bar deadlift",
+      "group": "Back",
+      "equipment": "trap bar",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "lower_back",
+        "hamstrings"
+      ],
+      "tertiary": [
+        "traps",
+        "forearms",
+        "adductors"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 1.05
+      },
+      "note": "",
+      "load_split": {
+        "quads": 29,
+        "glutes": 29,
+        "lower_back": 12,
+        "hamstrings": 12,
+        "traps": 6,
+        "forearms": 6,
+        "adductors": 6
+      }
+    },
+    {
+      "slug": "deficit_deadlift",
+      "name": "Deficit deadlift",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "glutes",
+        "lower_back"
+      ],
+      "secondary": [
+        "hamstrings",
+        "quads"
+      ],
+      "tertiary": [
+        "adductors",
+        "traps",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.9
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 29,
+        "lower_back": 29,
+        "hamstrings": 12,
+        "quads": 12,
+        "adductors": 6,
+        "traps": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "rack_pull",
+      "name": "Rack pull",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "lower_back",
+        "traps"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "hamstrings",
+        "forearms",
+        "lats"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 1.15
+      },
+      "note": "",
+      "load_split": {
+        "lower_back": 33,
+        "traps": 33,
+        "glutes": 13,
+        "hamstrings": 7,
+        "forearms": 7,
+        "lats": 7
+      }
+    },
+    {
+      "slug": "barbell_row",
+      "name": "Bent-over row (barbell)",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [
+        "lower_back",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.85
+      },
+      "note": "",
+      "load_split": {
+        "lats": 31,
+        "traps": 31,
+        "biceps": 13,
+        "rear_delts": 13,
+        "lower_back": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "pendlay_row",
+      "name": "Pendlay row",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [
+        "lower_back",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "lats": 31,
+        "traps": 31,
+        "biceps": 13,
+        "rear_delts": 13,
+        "lower_back": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "seal_row",
+      "name": "Seal row",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "rear_delts",
+        "biceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.8
+      },
+      "note": "",
+      "load_split": {
+        "lats": 36,
+        "traps": 36,
+        "rear_delts": 14,
+        "biceps": 14
+      }
+    },
+    {
+      "slug": "db_row",
+      "name": "Single-arm row (dumbbell)",
+      "group": "Back",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "traps",
+        "biceps"
+      ],
+      "tertiary": [
+        "rear_delts",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.5
+      },
+      "note": "",
+      "load_split": {
+        "lats": 46,
+        "traps": 18,
+        "biceps": 18,
+        "rear_delts": 9,
+        "forearms": 9
+      }
+    },
+    {
+      "slug": "chest_supported_row_db",
+      "name": "Chest-supported row (dumbbell)",
+      "group": "Back",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "traps",
+        "lats"
+      ],
+      "secondary": [
+        "rear_delts",
+        "biceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.35
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "traps": 36,
+        "lats": 36,
+        "rear_delts": 14,
+        "biceps": 14
+      }
+    },
+    {
+      "slug": "t_bar_row",
+      "name": "T-bar row",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [
+        "lower_back",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.9
+      },
+      "note": "",
+      "load_split": {
+        "lats": 31,
+        "traps": 31,
+        "biceps": 13,
+        "rear_delts": 13,
+        "lower_back": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "seated_cable_row",
+      "name": "Seated cable row",
+      "group": "Back",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 34,
+        "traps": 33,
+        "biceps": 13,
+        "rear_delts": 13,
+        "forearms": 7
+      }
+    },
+    {
+      "slug": "machine_row",
+      "name": "Row (machine)",
+      "group": "Back",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 36,
+        "traps": 36,
+        "biceps": 14,
+        "rear_delts": 14
+      }
+    },
+    {
+      "slug": "inverted_row",
+      "name": "Inverted row",
+      "group": "Back",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.5,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "traps"
+      ],
+      "secondary": [
+        "biceps",
+        "rear_delts"
+      ],
+      "tertiary": [
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 34,
+        "traps": 33,
+        "biceps": 13,
+        "rear_delts": 13,
+        "abs": 7
+      }
+    },
+    {
+      "slug": "pull_up",
+      "name": "Pull-up",
+      "group": "Back",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps",
+        "traps"
+      ],
+      "tertiary": [
+        "rear_delts",
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 46,
+        "biceps": 18,
+        "traps": 18,
+        "rear_delts": 9,
+        "forearms": 9
+      }
+    },
+    {
+      "slug": "chin_up",
+      "name": "Chin-up",
+      "group": "Back",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats",
+        "biceps"
+      ],
+      "secondary": [
+        "traps"
+      ],
+      "tertiary": [
+        "rear_delts",
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 36,
+        "biceps": 36,
+        "traps": 14,
+        "rear_delts": 7,
+        "forearms": 7
+      }
+    },
+    {
+      "slug": "neutral_grip_pull_up",
+      "name": "Neutral-grip pull-up",
+      "group": "Back",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps",
+        "traps"
+      ],
+      "tertiary": [
+        "forearms",
+        "rear_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 46,
+        "biceps": 18,
+        "traps": 18,
+        "forearms": 9,
+        "rear_delts": 9
+      }
+    },
+    {
+      "slug": "assisted_pull_up",
+      "name": "Assisted pull-up (machine)",
+      "group": "Back",
+      "equipment": "machine",
+      "load_mode": "assisted",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps",
+        "traps"
+      ],
+      "tertiary": [
+        "rear_delts"
+      ],
+      "pb_estimate": null,
+      "note": "log the assistance weight",
+      "load_split": {
+        "lats": 50,
+        "biceps": 20,
+        "traps": 20,
+        "rear_delts": 10
+      }
+    },
+    {
+      "slug": "lat_pulldown",
+      "name": "Lat pulldown (wide grip)",
+      "group": "Back",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps",
+        "traps"
+      ],
+      "tertiary": [
+        "rear_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lats": 50,
+        "biceps": 20,
+        "traps": 20,
+        "rear_delts": 10
+      }
+    },
+    {
+      "slug": "close_grip_pulldown",
+      "name": "Lat pulldown (close grip)",
+      "group": "Back",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps"
+      ],
+      "tertiary": [
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "lat_pulldown",
+        "ratio": 1.0
+      },
+      "note": "",
+      "load_split": {
+        "lats": 63,
+        "biceps": 25,
+        "traps": 12
+      }
+    },
+    {
+      "slug": "single_arm_pulldown",
+      "name": "Single-arm pulldown (cable)",
+      "group": "Back",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "biceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "lat_pulldown",
+        "ratio": 0.45
+      },
+      "note": "",
+      "load_split": {
+        "lats": 71,
+        "biceps": 29
+      }
+    },
+    {
+      "slug": "straight_arm_pulldown",
+      "name": "Straight-arm pulldown",
+      "group": "Back",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "triceps",
+        "rear_delts"
+      ],
+      "pb_estimate": {
+        "from": "lat_pulldown",
+        "ratio": 0.4
+      },
+      "note": "",
+      "load_split": {
+        "lats": 72,
+        "triceps": 14,
+        "rear_delts": 14
+      }
+    },
+    {
+      "slug": "db_pullover",
+      "name": "Pullover (dumbbell)",
+      "group": "Back",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lats"
+      ],
+      "secondary": [
+        "chest"
+      ],
+      "tertiary": [
+        "triceps"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.3
+      },
+      "note": "",
+      "load_split": {
+        "lats": 63,
+        "chest": 25,
+        "triceps": 12
+      }
+    },
+    {
+      "slug": "shrug_bb",
+      "name": "Shrug (barbell)",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "traps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.8
+      },
+      "note": "",
+      "load_split": {
+        "traps": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "shrug_db",
+      "name": "Shrug (dumbbell)",
+      "group": "Back",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "traps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.35
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "traps": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "back_extension",
+      "name": "Back extension",
+      "group": "Back",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.5,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "lower_back"
+      ],
+      "secondary": [
+        "glutes",
+        "hamstrings"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "add held plate as added load",
+      "load_split": {
+        "lower_back": 56,
+        "glutes": 22,
+        "hamstrings": 22
+      }
+    },
+    {
+      "slug": "good_morning",
+      "name": "Good morning",
+      "group": "Back",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings",
+        "lower_back"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.45
+      },
+      "note": "",
+      "load_split": {
+        "hamstrings": 39,
+        "lower_back": 38,
+        "glutes": 15,
+        "adductors": 8
+      }
+    },
+    {
+      "slug": "reverse_hyper",
+      "name": "Reverse hyperextension",
+      "group": "Back",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "lower_back",
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "lower_back": 42,
+        "glutes": 42,
+        "hamstrings": 16
+      }
+    },
+    {
+      "slug": "ohp_bb",
+      "name": "Overhead press (barbell)",
+      "group": "Shoulders",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [
+        "traps",
+        "abs"
+      ],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.62
+      },
+      "note": "",
+      "load_split": {
+        "front_delts": 46,
+        "side_delts": 18,
+        "triceps": 18,
+        "traps": 9,
+        "abs": 9
+      }
+    },
+    {
+      "slug": "ohp_seated_bb",
+      "name": "Seated overhead press (barbell)",
+      "group": "Shoulders",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "front_delts": 50,
+        "side_delts": 20,
+        "triceps": 20,
+        "traps": 10
+      }
+    },
+    {
+      "slug": "ohp_db",
+      "name": "Shoulder press (dumbbell)",
+      "group": "Shoulders",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.4
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "front_delts": 50,
+        "side_delts": 20,
+        "triceps": 20,
+        "traps": 10
+      }
+    },
+    {
+      "slug": "arnold_press",
+      "name": "Arnold press",
+      "group": "Shoulders",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.36
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "front_delts": 56,
+        "side_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "smith_ohp",
+      "name": "Overhead press (Smith machine)",
+      "group": "Shoulders",
+      "equipment": "smith",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 1.0
+      },
+      "note": "",
+      "load_split": {
+        "front_delts": 56,
+        "side_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "shoulder_press_machine",
+      "name": "Shoulder press (machine)",
+      "group": "Shoulders",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "side_delts",
+        "triceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "front_delts": 56,
+        "side_delts": 22,
+        "triceps": 22
+      }
+    },
+    {
+      "slug": "push_press",
+      "name": "Push press",
+      "group": "Shoulders",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "triceps",
+        "side_delts"
+      ],
+      "tertiary": [
+        "quads",
+        "glutes",
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 1.25
+      },
+      "note": "",
+      "load_split": {
+        "front_delts": 42,
+        "triceps": 17,
+        "side_delts": 17,
+        "quads": 8,
+        "glutes": 8,
+        "traps": 8
+      }
+    },
+    {
+      "slug": "landmine_press",
+      "name": "Landmine press",
+      "group": "Shoulders",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [
+        "chest",
+        "triceps"
+      ],
+      "tertiary": [
+        "obliques"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "front_delts": 50,
+        "chest": 20,
+        "triceps": 20,
+        "obliques": 10
+      }
+    },
+    {
+      "slug": "lateral_raise_db",
+      "name": "Lateral raise (dumbbell)",
+      "group": "Shoulders",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "side_delts"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.17
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "side_delts": 83,
+        "traps": 17
+      }
+    },
+    {
+      "slug": "lateral_raise_cable",
+      "name": "Lateral raise (cable)",
+      "group": "Shoulders",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "side_delts"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "side_delts": 100
+      }
+    },
+    {
+      "slug": "lateral_raise_machine",
+      "name": "Lateral raise (machine)",
+      "group": "Shoulders",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "side_delts"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "side_delts": 100
+      }
+    },
+    {
+      "slug": "front_raise_db",
+      "name": "Front raise (dumbbell)",
+      "group": "Shoulders",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "side_delts"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.2
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "front_delts": 83,
+        "side_delts": 17
+      }
+    },
+    {
+      "slug": "front_raise_cable",
+      "name": "Front raise (cable)",
+      "group": "Shoulders",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "front_delts"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "side_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "front_delts": 83,
+        "side_delts": 17
+      }
+    },
+    {
+      "slug": "rear_delt_fly_db",
+      "name": "Rear delt fly (dumbbell)",
+      "group": "Shoulders",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "rear_delts"
+      ],
+      "secondary": [
+        "traps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.12
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "rear_delts": 71,
+        "traps": 29
+      }
+    },
+    {
+      "slug": "reverse_pec_deck",
+      "name": "Reverse pec deck",
+      "group": "Shoulders",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "rear_delts"
+      ],
+      "secondary": [
+        "traps"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "rear_delts": 71,
+        "traps": 29
+      }
+    },
+    {
+      "slug": "rear_delt_cable_fly",
+      "name": "Rear delt fly (cable)",
+      "group": "Shoulders",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "rear_delts"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "traps"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "rear_delts": 83,
+        "traps": 17
+      }
+    },
+    {
+      "slug": "face_pull",
+      "name": "Face pull",
+      "group": "Shoulders",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "rear_delts"
+      ],
+      "secondary": [
+        "traps"
+      ],
+      "tertiary": [
+        "side_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "rear_delts": 63,
+        "traps": 25,
+        "side_delts": 12
+      }
+    },
+    {
+      "slug": "upright_row_bb",
+      "name": "Upright row (barbell)",
+      "group": "Shoulders",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "side_delts",
+        "traps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts",
+        "biceps"
+      ],
+      "pb_estimate": {
+        "from": "ohp_bb",
+        "ratio": 0.75
+      },
+      "note": "",
+      "load_split": {
+        "side_delts": 42,
+        "traps": 42,
+        "front_delts": 8,
+        "biceps": 8
+      }
+    },
+    {
+      "slug": "upright_row_cable",
+      "name": "Upright row (cable)",
+      "group": "Shoulders",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "side_delts",
+        "traps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts",
+        "biceps"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "side_delts": 42,
+        "traps": 42,
+        "front_delts": 8,
+        "biceps": 8
+      }
+    },
+    {
+      "slug": "band_pull_apart",
+      "name": "Band pull-apart",
+      "group": "Shoulders",
+      "equipment": "band",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "rear_delts"
+      ],
+      "secondary": [
+        "traps"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "rear_delts": 71,
+        "traps": 29
+      }
+    },
+    {
+      "slug": "bb_curl",
+      "name": "Curl (barbell)",
+      "group": "Arms",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [
+        "forearms"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "barbell_row",
+        "ratio": 0.45
+      },
+      "note": "",
+      "load_split": {
+        "biceps": 71,
+        "forearms": 29
+      }
+    },
+    {
+      "slug": "ez_curl",
+      "name": "Curl (EZ bar)",
+      "group": "Arms",
+      "equipment": "ez bar",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [
+        "forearms"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "biceps": 71,
+        "forearms": 29
+      }
+    },
+    {
+      "slug": "db_curl",
+      "name": "Curl (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.45
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "biceps": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "hammer_curl",
+      "name": "Hammer curl (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [
+        "forearms"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.5
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "biceps": 71,
+        "forearms": 29
+      }
+    },
+    {
+      "slug": "incline_db_curl",
+      "name": "Incline curl (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.38
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "biceps": 100
+      }
+    },
+    {
+      "slug": "preacher_curl_ez",
+      "name": "Preacher curl (EZ bar)",
+      "group": "Arms",
+      "equipment": "ez bar",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.8
+      },
+      "note": "",
+      "load_split": {
+        "biceps": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "preacher_curl_machine",
+      "name": "Preacher curl (machine)",
+      "group": "Arms",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "biceps": 100
+      }
+    },
+    {
+      "slug": "concentration_curl",
+      "name": "Concentration curl",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.4
+      },
+      "note": "",
+      "load_split": {
+        "biceps": 100
+      }
+    },
+    {
+      "slug": "spider_curl",
+      "name": "Spider curl (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.4
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "biceps": 100
+      }
+    },
+    {
+      "slug": "cable_curl",
+      "name": "Curl (cable)",
+      "group": "Arms",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "biceps": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "bayesian_curl",
+      "name": "Bayesian curl (cable)",
+      "group": "Arms",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "biceps": 100
+      }
+    },
+    {
+      "slug": "reverse_curl",
+      "name": "Reverse curl (EZ bar)",
+      "group": "Arms",
+      "equipment": "ez bar",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "forearms"
+      ],
+      "secondary": [
+        "biceps"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bb_curl",
+        "ratio": 0.65
+      },
+      "note": "",
+      "load_split": {
+        "forearms": 71,
+        "biceps": 29
+      }
+    },
+    {
+      "slug": "close_grip_bench",
+      "name": "Close-grip bench press",
+      "group": "Arms",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [
+        "chest",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.88
+      },
+      "note": "",
+      "load_split": {
+        "triceps": 56,
+        "chest": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "dip_triceps",
+      "name": "Triceps dip",
+      "group": "Arms",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [
+        "chest",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 56,
+        "chest": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "assisted_dip",
+      "name": "Assisted dip (machine)",
+      "group": "Arms",
+      "equipment": "machine",
+      "load_mode": "assisted",
+      "bw_factor": 1.0,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [
+        "chest",
+        "front_delts"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "log the assistance weight",
+      "load_split": {
+        "triceps": 56,
+        "chest": 22,
+        "front_delts": 22
+      }
+    },
+    {
+      "slug": "bench_dip",
+      "name": "Bench dip",
+      "group": "Arms",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.6,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "front_delts",
+        "chest"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 72,
+        "front_delts": 14,
+        "chest": 14
+      }
+    },
+    {
+      "slug": "diamond_push_up",
+      "name": "Diamond push-up",
+      "group": "Arms",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.64,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [
+        "chest"
+      ],
+      "tertiary": [
+        "front_delts"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 63,
+        "chest": 25,
+        "front_delts": 12
+      }
+    },
+    {
+      "slug": "skullcrusher",
+      "name": "Skullcrusher (EZ bar)",
+      "group": "Arms",
+      "equipment": "ez bar",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.4
+      },
+      "note": "",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "overhead_tri_ext_db",
+      "name": "Overhead triceps extension (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.3
+      },
+      "note": "one dumbbell, both hands",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "overhead_tri_ext_cable",
+      "name": "Overhead triceps extension (cable)",
+      "group": "Arms",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "tri_pushdown_rope",
+      "name": "Triceps pushdown (rope)",
+      "group": "Arms",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "tri_pushdown_bar",
+      "name": "Triceps pushdown (bar)",
+      "group": "Arms",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "tri_kickback",
+      "name": "Triceps kickback (dumbbell)",
+      "group": "Arms",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.1
+      },
+      "note": "",
+      "load_split": {
+        "triceps": 100
+      }
+    },
+    {
+      "slug": "jm_press",
+      "name": "JM press",
+      "group": "Arms",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "triceps"
+      ],
+      "secondary": [
+        "chest"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "bench_press_bb",
+        "ratio": 0.65
+      },
+      "note": "",
+      "load_split": {
+        "triceps": 71,
+        "chest": 29
+      }
+    },
+    {
+      "slug": "wrist_curl",
+      "name": "Wrist curl",
+      "group": "Arms",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "forearms"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "forearms": 100
+      }
+    },
+    {
+      "slug": "reverse_wrist_curl",
+      "name": "Reverse wrist curl",
+      "group": "Arms",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "forearms"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "forearms": 100
+      }
+    },
+    {
+      "slug": "dead_hang",
+      "name": "Dead hang",
+      "group": "Arms",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "forearms"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "lats"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "forearms": 83,
+        "lats": 17
+      }
+    },
+    {
+      "slug": "squat_bb",
+      "name": "Back squat (barbell)",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes",
+        "adductors"
+      ],
+      "tertiary": [
+        "lower_back",
+        "hamstrings",
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 42,
+        "glutes": 17,
+        "adductors": 17,
+        "lower_back": 8,
+        "hamstrings": 8,
+        "abs": 8
+      }
+    },
+    {
+      "slug": "front_squat",
+      "name": "Front squat",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes",
+        "adductors"
+      ],
+      "tertiary": [
+        "abs",
+        "lower_back",
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.82
+      },
+      "note": "",
+      "load_split": {
+        "quads": 42,
+        "glutes": 17,
+        "adductors": 17,
+        "abs": 8,
+        "lower_back": 8,
+        "traps": 8
+      }
+    },
+    {
+      "slug": "pause_squat",
+      "name": "Pause squat",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes",
+        "adductors"
+      ],
+      "tertiary": [
+        "lower_back",
+        "abs"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.85
+      },
+      "note": "",
+      "load_split": {
+        "quads": 46,
+        "glutes": 18,
+        "adductors": 18,
+        "lower_back": 9,
+        "abs": 9
+      }
+    },
+    {
+      "slug": "box_squat",
+      "name": "Box squat",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors",
+        "hamstrings"
+      ],
+      "tertiary": [
+        "lower_back"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "quads": 34,
+        "glutes": 33,
+        "adductors": 13,
+        "hamstrings": 13,
+        "lower_back": 7
+      }
+    },
+    {
+      "slug": "smith_squat",
+      "name": "Squat (Smith machine)",
+      "group": "Legs",
+      "equipment": "smith",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors",
+        "hamstrings"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.95
+      },
+      "note": "",
+      "load_split": {
+        "quads": 56,
+        "glutes": 22,
+        "adductors": 11,
+        "hamstrings": 11
+      }
+    },
+    {
+      "slug": "goblet_squat",
+      "name": "Goblet squat",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes",
+        "adductors"
+      ],
+      "tertiary": [
+        "abs"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.35
+      },
+      "note": "",
+      "load_split": {
+        "quads": 50,
+        "glutes": 20,
+        "adductors": 20,
+        "abs": 10
+      }
+    },
+    {
+      "slug": "hack_squat",
+      "name": "Hack squat (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 63,
+        "glutes": 25,
+        "adductors": 12
+      }
+    },
+    {
+      "slug": "pendulum_squat",
+      "name": "Pendulum squat (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 63,
+        "glutes": 25,
+        "adductors": 12
+      }
+    },
+    {
+      "slug": "belt_squat",
+      "name": "Belt squat (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 42,
+        "glutes": 42,
+        "adductors": 16
+      }
+    },
+    {
+      "slug": "leg_press",
+      "name": "Leg press",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors",
+        "hamstrings"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 56,
+        "glutes": 22,
+        "adductors": 11,
+        "hamstrings": 11
+      }
+    },
+    {
+      "slug": "single_leg_press",
+      "name": "Single-leg press",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 63,
+        "glutes": 25,
+        "adductors": 12
+      }
+    },
+    {
+      "slug": "bulgarian_split_squat",
+      "name": "Bulgarian split squat",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "hamstrings"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.25
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "quads": 39,
+        "glutes": 38,
+        "adductors": 15,
+        "hamstrings": 8
+      }
+    },
+    {
+      "slug": "split_squat",
+      "name": "Split squat",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "hamstrings"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.3
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "quads": 39,
+        "glutes": 38,
+        "adductors": 15,
+        "hamstrings": 8
+      }
+    },
+    {
+      "slug": "walking_lunge",
+      "name": "Walking lunge",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "hamstrings",
+        "calves"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.28
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "quads": 36,
+        "glutes": 36,
+        "adductors": 14,
+        "hamstrings": 7,
+        "calves": 7
+      }
+    },
+    {
+      "slug": "reverse_lunge",
+      "name": "Reverse lunge",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "glutes",
+        "quads"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "hamstrings"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.28
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "glutes": 39,
+        "quads": 38,
+        "adductors": 15,
+        "hamstrings": 8
+      }
+    },
+    {
+      "slug": "step_up",
+      "name": "Step-up",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "hamstrings",
+        "adductors"
+      ],
+      "pb_estimate": {
+        "from": "squat_bb",
+        "ratio": 0.25
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "quads": 42,
+        "glutes": 42,
+        "hamstrings": 8,
+        "adductors": 8
+      }
+    },
+    {
+      "slug": "leg_extension",
+      "name": "Leg extension",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 100
+      }
+    },
+    {
+      "slug": "sissy_squat",
+      "name": "Sissy squat",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.7,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 100
+      }
+    },
+    {
+      "slug": "bodyweight_squat",
+      "name": "Bodyweight squat",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.8,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "adductors"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 63,
+        "glutes": 25,
+        "adductors": 12
+      }
+    },
+    {
+      "slug": "pistol_squat",
+      "name": "Pistol squat",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.85,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 39,
+        "glutes": 38,
+        "adductors": 15,
+        "abs": 8
+      }
+    },
+    {
+      "slug": "wall_sit",
+      "name": "Wall sit",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "quads"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "glutes"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 83,
+        "glutes": 17
+      }
+    },
+    {
+      "slug": "rdl_bb",
+      "name": "Romanian deadlift (barbell)",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings",
+        "glutes"
+      ],
+      "secondary": [
+        "lower_back",
+        "adductors"
+      ],
+      "tertiary": [
+        "forearms",
+        "traps"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.7
+      },
+      "note": "",
+      "load_split": {
+        "hamstrings": 31,
+        "glutes": 31,
+        "lower_back": 13,
+        "adductors": 13,
+        "forearms": 6,
+        "traps": 6
+      }
+    },
+    {
+      "slug": "rdl_db",
+      "name": "Romanian deadlift (dumbbell)",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings",
+        "glutes"
+      ],
+      "secondary": [
+        "lower_back",
+        "adductors"
+      ],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.3
+      },
+      "note": "weight per hand",
+      "load_split": {
+        "hamstrings": 34,
+        "glutes": 33,
+        "lower_back": 13,
+        "adductors": 13,
+        "forearms": 7
+      }
+    },
+    {
+      "slug": "single_leg_rdl",
+      "name": "Single-leg Romanian deadlift",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "hamstrings",
+        "glutes"
+      ],
+      "secondary": [
+        "adductors"
+      ],
+      "tertiary": [
+        "lower_back",
+        "obliques"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.2
+      },
+      "note": "",
+      "load_split": {
+        "hamstrings": 36,
+        "glutes": 36,
+        "adductors": 14,
+        "lower_back": 7,
+        "obliques": 7
+      }
+    },
+    {
+      "slug": "stiff_leg_deadlift",
+      "name": "Stiff-leg deadlift",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [
+        "glutes",
+        "lower_back"
+      ],
+      "tertiary": [
+        "adductors",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.65
+      },
+      "note": "",
+      "load_split": {
+        "hamstrings": 46,
+        "glutes": 18,
+        "lower_back": 18,
+        "adductors": 9,
+        "forearms": 9
+      }
+    },
+    {
+      "slug": "leg_curl_lying",
+      "name": "Lying leg curl",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "calves"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "hamstrings": 83,
+        "calves": 17
+      }
+    },
+    {
+      "slug": "leg_curl_seated",
+      "name": "Seated leg curl",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "hamstrings": 100
+      }
+    },
+    {
+      "slug": "leg_curl_standing",
+      "name": "Standing leg curl",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "hamstrings": 100
+      }
+    },
+    {
+      "slug": "nordic_curl",
+      "name": "Nordic hamstring curl",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.6,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "calves",
+        "glutes"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "hamstrings": 72,
+        "calves": 14,
+        "glutes": 14
+      }
+    },
+    {
+      "slug": "glute_ham_raise",
+      "name": "Glute-ham raise",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.5,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "hamstrings"
+      ],
+      "secondary": [
+        "glutes"
+      ],
+      "tertiary": [
+        "calves",
+        "lower_back"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "hamstrings": 56,
+        "glutes": 22,
+        "calves": 11,
+        "lower_back": 11
+      }
+    },
+    {
+      "slug": "hip_thrust_bb",
+      "name": "Hip thrust (barbell)",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [
+        "quads",
+        "adductors"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 1.0
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 56,
+        "hamstrings": 22,
+        "quads": 11,
+        "adductors": 11
+      }
+    },
+    {
+      "slug": "hip_thrust_machine",
+      "name": "Hip thrust (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 71,
+        "hamstrings": 29
+      }
+    },
+    {
+      "slug": "glute_bridge_bb",
+      "name": "Glute bridge (barbell)",
+      "group": "Legs",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.85
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 71,
+        "hamstrings": 29
+      }
+    },
+    {
+      "slug": "glute_bridge_bw",
+      "name": "Glute bridge (bodyweight)",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.3,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 71,
+        "hamstrings": 29
+      }
+    },
+    {
+      "slug": "cable_kickback",
+      "name": "Glute kickback (cable)",
+      "group": "Legs",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "hamstrings"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 83,
+        "hamstrings": 17
+      }
+    },
+    {
+      "slug": "cable_pull_through",
+      "name": "Cable pull-through",
+      "group": "Legs",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [
+        "hamstrings"
+      ],
+      "tertiary": [
+        "lower_back"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 63,
+        "hamstrings": 25,
+        "lower_back": 12
+      }
+    },
+    {
+      "slug": "hip_abduction",
+      "name": "Hip abduction (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "glutes"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 100
+      }
+    },
+    {
+      "slug": "hip_adduction",
+      "name": "Hip adduction (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "adductors"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "adductors": 100
+      }
+    },
+    {
+      "slug": "copenhagen_plank",
+      "name": "Copenhagen plank",
+      "group": "Legs",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "adductors"
+      ],
+      "secondary": [
+        "obliques"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "adductors": 71,
+        "obliques": 29
+      }
+    },
+    {
+      "slug": "calf_raise_standing",
+      "name": "Standing calf raise (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "calves"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "calves": 100
+      }
+    },
+    {
+      "slug": "calf_raise_seated",
+      "name": "Seated calf raise (machine)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "calves"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "calves": 100
+      }
+    },
+    {
+      "slug": "calf_press",
+      "name": "Calf press (leg press)",
+      "group": "Legs",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "calves"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "calves": 100
+      }
+    },
+    {
+      "slug": "calf_raise_smith",
+      "name": "Calf raise (Smith machine)",
+      "group": "Legs",
+      "equipment": "smith",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "calves"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "calves": 100
+      }
+    },
+    {
+      "slug": "calf_raise_single_db",
+      "name": "Single-leg calf raise (dumbbell)",
+      "group": "Legs",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "calves"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "calves": 100
+      }
+    },
+    {
+      "slug": "plank",
+      "name": "Plank",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [
+        "obliques"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 71,
+        "obliques": 29
+      }
+    },
+    {
+      "slug": "side_plank",
+      "name": "Side plank",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "obliques"
+      ],
+      "secondary": [
+        "abs"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 71,
+        "abs": 29
+      }
+    },
+    {
+      "slug": "hollow_hold",
+      "name": "Hollow body hold",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "obliques"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 83,
+        "obliques": 17
+      }
+    },
+    {
+      "slug": "crunch",
+      "name": "Crunch",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.3,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "cable_crunch",
+      "name": "Cable crunch",
+      "group": "Core",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "machine_crunch",
+      "name": "Crunch (machine)",
+      "group": "Core",
+      "equipment": "machine",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "decline_sit_up",
+      "name": "Decline sit-up",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.4,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "obliques"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 83,
+        "obliques": 17
+      }
+    },
+    {
+      "slug": "hanging_leg_raise",
+      "name": "Hanging leg raise",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.35,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms",
+        "obliques"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 72,
+        "forearms": 14,
+        "obliques": 14
+      }
+    },
+    {
+      "slug": "hanging_knee_raise",
+      "name": "Hanging knee raise",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.25,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 83,
+        "forearms": 17
+      }
+    },
+    {
+      "slug": "captains_chair_raise",
+      "name": "Captain's chair leg raise",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.3,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "lying_leg_raise",
+      "name": "Lying leg raise",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.25,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "ab_wheel",
+      "name": "Ab wheel rollout",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "bodyweight",
+      "bw_factor": 0.6,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [
+        "lats"
+      ],
+      "tertiary": [
+        "obliques",
+        "triceps"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 56,
+        "lats": 22,
+        "obliques": 11,
+        "triceps": 11
+      }
+    },
+    {
+      "slug": "dead_bug",
+      "name": "Dead bug",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "abs": 100
+      }
+    },
+    {
+      "slug": "bicycle_crunch",
+      "name": "Bicycle crunch",
+      "group": "Core",
+      "equipment": "bodyweight",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "obliques",
+        "abs"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 50,
+        "abs": 50
+      }
+    },
+    {
+      "slug": "russian_twist",
+      "name": "Russian twist",
+      "group": "Core",
+      "equipment": "plate",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "obliques"
+      ],
+      "secondary": [
+        "abs"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 71,
+        "abs": 29
+      }
+    },
+    {
+      "slug": "cable_woodchop",
+      "name": "Cable woodchop",
+      "group": "Core",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "obliques"
+      ],
+      "secondary": [
+        "abs"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 71,
+        "abs": 29
+      }
+    },
+    {
+      "slug": "pallof_press",
+      "name": "Pallof press",
+      "group": "Core",
+      "equipment": "cable",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "low",
+      "primary": [
+        "obliques"
+      ],
+      "secondary": [
+        "abs"
+      ],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 71,
+        "abs": 29
+      }
+    },
+    {
+      "slug": "db_side_bend",
+      "name": "Side bend (dumbbell)",
+      "group": "Core",
+      "equipment": "dumbbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": true,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "obliques"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "obliques": 100
+      }
+    },
+    {
+      "slug": "power_clean",
+      "name": "Power clean",
+      "group": "Full body",
+      "equipment": "barbell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "high",
+      "primary": [
+        "glutes",
+        "quads"
+      ],
+      "secondary": [
+        "traps",
+        "hamstrings"
+      ],
+      "tertiary": [
+        "lower_back",
+        "calves",
+        "forearms"
+      ],
+      "pb_estimate": {
+        "from": "deadlift",
+        "ratio": 0.55
+      },
+      "note": "",
+      "load_split": {
+        "glutes": 29,
+        "quads": 29,
+        "traps": 12,
+        "hamstrings": 12,
+        "lower_back": 6,
+        "calves": 6,
+        "forearms": 6
+      }
+    },
+    {
+      "slug": "kettlebell_swing",
+      "name": "Kettlebell swing",
+      "group": "Full body",
+      "equipment": "kettlebell",
+      "load_mode": "weight",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "reps",
+      "fatigue": "standard",
+      "primary": [
+        "glutes",
+        "hamstrings"
+      ],
+      "secondary": [
+        "lower_back"
+      ],
+      "tertiary": [
+        "abs",
+        "forearms"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "glutes": 36,
+        "hamstrings": 36,
+        "lower_back": 14,
+        "abs": 7,
+        "forearms": 7
+      }
+    },
+    {
+      "slug": "farmers_walk",
+      "name": "Farmer's walk",
+      "group": "Full body",
+      "equipment": "dumbbell",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "standard",
+      "primary": [
+        "forearms",
+        "traps"
+      ],
+      "secondary": [
+        "abs",
+        "obliques"
+      ],
+      "tertiary": [
+        "quads",
+        "glutes",
+        "calves"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "forearms": 29,
+        "traps": 29,
+        "abs": 12,
+        "obliques": 12,
+        "quads": 6,
+        "glutes": 6,
+        "calves": 6
+      }
+    },
+    {
+      "slug": "sled_push",
+      "name": "Sled push",
+      "group": "Full body",
+      "equipment": "sled",
+      "load_mode": "fixed",
+      "bw_factor": null,
+      "unilateral": false,
+      "log_as": "seconds",
+      "fatigue": "high",
+      "primary": [
+        "quads",
+        "glutes"
+      ],
+      "secondary": [
+        "calves"
+      ],
+      "tertiary": [
+        "hamstrings",
+        "abs"
+      ],
+      "pb_estimate": null,
+      "note": "",
+      "load_split": {
+        "quads": 36,
+        "glutes": 36,
+        "calves": 14,
+        "hamstrings": 7,
+        "abs": 7
+      }
+    }
+  ]
+}
