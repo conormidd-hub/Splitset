@@ -572,3 +572,125 @@ Phase 2 output · 2026-10-16. The engine: `app/src/lib/recovery/engine.ts` and `
   - the §14 skips;
   - purity: frozen inputs, and history carried from workout to workout.
 - **`npm test` now runs 69 tests.**
+
+---
+
+## 17. Phase 3: decisions made
+
+Phase 3 output · 2026-10-16. Set fields, the stored e1RM, manual PBs, and the PB section of the exercise screen.
+
+### 17.1 Decisions from §12, now settled
+
+| # | Settled as |
+|---|---|
+| D4 | **One e1RM everywhere.** `lift_pbs` (1RM) and `exercise_records` (`best_e1rm_kg`) read `workout_sets.e1rm`, and both still leave warm-ups out. The logger's "new PB 🏆", the Progress chart and the finished-workout screen read it too. `epley()` is gone. Side effects: sets logged with RPE read higher, 13–20-rep sets count, and a bodyweight lift's 1RM includes bodyweight. A single shows as "tested" only when it is its own e1RM, i.e. no reps in reserve |
+| D5 | **Bodyweight snapshot per workout.** `workouts.bodyweight_kg` is filled when a workout starts, or by the workout screen as soon as the bodyweight has loaded. The engine reads it for every set. There's no `workout_sets.bodyweight_kg` |
+| UI | **RPE** is a per-exercise switch in the logger, on automatically if a set already has an RPE. **The PB section** sits on the exercise detail screen, above Records |
+
+### 17.2 Schema (`20261016000200_recovery_sets_pbs.sql`)
+
+1. **`workout_sets`:**
+   - gains `side` (left/right) and `e1rm` (double precision, > 0);
+   - `rpe` is checked to 6–10 in half steps;
+   - warm-ups stay `set_type = 'warmup'`, so there's no `is_warmup` column (notes §3).
+2. **`profiles`:** gains `bodyweight_kg` (20–400) and `bodyweight_updated_at`, with update grants.
+3. **`manual_pbs`:**
+   - columns `weight_kg`, `reps`, `e1rm`, `dated_at` (a `date`), plus `created_at` and `updated_at`;
+   - owner-only, with `lww_guard`;
+   - a user can only add one for an exercise they can see, because the RLS check re-reads `exercises` under their own rules.
+4. **`pb_history` view:**
+   - every completed set of a finished workout that has an e1RM, warm-ups included, dated at `finished_at`;
+   - plus every manual PB, dated at the start of `dated_at` in `profiles.timezone`, worked out in SQL (notes §7);
+   - the app pages through it 1,000 rows at a time, PostgREST's cap.
+5. **No maths in SQL.** The views read the stored e1RM. The migration changes no existing data.
+
+### 17.3 Computing the e1RM: one path, through the engine
+
+6. **`src/lib/recovery/sets.ts`:**
+   - `setE1rm` chains the engine's `effectiveWeight`, `rirFromRpe` and `e1rm`, with `rir_default` when there's no RPE. That's the rule `scoreExercise` uses for the records it creates, and a test checks the two agree.
+   - `exerciseDef` turns an `exercises` row into the engine's library entry.
+   - `currentBodyweight` picks the newer of the profile entry and the latest weigh-in. A profile entry made on a weigh-in's day wins. With neither, it uses `bodyweight_default_kg`.
+7. **Exercises outside the library** that are logged as weight × reps count as plain weight mode, keyed by id. So custom and legacy lifts keep a 1RM in the trophy cabinet (D4). Holds, carries and cardio get no e1RM.
+8. **`src/lib/lifting/setRow.ts`** builds the `workout_sets` row. It's moved out of the store so Node can build the identical row.
+   - The store keeps each exercise's library facts on its block: slug, load mode, bodyweight factor, one-sided, bodyweight.
+   - The store holds the user's thresholds, which the workout screen sets.
+   - A block saved before Phase 3 has only its measure, so it gets weight mode.
+9. **When the bodyweight snapshot arrives late,** sets of bodyweight and assisted exercises are saved again, so their e1RMs follow it.
+10. **`app/scripts/recovery-cli.ts`** gives Python the same code: JSON in, JSON out. The backfill and the database tests use it. No engine maths was ported to Python.
+
+### 17.4 Logging
+
+11. **RPE:** the cell opens a picker of 6 · 6.5 … 10, or none. The column narrows the row, and "previous" truncates to make room.
+12. **Sides:** one-sided exercises get "Each side".
+    - Turning it on gives open sets without a side alternating L/R, and new sets alternate too.
+    - Turning it off clears the sides, so one set covers both again.
+    - The L/R chip on a set toggles it.
+13. **e1RM display:** a ticked set shows "e1RM …", and the finished-workout screen shows the stored value and the side.
+14. **"New PB 🏆"** compares the session's best e1RM with the all-time best: the `lift_pbs` 1RM or your best manual entry, whichever is higher. Manual PBs stay out of the trophy cabinet, whose rows link to logged sets.
+
+### 17.5 PB section (exercise detail screen)
+
+15. **What it shows:**
+    - the reference a session starting now would use, from `pbBefore`;
+    - its source: Logged, Manual, Lapsed, "Estimated from <exercise>" or Calibrating. The window and lapse in the label come from the thresholds;
+    - the best in the last `pb.window_days` (both sources);
+    - the all-time best.
+
+    Fixed-cost exercises say they need no reference.
+16. **Which history it loads:** only the exercise and the exercises its estimate chain can reach.
+17. **PB history list:** each workout's best set plus each manual entry, newest first, with logged/manual badges. A logged row opens its workout; a manual row offers to delete it.
+18. **"Add a known best":**
+    - weight × reps, dated today unless a past date (YYYY-MM-DD) is typed;
+    - for bodyweight and assisted exercises, the weight is the added load or the assistance, and today's bodyweight counts;
+    - the e1RM is computed in the app by the same `setE1rm`.
+
+### 17.6 Backfill (`supabase/backfill_e1rm.py`)
+
+19. **It only ever fills nulls:**
+    - `workouts.bodyweight_kg` on workouts with a bodyweight or assisted set, using the current bodyweight, once;
+    - `workout_sets.e1rm` wherever the engine gives one.
+20. **It leaves everything else alone:** weights, reps, RPE, set types and `updated_at` are untouched. A second run changes nothing, and `--dry-run` rolls back.
+21. **The demo seed calls it too,** so a rebuilt demo has e1RMs. `seed_demo.py` now needs Node.
+
+### 17.7 Ambiguities resolved
+
+- **"`sets`: add `rpe`, `seconds`, `is_warmup`, `bodyweight_kg`":** `rpe` and `seconds` already existed (`rpe` gained the check), `is_warmup` is `set_type`, and the bodyweight snapshot is per workout (D5).
+- **`manual_pbs.weight` and `dated_at`:** the column is `weight_kg`, as elsewhere in the repo, and `dated_at` is a `date`.
+- **"Backfill every historical set in a migration":** SQL can't run the engine, and porting the e1RM to SQL would rewrite the maths. So the migration only adds the column, and `backfill_e1rm.py` fills it using the engine.
+- **"The real logging path" in the database tests:** the store needs React Native storage. So the tests build rows with the store's own row builder through the CLI, and insert them as the signed-in user under RLS.
+- **The e1RM of a 0-rep set** is its weight, as in the engine. A set with no reps gets none.
+
+### 17.8 Tests
+
+- **`npm test`: 94 tests.** The new ones are `sets.test.ts`, `setRow.test.ts` and `pbHistory.test.ts`. They cover:
+  - F02 storing 126.5 and 125.0;
+  - RPE (F04), the 20-rep cap (F03) and the bodyweight snapshot (F31);
+  - agreement with the engine's own records;
+  - the saved row;
+  - the reference cases F14, F17 and F18.
+- **`db-tests` (CI): 21 database tests,** now with Node on the runner. They cover:
+  - F02 sets saved through the app's row builder as the signed-in user;
+  - `pb_history`, `lift_pbs` and `exercise_records` reading the stored e1RM;
+  - F18 dated at local midnight in Melbourne;
+  - F14 and F17;
+  - the backfill, including that a second run changes nothing;
+  - the access rules, and the RPE and side checks.
+- **Failures show on the PR.** `supabase/tests/conftest.py` turns failing tests, test files that won't load, and a one-line summary into GitHub annotations, because job logs need sign-in to read. That's how the backfill's mixed int/float bug (JSON returns 105 as an integer) was found and fixed before it reached the real database.
+
+### 17.9 On splitset-dev (2026-10-16)
+
+- **Migration:** `20261016000200_recovery_sets_pbs` was pushed by Conor.
+- **Backfill:**
+  - 1,680 of the demo's 1,836 sets got an e1RM; the other 156 are holds, carries or sets with no weight;
+  - no workout needed a bodyweight;
+  - a second run finds nothing.
+- **Regenerated types** matched the hand-written ones exactly.
+- **Checked in the web preview as the demo user:**
+  - the logger stores 115 × 3 as 126.5, and 134.2 at RPE 8;
+  - "new PB" fires;
+  - per-side sets store `left` and `right`;
+  - the workout's bodyweight snapshot is 72.8 kg, from the latest weigh-in;
+  - the PB section shows Logged, Manual, "Estimated from Bench press (barbell)" (86.4 kg from a 120 kg known best), Calibrating, and "needs no reference" for a plank;
+  - adding and deleting a known best works.
+
+  The test workout and known best were deleted afterwards.

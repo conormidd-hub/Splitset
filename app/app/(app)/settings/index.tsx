@@ -123,7 +123,9 @@ export default function Settings() {
                 {bwBad
                   ? `Between ${formatLoad(BODYWEIGHT_KG.min, units)} and ${formatLoad(BODYWEIGHT_KG.max, units)}, please.`
                   : bodyweight.source === 'weigh-in'
-                    ? `For bodyweight exercises. Using your weigh-in of ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}), which is newer.`
+                    ? savedBw == null
+                      ? `For bodyweight exercises. Using your latest weigh-in: ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}).`
+                      : `For bodyweight exercises. Your weigh-in of ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}) is newer, so it's used.`
                     : bodyweight.source === 'default'
                       ? `For bodyweight exercises, which use ${formatLoad(bodyweight.kg, units)} until you enter yours.`
                       : 'For bodyweight exercises. A newer Garmin weigh-in takes over.'}
