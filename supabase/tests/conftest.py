@@ -19,7 +19,8 @@ def _escape(text: str, prop: bool = False) -> str:
 def _annotate(level: str, title: str, longrepr: object) -> None:
     lines = [line for line in str(longrepr).splitlines() if line.strip()]
     detail = "\n".join(lines[-12:])   # the assertion and its values come last
-    sys.__stdout__.write(f"::{level} title={_escape(title, prop=True)}::{_escape(detail)}\n")
+    # a workflow command must start its own line; pytest's progress line has no newline yet
+    sys.__stdout__.write(f"\n::{level} title={_escape(title, prop=True)}::{_escape(detail)}\n")
     sys.__stdout__.flush()
 
 
