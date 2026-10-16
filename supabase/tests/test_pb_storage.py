@@ -121,7 +121,8 @@ def test_db_logging_f02_stores_its_e1rms(conn, logged_f02):
 
 def test_db_pb_history_and_lift_pbs_read_the_stored_e1rm(conn, logged_f02):
     rows = [r for r in history_rows(conn, USER_P) if r["exercise_id"] == logged_f02["bench"]["id"]]
-    assert [(r["source"], round(r["e1rm"], 6)) for r in rows] == [("logged", 126.5), ("logged", 125.0)]
+    # both sets carry the workout's finish time, so their order is not fixed
+    assert sorted((r["source"], round(r["e1rm"], 6)) for r in rows) == [("logged", 125.0), ("logged", 126.5)]
     finished = conn.execute("select finished_at from public.workouts where id = %s", (logged_f02["workout_id"],)).fetchone()["finished_at"]
     assert all(r["at"] == finished for r in rows)
     one_rm = conn.execute("select value from public.lift_pbs where user_id = %s and exercise_id = %s and metric = '1rm' and period = 'all'",
