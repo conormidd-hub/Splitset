@@ -694,3 +694,108 @@ Phase 3 output · 2026-10-16. Set fields, the stored e1RM, manual PBs, and the P
   - adding and deleting a known best works.
 
   The test workout and known best were deleted afterwards.
+
+---
+
+## 18. Phase 4: decisions made
+
+Phase 4 output · 2026-10-16. The per-workout cache, the recompute rule, live scoring, the rescore backfill and the F26 seed.
+
+### 18.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| D6 | **Finish and the cache write are one transaction.** `finish_workout()` (security invoker) sets `finished_at` and replaces the workout's cache rows. `save_workout_loads()` does the replacing on its own, for recompute |
+| F26 seed | **For the demo athlete only**, the same guard as `seed_demo.py`. F26's PBs come from a "PBs (fixture F26)" workout of singles 168 h before Monday, so `pb_history` holds them exactly as the fixture does: logged, at −168 h. It was run once on splitset-dev |
+| Library changes | `migrate.yml` runs `rescore_workouts.py` after `seed_library.py`, since a change to an exercise's muscles or fatigue class changes every cached workout that used it (§14). The job now sets up Node |
+| Existing workouts | Dummy data. They were rescored, then replaced by the F26 week without asking, as Conor said |
+
+### 18.2 Schema (`20261016000300_recovery_loads.sql`)
+
+1. **`workout_muscle_loads`:**
+   - one row per muscle a workout loaded (L > 0), so no row means 0;
+   - columns: `load` (L), `recovery_hours` (R), `finished_at` (t_w), `source` (lift or activity);
+   - a row belongs to a workout or an activity, never both, enforced by a check. This is ready for Phase 10, since activities have text ids (§3);
+   - a unique index per (workout, muscle), and per (activity, muscle);
+   - an index on (user, `finished_at`) for Phase 5's reads.
+2. **`workout_exercise_loads`:**
+   - one row per (workout, exercise): `load` (L_e, both blocks of an exercise summed, F28), `pb_source`, `pb_detail`;
+   - plus **`pb_value`**, the reference e1RM the session started from. The plan doesn't list it, but Phase 5's contribution list and Phase 6's tap detail need it, and it costs nothing to store.
+3. **Access:** both tables are owner-only, with select, insert and delete; there are no updates, because rows are replaced as a set.
+4. **Function checks:**
+   - both functions raise an error for a workout the caller can't see (RLS hides it), and `save_workout_loads` also for an unfinished one;
+   - `finish_workout` only moves `updated_at` forward (`greatest(updated_at, now())`), so a device whose clock ran ahead can't make the last-write-wins guard drop the finish.
+
+### 18.3 Scoring: one path, through the engine
+
+5. **The PB history is `pb_history`:** stored set e1RMs (Phase 3) plus manual PBs.
+   - A workout is scored with `scoreWorkout` against the records dated before it started, which is what the reference gets by appending records as it goes. So the "rebuild PB history as it goes" of §14 is the stored history itself, and a workout's rows don't depend on which other workouts are rescored with it.
+   - Workouts are still processed in time order.
+6. **`src/lib/recovery/workoutLoads.ts` (pure):**
+   - **Rows to the engine:** `libraryFromRows` builds the library, now with muscles by role. `engineWorkout` turns a stored workout into its blocks in order, with ticked sets only and the workout's bodyweight on each set.
+   - **Engine to cache:** `scoreFinishedWorkouts` scores, and `cacheRows` shapes the rows.
+   - **Live workouts:** `scoreLiveWorkout` scores the logger's in-progress workout with t_w = now.
+   - **Reading the cache:** `recoveryMapFromLoads` is the recovery map over cache rows, one term per row (§8). Phase 5 builds on it.
+7. **The CLI gains `score-workouts` and `recovery-map`.** `rescore_workouts.py`, `seed_f26.py` and the database tests score through them, so Python never computes a load.
+
+### 18.4 In the app
+
+8. **Finish:**
+   - The save queue gets a `finish` step after the workout's last upserts. It fetches what scoring needs, scores the workout with t_w = its finish time, and calls `finish_workout`.
+   - Offline, the step stays queued and the sheet stays open, as before. A step persisted from an older app version replays the same way.
+   - If a finished workout started after this one, the recompute rule runs from here.
+9. **The recompute rule (§14), in the background (`recomputeFrom`, `useRecomputeStatus`):**
+   - **Deleting a finished workout:** rescore from its start.
+   - **Adding or deleting a manual PB:** rescore from the day before its date, which safely covers the start of that date in any time zone.
+   - **Changing an exercise's muscles or fatigue:** today that only happens through the library, so `migrate.yml` handles it. Phase 8's custom exercises will call `recomputeFrom` themselves.
+   - **Changing a threshold:** Phase 9.
+   - **"Updating…":** `useRecomputeStatus` reports `running` for Phase 6's figure, and the last error if one failed.
+10. **`useLiveSession()`:** the workout in progress, scored from its ticked sets against the full PB history, with its session map. Nothing is cached until Finish. Phase 7 draws it.
+11. **Reading in pages:** exercises, `exercise_muscles` and `pb_history` 1,000 rows at a time, and workouts with their blocks and sets 100 at a time.
+
+### 18.5 Scripts
+
+12. **`supabase/rescore_workouts.py`** (`--dry-run`, `--user`, `--from`):
+    - it's the one-off backfill and the recompute rule outside the app;
+    - it reports how many workouts' rows actually changed, so a second run says 0;
+    - `seed_demo.py` calls it too, so a rebuilt demo has its cache.
+13. **`supabase/seed_f26.py`** (`--now`):
+    - **Clears:** the demo's workouts (their sets, cache rows and plan links go with them) and its manual PBs.
+    - **Loads:** the PBs workout, then Push, Pull and Legs at F26's hours, with t0 = now − 68 h. They end 50, 26 and 2 hours before now, so their weekday names follow the real calendar, not the fixture's.
+    - **Reports:** each muscle's level and F at now against F26, and it notes any threshold overrides (F26 assumes the defaults).
+    - It reads the fixture straight from `data/load_model_fixtures.json`.
+
+### 18.6 Tests
+
+- **`npm test`: 100 tests.** The new `workoutLoads.test.ts` covers:
+  - F20's cache rows (L, R, L_e, and the pre-session reference, lateral raise 13);
+  - F28 as one bench row of 0.6181;
+  - time order;
+  - Monday's bench edit rescoring Tuesday's curls (the reference is bench × 0.85 × 0.45 × 0.9, and biceps load drops);
+  - the live score;
+  - F26's levels and F read back from cache rows.
+- **`db-tests` (CI): 48 tests, 9 of them new:**
+  - finishing F20 through `finish_workout` as the user;
+  - F28;
+  - the Monday edit with the rescore;
+  - a second rescore changing nothing;
+  - access to the cache and the functions;
+  - the workout-or-activity check;
+  - unfinished workouts refused;
+  - the F26 seed reproducing the fixture and replacing rather than adding on a second run.
+
+### 18.7 On splitset-dev (2026-10-16)
+
+- **Migration:** `20261016000300_recovery_loads` was pushed from a Terminal tab.
+- **Rescore backfill:** all 101 finished demo workouts in about 5 s, giving 1,010 muscle rows and 530 exercise rows. A second run changed 0.
+- **The F26 seed:** run once. All 17 muscles matched F26's levels, and hamstrings 2.56, quads 2.43 and biceps 2.07 matched its F values.
+- **Regenerated types** matched the hand-written ones exactly.
+- **Checked in the web preview:** finishing a one-set workout (bench 90 × 8) wrote chest 0.32 (R 28.6 h), triceps and front delts 0.128, and bench as "monthly, logged, 120", with t_w equal to `finished_at`. Deleting it removed its rows. The demo now holds just the F26 week.
+
+### 18.8 Ambiguities resolved
+
+- **"One row per touched muscle … zeros elsewhere":** muscles with L = 0 get no row, and a missing row reads as 0.
+- **"Rebuilding PB history as it goes":** the stored e1RMs already are that history (item 5). The recompute rescores against them, in time order.
+- **"Run it as a background job if it takes more than a moment":** the app always runs recompute in the background and shows its status. For one athlete it takes a few seconds; the demo's 101 workouts took about 5 s from Python.
+- **"Editing a finished workout":** the app still can't. The recompute is wired to the edits that exist today (delete, manual PBs), and the database test simulates an edit.
+- **Dates in the F26 seed:** "now falls on the Wednesday at 20:00" is relative: now becomes fixture hour 68. `--now` pins another instant.
