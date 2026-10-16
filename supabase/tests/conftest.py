@@ -7,9 +7,10 @@ import os
 import sys
 
 
-def _escape(text: str) -> str:
+def _escape(text: str, prop: bool = False) -> str:
     # workflow-command escaping: https://docs.github.com/actions/reference/workflow-commands-for-github-actions
-    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return text.replace(":", "%3A").replace(",", "%2C") if prop else text
 
 
 def pytest_runtest_logreport(report):
@@ -17,5 +18,5 @@ def pytest_runtest_logreport(report):
         return
     lines = [line for line in str(report.longrepr).splitlines() if line.strip()]
     detail = "\n".join(lines[-12:])   # the assertion and its values come last
-    sys.__stdout__.write(f"::error title={_escape(report.nodeid)}::{_escape(detail)}\n")
+    sys.__stdout__.write(f"::error title={_escape(report.nodeid, prop=True)}::{_escape(detail)}\n")
     sys.__stdout__.flush()
