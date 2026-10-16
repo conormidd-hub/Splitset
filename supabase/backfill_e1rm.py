@@ -154,13 +154,13 @@ def apply(conn: psycopg.Connection[Any], p: Plan) -> None:
                 """update public.workouts w set bodyweight_kg = v.kg
                      from unnest(%s::uuid[], %s::real[]) as v(id, kg)
                     where w.id = v.id and w.bodyweight_kg is null""",
-                ([str(i) for i, _ in workouts], [kg for _, kg in workouts]))
+                ([str(i) for i, _ in workouts], [float(kg) for _, kg in workouts]))
         if sets:
             cur.execute(
                 """update public.workout_sets s set e1rm = v.e1rm
                      from unnest(%s::uuid[], %s::double precision[]) as v(id, e1rm)
                     where s.id = v.id and s.e1rm is null""",
-                ([str(i) for i, _ in sets], [e for _, e in sets]))
+                ([str(i) for i, _ in sets], [float(e) for _, e in sets]))   # JSON gives 105 as an int
 
 
 def backfill(conn: psycopg.Connection[Any], user_id: Any = None) -> Plan:
