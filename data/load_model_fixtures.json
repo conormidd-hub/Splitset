@@ -1,0 +1,3917 @@
+{
+ "tolerance": 0.01,
+ "time_unit": "hours",
+ "default_bodyweight_kg": 75,
+ "fixtures": [
+  {
+   "id": "F01",
+   "kind": "exercise",
+   "about": "Set inside the PB: 90 x 8 vs PB 120",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 90,
+      "r": 8
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "pb_source": "monthly",
+    "refs": [
+     120
+    ],
+    "I": [
+     0.75
+    ],
+    "inol": [
+     0.32
+    ],
+    "L_e": 0.32
+   }
+  },
+  {
+   "id": "F02",
+   "kind": "exercise",
+   "about": "New PB mid-session updates the reference first; a single is capped at I = 0.95",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 115,
+      "r": 3
+     },
+     {
+      "w": 125,
+      "r": 1
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "refs": [
+     126.5,
+     126.5
+    ],
+    "I": [
+     0.9091,
+     0.95
+    ],
+    "inol": [
+     0.33,
+     0.2
+    ],
+    "records": [
+     126.5,
+     125.0
+    ]
+   }
+  },
+  {
+   "id": "F03",
+   "kind": "exercise",
+   "about": "20 reps: scored, reps capped at 20 for e1RM and INOL",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 60,
+      "r": 20
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "I": [
+     0.5
+    ],
+    "inol": [
+     0.4
+    ],
+    "records": [
+     100.0
+    ]
+   }
+  },
+  {
+   "id": "F04",
+   "kind": "exercise",
+   "about": "RPE 8 adds 2 reps in reserve to the e1RM",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 100,
+      "r": 5,
+      "rpe": 8
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "refs": [
+     123.33
+    ],
+    "I": [
+     0.8108
+    ],
+    "inol": [
+     0.2643
+    ],
+    "records": [
+     123.33
+    ]
+   }
+  },
+  {
+   "id": "F05",
+   "kind": "exercise",
+   "about": "Pyramid with a warm-up and a PB triple",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "sets": [
+     {
+      "w": 60,
+      "r": 12,
+      "warmup": true
+     },
+     {
+      "w": 80,
+      "r": 8
+     },
+     {
+      "w": 100,
+      "r": 5
+     },
+     {
+      "w": 110,
+      "r": 3
+     },
+     {
+      "w": 90,
+      "r": 8
+     }
+    ]
+   },
+   "expect": {
+    "refs": [
+     120,
+     120,
+     120,
+     121.0,
+     121.0
+    ],
+    "inol": [
+     null,
+     0.24,
+     0.3,
+     0.33,
+     0.3123
+    ],
+    "L_e": 1.1823
+   }
+  },
+  {
+   "id": "F06",
+   "kind": "exercise",
+   "about": "Rep scheme comparison: 8 x 3 at 90%",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     },
+     {
+      "w": 108,
+      "r": 3
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "I": [
+     0.9,
+     0.9,
+     0.9,
+     0.9,
+     0.9,
+     0.9,
+     0.9,
+     0.9
+    ],
+    "L_e": 2.4
+   }
+  },
+  {
+   "id": "F07",
+   "kind": "exercise",
+   "about": "Warm-up excluded from load but still raises the reference",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "sets": [
+     {
+      "w": 100,
+      "r": 6,
+      "warmup": true
+     },
+     {
+      "w": 80,
+      "r": 8
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 110.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "refs": [
+     120.0,
+     120.0
+    ],
+    "inol": [
+     null,
+     0.24
+    ],
+    "L_e": 0.24
+   }
+  },
+  {
+   "id": "F08",
+   "kind": "exercise",
+   "about": "Pull-up: bodyweight 80 + 10 kg, PB e1RM 112",
+   "inputs": {
+    "slug": "pull_up",
+    "sets": [
+     {
+      "w": 10,
+      "r": 5
+     }
+    ],
+    "history": [
+     {
+      "slug": "pull_up",
+      "e1rm": 112.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "bodyweight": 80
+   },
+   "expect": {
+    "w": [
+     90.0
+    ],
+    "I": [
+     0.8036
+    ],
+    "inol": [
+     0.2545
+    ]
+   }
+  },
+  {
+   "id": "F09",
+   "kind": "exercise",
+   "about": "Assisted pull-up: 80 kg body, 30 kg assistance",
+   "inputs": {
+    "slug": "assisted_pull_up",
+    "sets": [
+     {
+      "w": 30,
+      "r": 8
+     }
+    ],
+    "history": [
+     {
+      "slug": "assisted_pull_up",
+      "e1rm": 70.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "bodyweight": 80
+   },
+   "expect": {
+    "w": [
+     50.0
+    ],
+    "I": [
+     0.7143
+    ],
+    "inol": [
+     0.28
+    ],
+    "L_e": 0.224
+   }
+  },
+  {
+   "id": "F10",
+   "kind": "exercise",
+   "about": "Fixed mode: plank 3 x 60 s, no RPE",
+   "inputs": {
+    "slug": "plank",
+    "sets": [
+     {
+      "seconds": 60
+     },
+     {
+      "seconds": 60
+     },
+     {
+      "seconds": 60
+     }
+    ],
+    "history": []
+   },
+   "expect": {
+    "L_e": 0.9
+   }
+  },
+  {
+   "id": "F11",
+   "kind": "exercise",
+   "about": "Fixed mode with RPE 9",
+   "inputs": {
+    "slug": "plank",
+    "sets": [
+     {
+      "seconds": 60,
+      "rpe": 9
+     },
+     {
+      "seconds": 60,
+      "rpe": 9
+     },
+     {
+      "seconds": 60,
+      "rpe": 9
+     }
+    ],
+    "history": []
+   },
+   "expect": {
+    "L_e": 1.05
+   }
+  },
+  {
+   "id": "F12",
+   "kind": "exercise",
+   "about": "Unilateral logged per side counts each side as half a set",
+   "inputs": {
+    "slug": "db_row",
+    "sets": [
+     {
+      "w": 30,
+      "r": 10,
+      "side": "left"
+     },
+     {
+      "w": 30,
+      "r": 10,
+      "side": "right"
+     }
+    ],
+    "history": [
+     {
+      "slug": "db_row",
+      "e1rm": 45.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "inol": [
+     0.15,
+     0.15
+    ],
+    "L_e": 0.3
+   }
+  },
+  {
+   "id": "F13",
+   "kind": "pb",
+   "about": "Lapsed: last session 60 days ago \u2192 best of that last month \u00d7 0.95",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "at": 1440,
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": 0,
+      "source": "logged"
+     },
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 110.0,
+      "at": -480,
+      "source": "logged"
+     },
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 125.0,
+      "at": -960,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "pb": 114.0,
+    "source": "lapsed"
+   }
+  },
+  {
+   "id": "F14",
+   "kind": "exercise",
+   "about": "Estimated: incline DB from bench 120 \u00d7 0.32 \u00d7 0.9",
+   "inputs": {
+    "slug": "incline_bench_db",
+    "sets": [
+     {
+      "w": 24,
+      "r": 10
+     },
+     {
+      "w": 24,
+      "r": 10
+     },
+     {
+      "w": 24,
+      "r": 10
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "pb_source": "estimated",
+    "pb_before": 34.56,
+    "I": [
+     0.6944,
+     0.6944,
+     0.6944
+    ],
+    "L_e": 0.9818
+   }
+  },
+  {
+   "id": "F15",
+   "kind": "pb",
+   "about": "Estimated through three hops: db_curl \u2192 bb_curl \u2192 barbell_row \u2192 bench",
+   "inputs": {
+    "slug": "db_curl",
+    "at": 0,
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "pb": 18.59,
+    "source": "estimated",
+    "via": "bench_press_bb"
+   }
+  },
+  {
+   "id": "F16",
+   "kind": "pb",
+   "about": "Estimated from the nearest lift that has a PB",
+   "inputs": {
+    "slug": "db_curl",
+    "at": 0,
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 45.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "pb": 18.225,
+    "source": "estimated",
+    "via": "bb_curl"
+   }
+  },
+  {
+   "id": "F17",
+   "kind": "exercise",
+   "about": "Calibration: no history, no estimate link \u2192 reference from the session, 2 RIR assumed",
+   "inputs": {
+    "slug": "landmine_press",
+    "sets": [
+     {
+      "w": 30,
+      "r": 10
+     },
+     {
+      "w": 30,
+      "r": 10
+     },
+     {
+      "w": 30,
+      "r": 10
+     }
+    ],
+    "history": []
+   },
+   "expect": {
+    "pb_source": "calibration",
+    "refs": [
+     42.0,
+     42.0,
+     42.0
+    ],
+    "I": [
+     0.7143,
+     0.7143,
+     0.7143
+    ],
+    "L_e": 1.05,
+    "records": [
+     40.0,
+     40.0,
+     40.0
+    ]
+   }
+  },
+  {
+   "id": "F18",
+   "kind": "manual_timeline",
+   "about": "Manual PB 130 on day 0; logged 132 on day 10 overwrites it; manual expires after 30 days",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "manual": {
+     "e1rm": 130.0,
+     "day": 0
+    },
+    "sessions": [
+     {
+      "day": 1,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 3,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 10,
+      "sets": [
+       {
+        "w": 120,
+        "r": 3
+       }
+      ]
+     },
+     {
+      "day": 35,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     }
+    ]
+   },
+   "expect": {
+    "pb_before": [
+     130.0,
+     130.0,
+     130.0,
+     132.0
+    ],
+    "pb_kind": [
+     "manual",
+     "manual",
+     "manual",
+     "logged"
+    ],
+    "first_set_I": [
+     0.7692,
+     0.7692,
+     0.9091,
+     0.7576
+    ]
+   }
+  },
+  {
+   "id": "F19",
+   "kind": "manual_timeline",
+   "about": "Manual PB never beaten: logged data takes over on day 31",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "manual": {
+     "e1rm": 130.0,
+     "day": 0
+    },
+    "sessions": [
+     {
+      "day": 1,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 15,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 29,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 31,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     }
+    ]
+   },
+   "expect": {
+    "pb_before": [
+     130.0,
+     130.0,
+     130.0,
+     116.67
+    ]
+   }
+  },
+  {
+   "id": "F20",
+   "kind": "workout",
+   "about": "Push day (session view)",
+   "inputs": {
+    "exercises": [
+     [
+      "bench_press_bb",
+      [
+       {
+        "w": 90,
+        "r": 8
+       },
+       {
+        "w": 90,
+        "r": 8
+       },
+       {
+        "w": 90,
+        "r": 8
+       },
+       {
+        "w": 90,
+        "r": 8
+       }
+      ]
+     ],
+     [
+      "incline_bench_db",
+      [
+       {
+        "w": 30,
+        "r": 10
+       },
+       {
+        "w": 30,
+        "r": 10
+       },
+       {
+        "w": 30,
+        "r": 10
+       }
+      ]
+     ],
+     [
+      "ohp_db",
+      [
+       {
+        "w": 22.5,
+        "r": 8
+       },
+       {
+        "w": 22.5,
+        "r": 8
+       },
+       {
+        "w": 22.5,
+        "r": 8
+       }
+      ]
+     ],
+     [
+      "lateral_raise_db",
+      [
+       {
+        "w": 10,
+        "r": 15
+       },
+       {
+        "w": 10,
+        "r": 15
+       },
+       {
+        "w": 10,
+        "r": 15
+       }
+      ]
+     ],
+     [
+      "tri_pushdown_rope",
+      [
+       {
+        "w": 30,
+        "r": 12
+       },
+       {
+        "w": 30,
+        "r": 12
+       },
+       {
+        "w": 30,
+        "r": 12
+       }
+      ]
+     ],
+     [
+      "skullcrusher",
+      [
+       {
+        "w": 30,
+        "r": 10
+       },
+       {
+        "w": 30,
+        "r": 10
+       },
+       {
+        "w": 30,
+        "r": 10
+       }
+      ]
+     ]
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "L_e": {
+     "bench_press_bb": 1.28,
+     "incline_bench_db": 1.2,
+     "ohp_db": 0.96,
+     "lateral_raise_db": 1.35,
+     "tri_pushdown_rope": 1.008,
+     "skullcrusher": 1.2
+    },
+    "L_m": {
+     "chest": 2.48,
+     "triceps": 3.584,
+     "front_delts": 1.952,
+     "side_delts": 1.734,
+     "traps": 0.462
+    },
+    "level": {
+     "chest": 3,
+     "triceps": 4,
+     "front_delts": 3,
+     "side_delts": 3,
+     "traps": 1,
+     "lats": 0
+    },
+    "R": {
+     "chest": 59.71,
+     "triceps": 75.61,
+     "front_delts": 52.11,
+     "side_delts": 24.48,
+     "traps": 30.65
+    },
+    "ready_in_h": {
+     "chest": 53.69,
+     "triceps": 70.34,
+     "side_delts": 20.95
+    },
+    "trainable_in_h": {
+     "chest": 23.59,
+     "triceps": 43.97,
+     "front_delts": 12.07
+    }
+   }
+  },
+  {
+   "id": "F21",
+   "kind": "workout",
+   "about": "One set of curls: biceps Low, forearms below the visible threshold",
+   "inputs": {
+    "exercises": [
+     [
+      "bb_curl",
+      [
+       {
+        "w": 30,
+        "r": 10
+       }
+      ]
+     ]
+    ],
+    "history": [
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "L_m": {
+     "biceps": 0.4,
+     "forearms": 0.16
+    },
+    "level": {
+     "biceps": 1,
+     "forearms": 0
+    },
+    "R": {
+     "biceps": 29.76
+    },
+    "ready_in_h": {
+     "biceps": 11.16
+    }
+   }
+  },
+  {
+   "id": "F22",
+   "kind": "workout",
+   "about": "Exercise with no muscle mapping contributes nothing and does not throw",
+   "inputs": {
+    "extra_exercises": [
+     {
+      "slug": "__unmapped__",
+      "load_mode": "weight",
+      "fatigue": "standard",
+      "primary": [],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": null
+     }
+    ],
+    "exercises": [
+     [
+      "__unmapped__",
+      [
+       {
+        "w": 50,
+        "r": 10
+       },
+       {
+        "w": 50,
+        "r": 10
+       },
+       {
+        "w": 50,
+        "r": 10
+       }
+      ]
+     ]
+    ],
+    "history": [
+     {
+      "slug": "__unmapped__",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "L_m_all_zero": true
+   }
+  },
+  {
+   "id": "F23",
+   "kind": "timeline",
+   "about": "Push day decay, chest",
+   "inputs": {
+    "workouts": [
+     {
+      "start": -1,
+      "end": 0,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "muscles": [
+     "chest"
+    ],
+    "at": [
+     0,
+     12,
+     24,
+     36,
+     48,
+     54
+    ]
+   },
+   "expect": {
+    "chest": {
+     "F": [
+      2.48,
+      1.982,
+      1.483,
+      0.985,
+      0.486,
+      0.237
+     ],
+     "level": [
+      3,
+      3,
+      2,
+      2,
+      1,
+      0
+     ]
+    }
+   }
+  },
+  {
+   "id": "F24",
+   "kind": "timeline",
+   "about": "Stacking: push day repeated 24 h later",
+   "inputs": {
+    "workouts": [
+     {
+      "start": -1,
+      "end": 0,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 23,
+      "end": 24,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "muscles": [
+     "chest",
+     "triceps"
+    ],
+    "at": [
+     24
+    ]
+   },
+   "expect": {
+    "chest": {
+     "F": [
+      3.963
+     ],
+     "level": [
+      4
+     ],
+     "ready_in_h": [
+      53.75
+     ]
+    },
+    "triceps": {
+     "F": [
+      6.03
+     ],
+     "level": [
+      5
+     ],
+     "trainable_in_h": [
+      48.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "F25",
+   "kind": "timeline",
+   "about": "Weekly cap: chest pushed four times in six days stays red until the first session leaves the week",
+   "inputs": {
+    "workouts": [
+     {
+      "start": -1,
+      "end": 0,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 47,
+      "end": 48,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 95,
+      "end": 96,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 143,
+      "end": 144,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "muscles": [
+     "chest"
+    ],
+    "at": [
+     150,
+     160,
+     168.25
+    ]
+   },
+   "expect": {
+    "chest": {
+     "F": [
+      2.468,
+      1.815,
+      1.473
+     ],
+     "W": [
+      9.92,
+      9.92,
+      7.44
+     ],
+     "level": [
+      4,
+      4,
+      2
+     ]
+    }
+   }
+  },
+  {
+   "id": "F26",
+   "kind": "timeline",
+   "about": "PPL x2 week: Wednesday 20:00, two hours after legs (the preview image)",
+   "inputs": {
+    "workouts": [
+     {
+      "start": 17,
+      "end": 18,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 41,
+      "end": 42,
+      "exercises": [
+       [
+        "deadlift",
+        [
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         }
+        ]
+       ],
+       [
+        "barbell_row",
+        [
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lat_pulldown",
+        [
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "face_pull",
+        [
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "bb_curl",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "hammer_curl",
+        [
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 65,
+      "end": 66,
+      "exercises": [
+       [
+        "squat_bb",
+        [
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         }
+        ]
+       ],
+       [
+        "rdl_bb",
+        [
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "leg_press",
+        [
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "leg_curl_lying",
+        [
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "calf_raise_standing",
+        [
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         }
+        ]
+       ]
+      ]
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "at": [
+     68
+    ],
+    "muscles": [
+     "chest",
+     "traps",
+     "lats",
+     "lower_back",
+     "front_delts",
+     "side_delts",
+     "rear_delts",
+     "biceps",
+     "triceps",
+     "forearms",
+     "abs",
+     "obliques",
+     "glutes",
+     "quads",
+     "adductors",
+     "hamstrings",
+     "calves"
+    ]
+   },
+   "expect": {
+    "chest": {
+     "level": [
+      1
+     ]
+    },
+    "traps": {
+     "level": [
+      3
+     ]
+    },
+    "lats": {
+     "level": [
+      2
+     ]
+    },
+    "lower_back": {
+     "level": [
+      2
+     ]
+    },
+    "front_delts": {
+     "level": [
+      0
+     ]
+    },
+    "side_delts": {
+     "level": [
+      0
+     ]
+    },
+    "rear_delts": {
+     "level": [
+      2
+     ]
+    },
+    "biceps": {
+     "level": [
+      3
+     ],
+     "F": [
+      2.07
+     ]
+    },
+    "triceps": {
+     "level": [
+      2
+     ]
+    },
+    "forearms": {
+     "level": [
+      0
+     ]
+    },
+    "abs": {
+     "level": [
+      0
+     ]
+    },
+    "obliques": {
+     "level": [
+      0
+     ]
+    },
+    "glutes": {
+     "level": [
+      3
+     ]
+    },
+    "quads": {
+     "level": [
+      3
+     ],
+     "F": [
+      2.43
+     ]
+    },
+    "adductors": {
+     "level": [
+      2
+     ]
+    },
+    "hamstrings": {
+     "level": [
+      4
+     ],
+     "F": [
+      2.56
+     ]
+    },
+    "calves": {
+     "level": [
+      2
+     ]
+    }
+   }
+  },
+  {
+   "id": "F27",
+   "kind": "timeline",
+   "about": "PPL x2 week: Saturday 20:00, weekly load stays under the cap",
+   "inputs": {
+    "workouts": [
+     {
+      "start": 17,
+      "end": 18,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 41,
+      "end": 42,
+      "exercises": [
+       [
+        "deadlift",
+        [
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         }
+        ]
+       ],
+       [
+        "barbell_row",
+        [
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lat_pulldown",
+        [
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "face_pull",
+        [
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "bb_curl",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "hammer_curl",
+        [
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 65,
+      "end": 66,
+      "exercises": [
+       [
+        "squat_bb",
+        [
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         }
+        ]
+       ],
+       [
+        "rdl_bb",
+        [
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "leg_press",
+        [
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "leg_curl_lying",
+        [
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "calf_raise_standing",
+        [
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 89,
+      "end": 90,
+      "exercises": [
+       [
+        "bench_press_bb",
+        [
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         },
+         {
+          "w": 90,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "incline_bench_db",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "ohp_db",
+        [
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         },
+         {
+          "w": 22.5,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lateral_raise_db",
+        [
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         },
+         {
+          "w": 10,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "tri_pushdown_rope",
+        [
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         },
+         {
+          "w": 30,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "skullcrusher",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 113,
+      "end": 114,
+      "exercises": [
+       [
+        "deadlift",
+        [
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         },
+         {
+          "w": 140,
+          "r": 5
+         }
+        ]
+       ],
+       [
+        "barbell_row",
+        [
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         },
+         {
+          "w": 70,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "lat_pulldown",
+        [
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         },
+         {
+          "w": 60,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "face_pull",
+        [
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         },
+         {
+          "w": 20,
+          "r": 15
+         }
+        ]
+       ],
+       [
+        "bb_curl",
+        [
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         },
+         {
+          "w": 30,
+          "r": 10
+         }
+        ]
+       ],
+       [
+        "hammer_curl",
+        [
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         },
+         {
+          "w": 14,
+          "r": 12
+         }
+        ]
+       ]
+      ]
+     },
+     {
+      "start": 137,
+      "end": 138,
+      "exercises": [
+       [
+        "squat_bb",
+        [
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         },
+         {
+          "w": 110,
+          "r": 6
+         }
+        ]
+       ],
+       [
+        "rdl_bb",
+        [
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         },
+         {
+          "w": 100,
+          "r": 8
+         }
+        ]
+       ],
+       [
+        "leg_press",
+        [
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         },
+         {
+          "w": 180,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "leg_curl_lying",
+        [
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         },
+         {
+          "w": 40,
+          "r": 12
+         }
+        ]
+       ],
+       [
+        "calf_raise_standing",
+        [
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         },
+         {
+          "w": 80,
+          "r": 15
+         }
+        ]
+       ]
+      ]
+     }
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "incline_bench_db",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_db",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lateral_raise_db",
+      "e1rm": 13.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "tri_pushdown_rope",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "skullcrusher",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "deadlift",
+      "e1rm": 180.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "barbell_row",
+      "e1rm": 95.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "lat_pulldown",
+      "e1rm": 80.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "face_pull",
+      "e1rm": 30.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "bb_curl",
+      "e1rm": 40.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "hammer_curl",
+      "e1rm": 20.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "squat_bb",
+      "e1rm": 140.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "rdl_bb",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_press",
+      "e1rm": 260.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "leg_curl_lying",
+      "e1rm": 60.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "calf_raise_standing",
+      "e1rm": 130.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "at": [
+     140
+    ],
+    "muscles": [
+     "triceps",
+     "biceps",
+     "traps"
+    ]
+   },
+   "expect": {
+    "triceps": {
+     "W": [
+      7.17
+     ]
+    },
+    "biceps": {
+     "W": [
+      6.54
+     ]
+    },
+    "traps": {
+     "W": [
+      6.14
+     ]
+    }
+   }
+  },
+  {
+   "id": "F28",
+   "kind": "workout",
+   "about": "Same exercise in two blocks of one workout keeps one running reference",
+   "inputs": {
+    "exercises": [
+     [
+      "bench_press_bb",
+      [
+       {
+        "w": 110,
+        "r": 3
+       }
+      ]
+     ],
+     [
+      "ohp_bb",
+      [
+       {
+        "w": 50,
+        "r": 8
+       }
+      ]
+     ],
+     [
+      "bench_press_bb",
+      [
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     ]
+    ],
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 100.0,
+      "at": -168.0,
+      "source": "logged"
+     },
+     {
+      "slug": "ohp_bb",
+      "e1rm": 70.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ]
+   },
+   "expect": {
+    "L_e": {
+     "bench_press_bb": 0.6181
+    },
+    "set_refs": {
+     "bench_press_bb": [
+      121.0,
+      121.0
+     ]
+    }
+   }
+  },
+  {
+   "id": "F29",
+   "kind": "manual_timeline",
+   "about": "Manual policy replace_on_log: any later logged set retires the manual entry",
+   "inputs": {
+    "slug": "bench_press_bb",
+    "manual": {
+     "e1rm": 130.0,
+     "day": 0
+    },
+    "constants_override": {
+     "pb.manual_policy": "replace_on_log"
+    },
+    "sessions": [
+     {
+      "day": 1,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 3,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       },
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     },
+     {
+      "day": 10,
+      "sets": [
+       {
+        "w": 120,
+        "r": 3
+       }
+      ]
+     },
+     {
+      "day": 35,
+      "sets": [
+       {
+        "w": 100,
+        "r": 5
+       }
+      ]
+     }
+    ]
+   },
+   "expect": {
+    "pb_before": [
+     130.0,
+     116.67,
+     116.67,
+     132.0
+    ],
+    "pb_kind": [
+     "manual",
+     "logged",
+     "logged",
+     "logged"
+    ]
+   }
+  },
+  {
+   "id": "F30",
+   "kind": "pb",
+   "about": "Custom exercise based on a library curl: the fourth hop reaches bench",
+   "inputs": {
+    "slug": "custom_drag_curl",
+    "at": 0,
+    "history": [
+     {
+      "slug": "bench_press_bb",
+      "e1rm": 120.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "extra_exercises": [
+     {
+      "slug": "custom_drag_curl",
+      "load_mode": "weight",
+      "fatigue": "standard",
+      "primary": [
+       "biceps"
+      ],
+      "secondary": [],
+      "tertiary": [],
+      "pb_estimate": {
+       "from": "db_curl",
+       "ratio": 1.0
+      }
+     }
+    ]
+   },
+   "expect": {
+    "pb": 18.59,
+    "source": "estimated",
+    "via": "bench_press_bb"
+   }
+  },
+  {
+   "id": "F31",
+   "kind": "exercise",
+   "about": "Bodyweight snapshot on the set wins over the current profile weight",
+   "inputs": {
+    "slug": "pull_up",
+    "sets": [
+     {
+      "w": 10,
+      "r": 5,
+      "bodyweight": 78
+     }
+    ],
+    "history": [
+     {
+      "slug": "pull_up",
+      "e1rm": 112.0,
+      "at": -168.0,
+      "source": "logged"
+     }
+    ],
+    "bodyweight": 82
+   },
+   "expect": {
+    "w": [
+     88.0
+    ],
+    "I": [
+     0.7857
+    ],
+    "inol": [
+     0.2333
+    ]
+   }
+  }
+ ]
+}
