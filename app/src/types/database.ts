@@ -1203,6 +1203,58 @@ export type Database = {
           },
         ]
       }
+      workout_exercise_loads: {
+        Row: {
+          workout_id: string
+          user_id: string
+          exercise_id: string
+          load: number
+          pb_source: string
+          pb_detail: string | null
+          pb_value: number | null
+        }
+        Insert: {
+          workout_id: string
+          user_id: string
+          exercise_id: string
+          load: number
+          pb_source: string
+          pb_detail?: string | null
+          pb_value?: number | null
+        }
+        Update: {
+          workout_id?: string
+          user_id?: string
+          exercise_id?: string
+          load?: number
+          pb_source?: string
+          pb_detail?: string | null
+          pb_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_exercise_loads_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_exercise_loads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_exercise_loads_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_exercises: {
         Row: {
           id: string
@@ -1254,6 +1306,71 @@ export type Database = {
           },
           {
             foreignKeyName: "workout_exercises_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_muscle_loads: {
+        Row: {
+          id: number
+          user_id: string
+          workout_id: string | null
+          activity_id: string | null
+          source: string
+          muscle_id: string
+          load: number
+          recovery_hours: number
+          finished_at: string
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          workout_id?: string | null
+          activity_id?: string | null
+          source: string
+          muscle_id: string
+          load: number
+          recovery_hours: number
+          finished_at: string
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          workout_id?: string | null
+          activity_id?: string | null
+          source?: string
+          muscle_id?: string
+          load?: number
+          recovery_hours?: number
+          finished_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_muscle_loads_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_muscle_id_fkey"
+            columns: ["muscle_id"]
+            isOneToOne: false
+            referencedRelation: "muscles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_workout_id_fkey"
             columns: ["workout_id"]
             isOneToOne: false
             referencedRelation: "workouts"
@@ -1520,6 +1637,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      finish_workout: {
+        Args: {
+          p_workout_id: string
+          p_finished_at: string
+          p_loads: Json
+        }
+        Returns: undefined
+      }
       intervals_basic_auth: {
         Args: {
           p_api_key: string
@@ -1537,6 +1662,12 @@ export type Database = {
           p_kind?: string
         }
         Returns: Json
+      }
+      save_workout_loads: {
+        Args: {
+          p_loads: Json
+        }
+        Returns: number
       }
       sync_request_status: {
         Args: {

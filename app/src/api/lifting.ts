@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { recomputeInBackground } from '@/api/workoutLoads';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesInsert, Views } from '@/types/database';
@@ -241,6 +242,7 @@ export function invalidateWorkoutData(qc: QueryClient, uid: string) {
   qc.invalidateQueries({ queryKey: ['planSession'] });
   qc.invalidateQueries({ queryKey: ['pbs'] });
   qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+  qc.invalidateQueries({ queryKey: ['workoutLoads', uid] });
 }
 
 export function useDeleteWorkout() {
@@ -248,10 +250,15 @@ export function useDeleteWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('workouts').delete().eq('id', id);
+      const { data, error } = await supabase.from('workouts').delete().eq('id', id).select('started_at, finished_at');
       if (error) throw error;
+      return data[0] ?? null;
     },
-    onSuccess: () => invalidateWorkoutData(qc, uid),
+    onSuccess: (deleted) => {
+      invalidateWorkoutData(qc, uid);
+      // spec §14: later workouts may have taken their PB reference from this one
+      if (deleted?.finished_at) recomputeInBackground(uid, deleted.started_at);
+    },
   });
 }
 

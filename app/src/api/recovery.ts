@@ -3,20 +3,27 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useExercises, type Exercise } from '@/api/lifting';
 import { useProfile } from '@/api/profile';
 import { useLatestWeighIn } from '@/api/wellness';
+import { fetchLibraryRows, fetchPbHistoryRows, recomputeInBackground } from '@/api/workoutLoads';
 import { useNowHour } from '@/lib/clock';
-import { buildLibrary } from '@/lib/recovery/engine';
+import { buildLibrary, sessionMap } from '@/lib/recovery/engine';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
-import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory, type PbHistoryRow } from '@/lib/recovery/pbHistory';
+import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory } from '@/lib/recovery/pbHistory';
 import { currentBodyweight, engineKey, exerciseDef, setE1rm } from '@/lib/recovery/sets';
 import { thresholdsFor, type Thresholds } from '@/lib/recovery/thresholds';
 import type { ExerciseDef, Model } from '@/lib/recovery/types';
+import { libraryFromRows, scoreLiveWorkout } from '@/lib/recovery/workoutLoads';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
+import { useActiveWorkout } from '@/stores/activeWorkout';
+
+export { fetchPbHistoryRows } from '@/api/workoutLoads';
 
 export const recoveryKeys = {
   thresholds: (uid: string) => ['thresholds', uid] as const,
   pbHistory: (uid: string, exerciseIds: readonly string[]) => ['pbHistory', uid, ...exerciseIds] as const,
   manualPbs: (uid: string) => ['pbHistory', uid, 'manual'] as const,
+  allHistory: (uid: string) => ['pbHistory', uid, 'all'] as const,
+  libraryRows: () => ['libraryRows'] as const,
 };
 
 /** The signed-in user's thresholds: the constants file with their user_thresholds rows on top.
@@ -60,29 +67,6 @@ export function libraryOf(exercises: readonly Exercise[] | undefined) {
     if (def) defs.set(key, def);
   }
   return { lib: buildLibrary(defs.values()), keyOf, nameOf };
-}
-
-/**
- * Phase 3's repository function: one user's PB history (pb_history: logged sets with an e1RM
- * plus manual PBs) for a set of exercises, as raw rows. toPbHistory() turns them into the
- * engine's records. Paged, since PostgREST returns at most 1000 rows per request.
- */
-export async function fetchPbHistoryRows(uid: string, exerciseIds: readonly string[]): Promise<PbHistoryRow[]> {
-  const PAGE = 1000;
-  const out: PbHistoryRow[] = [];
-  if (!exerciseIds.length) return out;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('pb_history')
-      .select('exercise_id, e1rm, at, source, weight_kg, reps, set_type, workout_id, manual_pb_id')
-      .eq('user_id', uid)
-      .in('exercise_id', [...exerciseIds])
-      .order('at', { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    out.push(...(data as PbHistoryRow[]));
-    if (data.length < PAGE) return out;
-  }
 }
 
 /** The exercise and every exercise its PB estimate can reach, as exercise ids. */
@@ -162,9 +146,18 @@ export function useAddManualPb() {
         user_id: uid, exercise_id: exercise.id, weight_kg: weightKg, reps, e1rm, dated_at: datedAt,
       });
       if (error) throw error;
+      return datedAt;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pbHistory', uid] }),
+    onSuccess: (datedAt) => {
+      qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      recomputeInBackground(uid, dayBefore(datedAt));   // spec §14: a manual PB moves later references
+    },
   });
+}
+
+/** The day before a date, as an instant: safely before the start of that date in any time zone. */
+function dayBefore(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 24 * 3_600_000).toISOString();
 }
 
 export function useDeleteManualPb() {
@@ -172,9 +165,34 @@ export function useDeleteManualPb() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('manual_pbs').delete().eq('id', id);
+      const { data, error } = await supabase.from('manual_pbs').delete().eq('id', id).select('dated_at');
       if (error) throw error;
+      return data[0]?.dated_at ?? null;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['pbHistory', uid] }),
+    onSuccess: (datedAt) => {
+      qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      if (datedAt) recomputeInBackground(uid, dayBefore(datedAt));
+    },
   });
+}
+
+/**
+ * The workout in progress, scored on the fly with t_w = now (build phase 4): its ticked sets
+ * against the PB history, and its session view. Null without a workout or before the library
+ * and history have loaded. Nothing is cached until Finish.
+ */
+export function useLiveSession() {
+  const uid = useUserId();
+  const c = useThresholds();
+  const workout = useActiveWorkout((s) => s.workout);
+  const nowMs = useNowHour();
+  const library = useQuery({ queryKey: recoveryKeys.libraryRows(), queryFn: fetchLibraryRows, staleTime: 10 * 60_000, enabled: !!workout });
+  const history = useQuery({
+    queryKey: recoveryKeys.allHistory(uid), queryFn: () => fetchPbHistoryRows(uid, null), enabled: !!uid && !!workout,
+  });
+  if (!workout || !library.data || !history.data) return null;
+  const { lib, keyOf } = libraryFromRows(library.data.exercises, library.data.muscles);
+  const m: Model = { c, lib };
+  const scored = scoreLiveWorkout(m, workout, toPbHistory(history.data, (id) => keyOf.get(id)), hoursOf(nowMs));
+  return { scored, session: sessionMap(m, scored) };
 }

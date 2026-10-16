@@ -19,6 +19,10 @@
 //       → { "kg", "source", "date" }
 //   { "command": "reference",  "exercises": (ExerciseRow & { name })[], "rows": PbHistoryRow[], "exercise_id", "at": iso }
 //       → { "pb", "source", "detail", "tone", "label" }
+//   { "command": "score-workouts", "exercises", "muscles", "workouts", "blocks", "sets", "history" }   (ScoringRows)
+//       → WorkoutLoads[]: the cache rows of every finished workout, in time order (build phase 4)
+//   { "command": "recovery-map", "exercises", "muscles", "rows": MuscleLoadRow[], "at": iso }
+//       → { muscle: MuscleState } at that instant, from cached rows
 
 import { readFileSync } from 'node:fs';
 
@@ -28,6 +32,8 @@ import { hoursOf, strengthReference, toPbHistory, type PbHistoryRow } from '../s
 import { currentBodyweight, engineKey, exerciseDef, setE1rm, type ExerciseRow } from '../src/lib/recovery/sets.ts';
 import { parseConstants, thresholdsFor, type ThresholdOverride } from '../src/lib/recovery/thresholds.ts';
 import type { ExerciseDef } from '../src/lib/recovery/types.ts';
+import { libraryFromRows, recoveryMapFromLoads, scoreFinishedWorkouts, type MuscleLoadRow, type ScoringRows } from '../src/lib/recovery/workoutLoads.ts';
+import type { ExerciseMuscleRow } from '../src/lib/recovery/sets.ts';
 
 type Request = Record<string, unknown> & { command: string; user_id?: string; thresholds_rows?: ThresholdOverride[] };
 
@@ -70,6 +76,12 @@ function handle(req: Request): unknown {
       const key = keyOf.get(String(req.exercise_id));
       if (!key) throw new Error(`unknown exercise ${String(req.exercise_id)}`);
       return strengthReference({ c, lib: buildLibrary(defs) }, key, hoursOf(String(req.at)), history, (k) => nameOf.get(k));
+    }
+    case 'score-workouts':
+      return scoreFinishedWorkouts({ ...(req as unknown as Omit<ScoringRows, 'thresholds'>), thresholds: c });
+    case 'recovery-map': {
+      const { lib } = libraryFromRows(req.exercises as ExerciseRow[], req.muscles as ExerciseMuscleRow[]);
+      return recoveryMapFromLoads({ c, lib }, req.rows as MuscleLoadRow[], hoursOf(String(req.at)));
     }
     default:
       throw new Error(`unknown command ${req.command}`);

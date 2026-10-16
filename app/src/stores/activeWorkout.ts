@@ -12,6 +12,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { Exercise, RoutineWithStructure } from '@/api/lifting';
+import { finishWorkoutRemote } from '@/api/workoutLoads';
 import { setRowPayload, usesBodyweight, type ExerciseFacts, type SetRow, type SetType, type Side } from '@/lib/lifting/setRow';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
 import type { Thresholds } from '@/lib/recovery/thresholds';
@@ -61,7 +62,10 @@ export type ActiveWorkout = {
 
 type Op =
   | { kind: 'upsert'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; row: Record<string, unknown> }
-  | { kind: 'delete'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; id: string };
+  | { kind: 'delete'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; id: string }
+  /** Score the workout and set finished_at with its cache, in one transaction (build phase 4).
+   *  Queued after every save of the workout, so it scores exactly what was logged. */
+  | { kind: 'finish'; userId: string; workoutId: string; finishedAt: string };
 
 export type RestTimer = { endsAt: number; seconds: number; label: string; notificationId?: string | null };
 
@@ -348,7 +352,8 @@ export const useActiveWorkout = create<State>()(
             outbox: [
               ...s.outbox,
               ...removed.map((r): Op => ({ kind: 'delete', table: 'workout_sets', id: r.id })),
-              { kind: 'upsert', table: 'workouts', row: rowOf.workout(cleaned ?? w, finishedAt) },
+              { kind: 'upsert', table: 'workouts', row: rowOf.workout(cleaned ?? w) },
+              { kind: 'finish', userId: w.userId, workoutId: w.id, finishedAt },
             ],
           }));
           await get().flush();
@@ -375,10 +380,14 @@ export const useActiveWorkout = create<State>()(
           try {
             while (get().outbox.length) {
               const op = get().outbox[0];
-              const res = op.kind === 'upsert'
-                ? await supabase.from(op.table).upsert(op.row as never, { onConflict: 'id' })
-                : await supabase.from(op.table).delete().eq('id', op.id);
-              if (res.error) throw res.error;
+              if (op.kind === 'finish') {
+                await finishWorkoutRemote(op.userId, op.workoutId, op.finishedAt);
+              } else {
+                const res = op.kind === 'upsert'
+                  ? await supabase.from(op.table).upsert(op.row as never, { onConflict: 'id' })
+                  : await supabase.from(op.table).delete().eq('id', op.id);
+                if (res.error) throw res.error;
+              }
               set((s) => ({ outbox: s.outbox.slice(1), lastError: null }));
             }
           } catch (e) {
