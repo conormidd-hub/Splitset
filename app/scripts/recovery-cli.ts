@@ -21,8 +21,14 @@
 //       → { "pb", "source", "detail", "tone", "label" }
 //   { "command": "score-workouts", "exercises", "muscles", "workouts", "blocks", "sets", "history" }   (ScoringRows)
 //       → WorkoutLoads[]: the cache rows of every finished workout, in time order (build phase 4)
-//   { "command": "recovery-map", "exercises", "muscles", "rows": MuscleLoadRow[], "at": iso }
-//       → { muscle: MuscleState } at that instant, from cached rows
+//   { "command": "recovery-map", "exercises", "muscles", "loads": LoadWindow, "at": iso }
+//       → RecoveryMap at that instant: recovery_map(user, at) of build phase 5 over what
+//         recovery_loads() returned. "rows" (muscle rows only) may stand in for "loads"; the
+//         contributing lists are then empty
+//   { "command": "session-map", "rows": [{ muscle_id, load, recovery_hours }] }
+//       → SessionMap: session_map(workout) over that workout's workout_muscle_loads rows
+//   { "command": "recovery-history", "exercises", "muscles", "loads": LoadWindow, "from": iso, "to": iso, "step_h"?: 24 }
+//       → RecoverySample[]: recovery_history(user, from, to, step)
 
 import { readFileSync } from 'node:fs';
 
@@ -32,7 +38,10 @@ import { hoursOf, strengthReference, toPbHistory, type PbHistoryRow } from '../s
 import { currentBodyweight, engineKey, exerciseDef, setE1rm, type ExerciseRow } from '../src/lib/recovery/sets.ts';
 import { parseConstants, thresholdsFor, type ThresholdOverride } from '../src/lib/recovery/thresholds.ts';
 import type { ExerciseDef } from '../src/lib/recovery/types.ts';
-import { libraryFromRows, recoveryMapFromLoads, scoreFinishedWorkouts, type MuscleLoadRow, type ScoringRows } from '../src/lib/recovery/workoutLoads.ts';
+import {
+  recoveryHistory, recoveryMapAt, sessionMapFromLoads, type LoadWindow, type WindowMuscleRow,
+} from '../src/lib/recovery/read.ts';
+import { libraryFromRows, scoreFinishedWorkouts, type MuscleLoadRow, type ScoringRows } from '../src/lib/recovery/workoutLoads.ts';
 import type { ExerciseMuscleRow } from '../src/lib/recovery/sets.ts';
 
 type Request = Record<string, unknown> & { command: string; user_id?: string; thresholds_rows?: ThresholdOverride[] };
@@ -80,8 +89,16 @@ function handle(req: Request): unknown {
     case 'score-workouts':
       return scoreFinishedWorkouts({ ...(req as unknown as Omit<ScoringRows, 'thresholds'>), thresholds: c });
     case 'recovery-map': {
-      const { lib } = libraryFromRows(req.exercises as ExerciseRow[], req.muscles as ExerciseMuscleRow[]);
-      return recoveryMapFromLoads({ c, lib }, req.rows as MuscleLoadRow[], hoursOf(String(req.at)));
+      const { lib, keyOf } = libraryFromRows(req.exercises as ExerciseRow[], req.muscles as ExerciseMuscleRow[]);
+      const loads = (req.loads as LoadWindow | undefined) ?? { muscles: req.rows as WindowMuscleRow[], exercises: [] };
+      return recoveryMapAt({ c, lib }, keyOf, loads, hoursOf(String(req.at)));
+    }
+    case 'session-map':
+      return sessionMapFromLoads({ c, lib: buildLibrary([]) }, req.rows as MuscleLoadRow[]);
+    case 'recovery-history': {
+      const { lib, keyOf } = libraryFromRows(req.exercises as ExerciseRow[], req.muscles as ExerciseMuscleRow[]);
+      return recoveryHistory({ c, lib }, keyOf, req.loads as LoadWindow, hoursOf(String(req.from)), hoursOf(String(req.to)),
+        (req.step_h as number | undefined) ?? 24);
     }
     default:
       throw new Error(`unknown command ${req.command}`);

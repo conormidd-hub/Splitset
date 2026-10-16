@@ -1657,6 +1657,13 @@ export type Database = {
         }
         Returns: Json
       }
+      recovery_loads: {
+        Args: {
+          p_from: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       request_sync: {
         Args: {
           p_kind?: string
