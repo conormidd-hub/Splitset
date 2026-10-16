@@ -494,3 +494,81 @@ Phase 1 output · 2026-10-16. Muscles, the library and the constants loader.
 - **"161 exercises":** that's 161 global rows with a slug. The table also keeps 19 unscored legacy rows, so it holds 180 global rows.
 - **"Library chains are ≤ 3 hops":** checked on the library, which leaves one hop for a custom exercise (item 5).
 - **"Per-user overrides":** the plan names keys like `base_recovery_hours.default`, but Phase 9 also sets base hours per muscle. So `base_recovery_hours.<muscle>` is the one kind of key an override may add (item 15).
+
+---
+
+## 16. Phase 2: decisions made
+
+Phase 2 output · 2026-10-16. The engine: `app/src/lib/recovery/engine.ts` and `types.ts`.
+
+### 16.1 Result
+
+- **Fixtures:** all 31 pass in `npm test`. The runner compares 198 values, the same 198 that `scripts/verify_spec_fixtures.py` compares, and fails any fixture that compares nothing.
+- **Cross-check against the reference (one-off, not committed):**
+  - 400 random timelines (1,851 workouts), scored by both `scripts/load_model.py` and the engine;
+  - covering both manual-PB policies, lapsed and estimated PBs, calibration, bodyweight snapshots (including 0), RPE 0 and 11, warm-ups, per-side sets and repeated blocks;
+  - 558,312 values compared, with 0 mismatches. The largest difference is 8.9 × 10⁻¹⁶.
+
+### 16.2 Shape of the port
+
+1. **Same functions, same order, camelCase names.** For example, `score_exercise` → `scoreExercise` and `hours_until_below` → `hoursUntilBelow`.
+   - `_records` and `_own_pb` stay private, as `records` and `ownPb`.
+   - `level_info`, which `muscle_state` uses but the plan's list leaves out, is `levelInfo`.
+2. **The reference's globals become arguments.** `C` and `EX` become a `Model` (`{ c: Thresholds, lib: Library }`), passed as the first argument.
+   - A fixture's `extra_exercises` and `constants_override` build a `Model` for that case only, through `buildLibrary` and Phase 1's `withOverride`. Nothing global changes.
+   - The `Library` is a `Map` keyed by slug.
+3. **Field names follow the reference and the library JSON.**
+   - Exercises use `load_mode`, `bw_factor` and `pb_estimate`.
+   - Sets use `w`, `r`, `rpe`, `warmup`, `seconds`, `side` and `bodyweight`.
+   - Results keep the spec's symbols (`L_e`, `L_m`, `R`, `F`, `W`), plus the snake_case names Phase 5 returns (`ready_in_h`, `trainable_in_h`, `pb_source`).
+   - **For Phase 3:** the repository maps `workout_sets` rows onto `LiftSet`: `weight_kg` → `w`, `reps` → `r`, `set_type = 'warmup'` → `warmup`, and the workout's bodyweight → `bodyweight`.
+
+### 16.3 Where the port deliberately differs from the reference
+
+4. **`scoreWorkout` doesn't touch the history it's given.** It returns the workout's PB records, dated at its end, in `records`.
+   - `scoreWorkouts(m, workouts, history)` scores workouts in the order given and carries each one's records into the next, as the reference's shared list does.
+   - Callers pass workouts in the order they happened.
+   - Phase 4's recompute should use `scoreWorkouts`.
+5. **Unknown exercises never throw from a workout.**
+   - `scoreWorkout` and `muscleLoads` skip a slug that isn't in the library. Python raises a `KeyError` there.
+   - `scoreExercise`, called directly with an unknown slug, throws.
+   - A `pb_estimate` link to an exercise missing from the library ends the chain, which means calibration.
+   - `muscleLoads` ignores muscle IDs outside the 17.
+6. **Sets that can't be scored are skipped.**
+   - A set with no reps is skipped like a zero-weight set; Python would raise.
+   - A bodyweight or assisted exercise without a `bw_factor` gives no effective weight. Phase 1's constraint already rules that out in the database.
+7. **Python's truthiness is spelt out.**
+   - A missing or zero bodyweight snapshot falls back to the current bodyweight, and a missing weight counts as no added load.
+   - RPE 0 still counts as an RPE (`rpe == null` is the test).
+   - On ties, the first record wins, as Python's `max()` does. This decides whether a reference shows as manual or logged.
+8. **`firstTime` drops the reference's unused `terms` parameter.**
+9. **Two extra output fields.** `muscleState` and `sessionMap` also return `fill_dark`, and `muscleState` returns `advice`. Phase 5 lists both.
+10. **`fmtHours` rounds exact halves to even,** as Python's `round()` and `format` do: 12.5 h shows as "12 h" and 54 h as "2.2 days". JavaScript's `Math.round` and `toFixed` would round them up.
+
+### 16.4 Constants and fixed numbers
+
+11. **Every tunable number comes from `Thresholds`.** The numbers that stay in code are named at the top of `engine.ts`, with the same values the reference hard-codes:
+    - the RPE scale's 10, and the RIR clamp of 0 to 5 (the constants file states this only as text, in `e1rm.rir_from_rpe`);
+    - the fixed-set RPE pivot of 8 (in `fixed_set._doc` only);
+    - INOL's 100;
+    - 24 hours per day;
+    - the 15-minute scan step (§9).
+
+### 16.5 Ambiguities resolved
+
+- **Exact solve or the 15-minute scan (Phase 2, item 3):** I kept the scan. The fixtures were computed on the 15-minute grid. In F24, chest's exact ready time is 53.69 h against the fixture's 53.75 h, which is 0.057 off, more than the 0.01 tolerance.
+- **The plan names `_records` and `_own_pb` with Python's leading underscore.** They're ported as private functions without it.
+- **Node 22 in CI:** `tsc --erasableSyntaxOnly` finds nothing in the engine or test files, so Node can strip their types. `app.yml` runs `npm test` only on main and on pull requests, so CI hasn't run it on this branch yet.
+
+### 16.6 Tests
+
+- **`engine.test.ts`:** the fixture runner. One test per fixture, one checking that F01 to F31 are all present, and a closing summary line.
+- **`engine.edge.test.ts`:** 14 tests, covering:
+  - `fmtHours` against the reference's output;
+  - RIR clamping and the fixed-set cost clamp;
+  - the bodyweight snapshot fallback;
+  - inclusive level boundaries and the weekly guard;
+  - thresholds flowing through (`lookbackHours`; base hours 72 give chest 89.6 h);
+  - the §14 skips;
+  - purity: frozen inputs, and history carried from workout to workout.
+- **`npm test` now runs 69 tests.**
