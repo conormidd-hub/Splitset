@@ -19,10 +19,12 @@ export function runRows(index: Map<string, PbPeriods<RunPb>> | undefined, units:
   });
 }
 
-/** How a 1RM was arrived at: "tested" for a real single, otherwise the set it was estimated from ("132.5×5"). */
+/** How a 1RM was arrived at: "tested" for a single that is its own e1RM (no reps in reserve),
+ *  otherwise the set it was estimated from ("132.5×5"). */
 function oneRmNote(r: LiftPb | undefined, units: Units): string | undefined {
   if (!r?.reps || r.weight_kg == null) return undefined;
-  return r.reps === 1 ? 'tested' : `${formatLoad(r.weight_kg, units).split(' ')[0]}×${r.reps}`;
+  const tested = r.reps === 1 && r.value != null && Math.abs(r.value - r.weight_kg) < 0.05;
+  return tested ? 'tested' : `${formatLoad(r.weight_kg, units).split(' ')[0]}×${r.reps}`;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
-import { epley, useDeleteWorkout, useWorkout } from '@/api/lifting';
+import { useDeleteWorkout, useWorkout } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,6 +11,7 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
 import { longDate, shortTime } from '@/lib/dates';
+import { formatLoad } from '@/lib/pbs';
 import { formatDurationShort, formatWeight, kgToDisplay } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
@@ -56,7 +57,6 @@ export default function WorkoutHistory() {
         {w.workout_exercises.map((e) => (
           <Card key={e.id} title={e.exercise?.name ?? 'Exercise'} subtitle={e.notes ?? undefined}>
             {e.workout_sets.map((s, i) => {
-              const e1 = epley(s.weight_kg, s.reps);
               return (
                 <View key={s.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderTopWidth: i ? 1 : 0, borderTopColor: palette.hair, opacity: s.completed ? 1 : 0.5 }}>
                   <T variant="small" tone="mut" style={{ width: 32 }}>{s.set_type === 'warmup' ? 'W' : s.set_type === 'drop' ? 'D' : s.set_type === 'failure' ? 'F' : i + 1}</T>
@@ -66,9 +66,10 @@ export default function WorkoutHistory() {
                       s.reps != null ? `${s.reps} reps` : null,
                       s.seconds != null ? `${s.seconds} s` : null,
                     ].filter(Boolean).join(' × ') || '–'}
+                    {s.side ? <T variant="small" tone="mut">{`  ${s.side === 'left' ? 'L' : 'R'}`}</T> : null}
                   </T>
                   {s.rpe != null ? <T variant="small" tone="mut" style={{ width: 56, textAlign: 'right' }}>RPE {s.rpe}</T> : null}
-                  {e1 ? <T variant="small" tone="mut" style={{ width: 80, textAlign: 'right' }}>e1RM {kgToDisplay(Math.round(e1 * 10) / 10, units)}</T> : null}
+                  {s.e1rm != null ? <T variant="small" tone="mut" style={{ width: 96, textAlign: 'right' }}>e1RM {formatLoad(s.e1rm, units)}</T> : null}
                   {!s.completed ? <T variant="tiny" tone="mut" style={{ marginLeft: space.sm }}>skipped</T> : null}
                 </View>
               );

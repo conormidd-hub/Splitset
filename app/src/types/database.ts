@@ -225,6 +225,39 @@ export type Database = {
           },
         ]
       }
+      exercise_muscles: {
+        Row: {
+          exercise_id: string
+          muscle_id: string
+          role: string
+        }
+        Insert: {
+          exercise_id: string
+          muscle_id: string
+          role: string
+        }
+        Update: {
+          exercise_id?: string
+          muscle_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_muscles_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_muscles_muscle_id_fkey"
+            columns: ["muscle_id"]
+            isOneToOne: false
+            referencedRelation: "muscles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercises: {
         Row: {
           id: string
@@ -239,6 +272,14 @@ export type Database = {
           archived: boolean
           created_at: string
           updated_at: string
+          slug: string | null
+          group: string | null
+          load_mode: string | null
+          bw_factor: number | null
+          fatigue: string | null
+          load_split: Json | null
+          pb_estimate_from: string | null
+          pb_estimate_ratio: number | null
         }
         Insert: {
           id?: string
@@ -253,6 +294,14 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          slug?: string | null
+          group?: string | null
+          load_mode?: string | null
+          bw_factor?: number | null
+          fatigue?: string | null
+          load_split?: Json | null
+          pb_estimate_from?: string | null
+          pb_estimate_ratio?: number | null
         }
         Update: {
           id?: string
@@ -267,6 +316,14 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          slug?: string | null
+          group?: string | null
+          load_mode?: string | null
+          bw_factor?: number | null
+          fatigue?: string | null
+          load_split?: Json | null
+          pb_estimate_from?: string | null
+          pb_estimate_ratio?: number | null
         }
         Relationships: [
           {
@@ -275,6 +332,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercises_pb_estimate_from_fkey"
+            columns: ["pb_estimate_from"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["slug"]
           },
         ]
       }
@@ -329,6 +393,79 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      manual_pbs: {
+        Row: {
+          id: string
+          user_id: string
+          exercise_id: string
+          weight_kg: number
+          reps: number
+          e1rm: number
+          dated_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          exercise_id: string
+          weight_kg: number
+          reps: number
+          e1rm: number
+          dated_at: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          exercise_id?: string
+          weight_kg?: number
+          reps?: number
+          e1rm?: number
+          dated_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_pbs_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_pbs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      muscles: {
+        Row: {
+          id: string
+          group: string
+          name: string
+          views: string[]
+        }
+        Insert: {
+          id: string
+          group: string
+          name: string
+          views: string[]
+        }
+        Update: {
+          id?: string
+          group?: string
+          name?: string
+          views?: string[]
+        }
+        Relationships: [
         ]
       }
       plan_event_deletions: {
@@ -463,6 +600,8 @@ export type Database = {
           onboarded_at: string | null
           birth_year: number | null
           sex: string | null
+          bodyweight_kg: number | null
+          bodyweight_updated_at: string | null
         }
         Insert: {
           id: string
@@ -475,6 +614,8 @@ export type Database = {
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
+          bodyweight_kg?: number | null
+          bodyweight_updated_at?: string | null
         }
         Update: {
           id?: string
@@ -487,8 +628,69 @@ export type Database = {
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
+          bodyweight_kg?: number | null
+          bodyweight_updated_at?: string | null
         }
         Relationships: [
+        ]
+      }
+      routes: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m: number | null
+          elev_loss_m: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          polyline: string
+          distance_m: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat: number
+          start_lng: number
+          bbox: number[]
+          kind: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          polyline?: string
+          distance_m?: number
+          elev_gain_m?: number | null
+          elev_loss_m?: number | null
+          start_lat?: number
+          start_lng?: number
+          bbox?: number[]
+          kind?: string
+          provider?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       routine_exercises: {
@@ -647,65 +849,6 @@ export type Database = {
           },
         ]
       }
-      routes: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          polyline: string
-          distance_m: number
-          elev_gain_m: number | null
-          elev_loss_m: number | null
-          start_lat: number
-          start_lng: number
-          bbox: number[]
-          kind: string
-          provider: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          polyline: string
-          distance_m: number
-          elev_gain_m?: number | null
-          elev_loss_m?: number | null
-          start_lat: number
-          start_lng: number
-          bbox: number[]
-          kind: string
-          provider?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          polyline?: string
-          distance_m?: number
-          elev_gain_m?: number | null
-          elev_loss_m?: number | null
-          start_lat?: number
-          start_lng?: number
-          bbox?: number[]
-          kind?: string
-          provider?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "routes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       segment_efforts: {
         Row: {
           id: string
@@ -742,10 +885,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "segment_efforts_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "segment_efforts_activity_id_fkey"
+            columns: ["activity_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
           {
@@ -756,10 +899,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "segment_efforts_activity_id_fkey"
-            columns: ["activity_id"]
+            foreignKeyName: "segment_efforts_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "activities"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -815,17 +958,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "segments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "segments_source_activity_id_fkey"
             columns: ["source_activity_id"]
             isOneToOne: false
             referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "segments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -923,6 +1066,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sync_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_thresholds: {
+        Row: {
+          user_id: string
+          key: string
+          value: Json
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          key: string
+          value: Json
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          key?: string
+          value?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_thresholds_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -1031,6 +1203,58 @@ export type Database = {
           },
         ]
       }
+      workout_exercise_loads: {
+        Row: {
+          workout_id: string
+          user_id: string
+          exercise_id: string
+          load: number
+          pb_source: string
+          pb_detail: string | null
+          pb_value: number | null
+        }
+        Insert: {
+          workout_id: string
+          user_id: string
+          exercise_id: string
+          load: number
+          pb_source: string
+          pb_detail?: string | null
+          pb_value?: number | null
+        }
+        Update: {
+          workout_id?: string
+          user_id?: string
+          exercise_id?: string
+          load?: number
+          pb_source?: string
+          pb_detail?: string | null
+          pb_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_exercise_loads_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_exercise_loads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_exercise_loads_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_exercises: {
         Row: {
           id: string
@@ -1089,6 +1313,71 @@ export type Database = {
           },
         ]
       }
+      workout_muscle_loads: {
+        Row: {
+          id: number
+          user_id: string
+          workout_id: string | null
+          activity_id: string | null
+          source: string
+          muscle_id: string
+          load: number
+          recovery_hours: number
+          finished_at: string
+        }
+        Insert: {
+          id?: never
+          user_id: string
+          workout_id?: string | null
+          activity_id?: string | null
+          source: string
+          muscle_id: string
+          load: number
+          recovery_hours: number
+          finished_at: string
+        }
+        Update: {
+          id?: never
+          user_id?: string
+          workout_id?: string | null
+          activity_id?: string | null
+          source?: string
+          muscle_id?: string
+          load?: number
+          recovery_hours?: number
+          finished_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_muscle_loads_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_muscle_id_fkey"
+            columns: ["muscle_id"]
+            isOneToOne: false
+            referencedRelation: "muscles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_muscle_loads_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_sets: {
         Row: {
           id: string
@@ -1107,6 +1396,8 @@ export type Database = {
           completed_at: string | null
           notes: string | null
           updated_at: string
+          side: string | null
+          e1rm: number | null
         }
         Insert: {
           id?: string
@@ -1125,6 +1416,8 @@ export type Database = {
           completed_at?: string | null
           notes?: string | null
           updated_at?: string
+          side?: string | null
+          e1rm?: number | null
         }
         Update: {
           id?: string
@@ -1143,6 +1436,8 @@ export type Database = {
           completed_at?: string | null
           notes?: string | null
           updated_at?: string
+          side?: string | null
+          e1rm?: number | null
         }
         Relationships: [
           {
@@ -1274,6 +1569,23 @@ export type Database = {
         }
         Relationships: []
       }
+      pb_history: {
+        Row: {
+          user_id: string | null
+          exercise_id: string | null
+          e1rm: number | null
+          at: string | null
+          source: string | null
+          weight_kg: number | null
+          reps: number | null
+          rpe: number | null
+          set_type: string | null
+          workout_id: string | null
+          set_id: string | null
+          manual_pb_id: string | null
+        }
+        Relationships: []
+      }
       run_pbs: {
         Row: {
           user_id: string | null
@@ -1325,6 +1637,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      finish_workout: {
+        Args: {
+          p_workout_id: string
+          p_finished_at: string
+          p_loads: Json
+        }
+        Returns: undefined
+      }
       intervals_basic_auth: {
         Args: {
           p_api_key: string
@@ -1337,11 +1657,24 @@ export type Database = {
         }
         Returns: Json
       }
+      recovery_loads: {
+        Args: {
+          p_from: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       request_sync: {
         Args: {
           p_kind?: string
         }
         Returns: Json
+      }
+      save_workout_loads: {
+        Args: {
+          p_loads: Json
+        }
+        Returns: number
       }
       sync_request_status: {
         Args: {

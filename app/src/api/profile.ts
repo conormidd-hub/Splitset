@@ -8,7 +8,10 @@ import type { Tables, TablesUpdate } from '@/types/database';
 
 export type Profile = Tables<'profiles'>;
 /** The columns a signed-in user may change (profiles grants update on exactly these). */
-export type ProfilePatch = Pick<TablesUpdate<'profiles'>, 'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout'>;
+export type ProfilePatch = Pick<
+  TablesUpdate<'profiles'>,
+  'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout' | 'bodyweight_kg' | 'bodyweight_updated_at'
+>;
 
 export function useProfile() {
   const uid = useUserId();

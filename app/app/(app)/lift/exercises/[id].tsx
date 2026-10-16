@@ -1,9 +1,10 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
-import { epley, useExerciseHistory, useExercises, useRecords } from '@/api/lifting';
+import { useExerciseHistory, useExercises, useRecords } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { LineChart } from '@/components/charts/LineChart';
+import { StrengthReference } from '@/components/pbs/StrengthReference';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
@@ -36,10 +37,12 @@ export default function ExerciseDetail() {
           </View>
         ) : null}
 
+        {exercise ? <StrengthReference exercise={exercise} /> : null}
+
         <Card title="Records" subtitle={record?.last_completed_at ? `last done ${relativeDay(record.last_completed_at).toLowerCase()}` : 'no completed sets yet'}>
           <Grid>
             <StatTile label="Best weight" value={record?.best_weight_kg != null ? formatWeight(record.best_weight_kg, units, 1) : '–'} />
-            <StatTile label="Est. 1RM" value={record?.best_e1rm_kg != null ? formatWeight(record.best_e1rm_kg, units, 0) : '–'} sub="Epley, ≤12 reps" />
+            <StatTile label="Est. 1RM" value={record?.best_e1rm_kg != null ? formatWeight(record.best_e1rm_kg, units, 0) : '–'} sub="best set, RPE counted" />
             <StatTile label="Best set" value={record?.best_set_volume_kg != null ? formatWeight(record.best_set_volume_kg, units, 0) : '–'} sub="weight × reps" />
             <StatTile label="Most reps" value={record?.best_reps != null ? `${record.best_reps}` : '–'} />
             <StatTile label="Sets logged" value={`${record?.completed_sets ?? 0}`} />
@@ -53,7 +56,7 @@ export default function ExerciseDetail() {
               series={[
                 { name: 'best set', color: palette.accent, points: [...history.data].reverse().map((h) => ({ x: Date.parse(h.startedAt), y: h.bestWeight == null ? null : kgToDisplay(h.bestWeight, units) })) },
                 { name: 'est. 1RM', color: palette.ink2, dashed: true, points: [...history.data].reverse().map((h) => {
-                  const best = Math.max(...h.sets.map((s) => epley(s.weight_kg, s.reps) ?? 0));
+                  const best = Math.max(0, ...h.sets.filter((s) => s.set_type !== 'warmup').map((s) => s.e1rm ?? 0));
                   return { x: Date.parse(h.startedAt), y: best > 0 ? kgToDisplay(Math.round(best * 10) / 10, units) : null };
                 }) },
               ]}

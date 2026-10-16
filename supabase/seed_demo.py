@@ -46,6 +46,9 @@ from splitset_sync.config import env  # noqa: E402
 from splitset_sync.normalise import ACTIVITY_COLUMNS  # noqa: E402
 from splitset_sync.streams import derive_details  # noqa: E402
 from splitset_sync.wellness import WELLNESS_COLUMNS  # noqa: E402
+from seed_library import LEGACY_NAMES  # noqa: E402  (this folder is on sys.path)
+from backfill_e1rm import backfill  # noqa: E402
+from rescore_workouts import rescore  # noqa: E402
 
 # ---------------------------------------------------------------- the athlete
 
@@ -610,8 +613,14 @@ def main() -> None:
 
     # ---- the shared exercise library must be in place
     with db.connect(db_url) as conn:
-        exercise_ids = {r["name"]: r["id"] for r in conn.execute(
-            "select id, name from public.exercises where owner_id is null").fetchall()}
+        rows = conn.execute("select id, name, slug from public.exercises where owner_id is null").fetchall()
+    exercise_ids = {r["name"]: r["id"] for r in rows}
+    # seed_library.py renames matched rows to the library's names ("Bench press" becomes
+    # "Bench press (barbell)"); GYM keeps the old names, which still resolve through the slug
+    by_slug = {r["slug"]: r["id"] for r in rows if r["slug"]}
+    for name, slug in LEGACY_NAMES.items():
+        if name not in exercise_ids and slug in by_slug:
+            exercise_ids[name] = by_slug[slug]
     missing = {x[0] for ex in GYM.values() for x in ex} - set(exercise_ids)
     if missing:
         raise SystemExit(f"exercise library is missing {sorted(missing)}; apply the migrations first")
@@ -782,6 +791,8 @@ def main() -> None:
         insert_rows(conn, "workout_exercises", wexercises)
         insert_rows(conn, "workout_sets", wsets)
         insert_rows(conn, "plan_sessions", plans)
+        e1rms = backfill(conn, DEMO_ID)   # every set's e1RM, from the app's engine (build phase 3)
+        loads = rescore(conn, DEMO_ID)     # every workout's cached muscle loads (build phase 4)
         conn.commit()
 
     runs = sum(1 for r in act_rows if r["type"] == "Run")
@@ -791,6 +802,8 @@ def main() -> None:
           f"to {act_rows[-1]['start_time_local'].date()}")
     print(f"  wellness {n_well} days, {len(wsets)} sets in {len(workouts)} workouts, {len(routines)} routines, "
           f"{len(plans)} plan sessions ({plan_from} to {plan_to}), {len(sync_runs)} sync runs")
+    print(f"  e1RMs on {e1rms.sets} sets, bodyweight on {e1rms.workouts} more workouts, "
+          f"muscle loads cached for {loads.workouts} workouts")
 
 
 if __name__ == "__main__":

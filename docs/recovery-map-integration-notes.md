@@ -395,3 +395,407 @@ select count(*) filter (where rpe is not null) as with_rpe,
        count(*) as total
   from workout_sets where completed;
 ```
+
+---
+
+## 15. Phase 1: decisions made
+
+Phase 1 output · 2026-10-16. Muscles, the library and the constants loader.
+
+### 15.1 Decisions from §12, now settled
+
+| # | Settled as |
+|---|---|
+| D1 | `node --test`. `cd app && npm test` runs `src/**/*.test.ts`, and `app.yml` runs it too. TypeScript 6 no longer loads `@types` packages on its own, so each test file starts with `/// <reference types="node" />`. `@types/node` is now an explicit dev dependency, the version Expo already brought in |
+| D2 | The new `db-tests` workflow starts a throwaway local Supabase database on the runner (`supabase db start`, which applies every migration). The tests then seed it. It runs on push to any branch. The database tests skip unless `SPLITSET_TEST_DB_URL` points at a local host, and they never read `SUPABASE_DB_URL` |
+| D3 | Matched global rows take the library name. `seed_demo.py` still looks exercises up by its old names, and resolves them through `LEGACY_NAMES` → slug |
+| D7 | The §4.3 picks as recommended. Single-leg calf raise stays unscored. Result: 57 rows matched, 104 inserted, 19 left unscored. Global `exercises` rows: 76 + 104 = 180, of which 161 have a slug |
+| Seeding | By hand once, after the Phase 1 migration is pushed. `migrate.yml` then runs `seed_library.py` after every `db push` on main, and also when only the loader or `data/exercise_library.json` changes |
+
+### 15.2 Schema
+
+1. **`exercises` gets eight columns:** `slug`, `"group"`, `load_mode`, `bw_factor`, `fatigue`, `load_split`, `pb_estimate_from` and `pb_estimate_ratio`. The rest of the plan's list maps onto existing columns (§3): `log_as` → `measure`, `note` → `instructions`, `unilateral` → `is_unilateral`, `is_custom` → `owner_id is not null`, `owner_user_id` → `owner_id`.
+2. **The column is called `group`, as in the spec.** That's a reserved word, so SQL quotes it (`"group"`). supabase-js and PostgREST handle it unquoted.
+3. **`pb_estimate_from` holds the slug, not the uuid,** because the engine works in slugs.
+   - It's a foreign key to `exercises.slug`, deferrable, so the loader can write in file order.
+   - It's set to null if the target is deleted. The ratio may then linger, and is ignored.
+   - `slug` is a plain `unique` column; nulls don't clash.
+4. **`bw_factor` and `pb_estimate_ratio` are `double precision`, not `real`,** so a ratio of 0.38 reads back as 0.38.
+5. **Not enforced in SQL:**
+   - role caps;
+   - at least one primary;
+   - library chains of 3 hops or fewer.
+
+   The first two would hard-code numbers from `role_caps`. `validate()` in the loader enforces all three, and the Phase 8 create flow must too. The chain limit is derived as `pb.estimate_max_hops − 1`, so a custom exercise's extra hop always resolves (F30). It's not a new constant.
+6. **The constraints SQL does enforce:**
+   - `bw_factor` is set exactly when `load_mode` is `bodyweight` or `assisted`;
+   - a row with a slug has `load_mode` and `fatigue`;
+   - `load_split` is a JSON object;
+   - a user's own row can only carry a slug starting with `custom_`, so nobody can claim a library slug before the seed does.
+7. **`exercise_muscles`:**
+   - no `updated_at` and no `lww_guard`, because an exercise's rows are always replaced as a set;
+   - users can read rows for global exercises and their own, and can write rows only for their own exercises (ready for Phase 8);
+   - an index on `(muscle_id, role)` serves "train next".
+8. **`user_thresholds` is created now,** because the loader reads it:
+   - `value jsonb`, with the key's format checked;
+   - owner-only, with `lww_guard`;
+   - primary key `(user_id, key)`.
+
+### 15.3 Seed loader (`supabase/seed_library.py`)
+
+9. **Who owns which columns on a matched row.** The library owns:
+   - `name`, `slug`, `group`, `equipment`, `is_unilateral`;
+   - the library columns;
+   - `instructions`, taken from `note`; an empty note becomes null.
+
+   The row keeps its own `measure`, `is_bodyweight` and `muscle_group`, so existing logs and PB views read the same (§4.6). For example, Farmer's carry stays `weight_duration`.
+10. **New rows:**
+    - `measure` and `is_bodyweight` follow §4.6. A `fixed` exercise counts as bodyweight when its equipment is bodyweight.
+    - `muscle_group` comes from the first primary muscle, in the older vocabulary.
+    - Forearms and adductors have no match there, so they get null.
+    - The Full body group gets `full_body`.
+11. **What runs twice changes nothing.**
+    - Rows are written only when a value differs, and `updated_at` moves only then.
+    - An exercise's `exercise_muscles` rows are replaced only when its set differs from the library's.
+    - So a second run reports 0 changes, and the snapshots match, `updated_at` included.
+    - Renames run before inserts.
+12. **Matching:** by slug first, then by the explicit `LEGACY_NAMES` map (§4.1 to §4.3). There's no fuzzy match. A global row the map doesn't know about, but which has a library name, makes the insert fail on the unique-name index rather than being guessed at.
+13. **`--dry-run`** does everything, checks the deferred foreign key, prints the counts and rolls back.
+
+### 15.4 Constants loader (`app/src/lib/recovery/`)
+
+14. **`library.ts`** holds identifiers only: `MUSCLE_IDS` (§2 order), `EXERCISE_GROUPS` and `ROLES`. Tests check them against the library JSON.
+15. **`thresholds.ts`:** the `Thresholds` type mirrors the JSON.
+    - `parseConstants` drops `_doc` and deep-freezes the result.
+    - Dotted keys can index arrays, so `levels.3.min` works.
+    - **What an override may do:**
+      - replace an existing leaf with a value of the same type;
+      - add `base_recovery_hours.<muscle>` for any of the 17 muscles.
+
+      Whole sections, `__proto__`-style keys and non-finite numbers are rejected. `pb.manual_policy` must be `max` or `replace_on_log`.
+    - **`thresholdsFor`** ignores other users' rows and silently skips invalid ones, so a stale key can't break the map. With nothing to apply, it returns the frozen defaults object itself.
+    - **`withOverride` and `isValidOverride`** are for Phase 9's settings writer. `withOverride` throws on an invalid override.
+16. **`constants.ts` is the only file that imports `data/recovery_constants.json`.** `app/metro.config.js` adds `../data` to `watchFolders`. I checked this: without it, Metro fails with "Unable to resolve module", despite SDK 56's on-demand filesystem.
+    - Metro also resolves the `.ts`-extension imports Node needs.
+    - A Vercel build needs files outside the root directory available, which is Vercel's default.
+17. **`useThresholds()`** in `app/src/api/recovery.ts`, query key `['thresholds', uid]`. It returns the defaults while loading or on error.
+
+### 15.5 Picker
+
+18. **One `filterExercises` for both screens.**
+    - Search matches name, slug, group and `muscle_group`, so "rdl" finds both RDLs.
+    - The chips are All plus the 7 groups.
+    - Rows without a group (the 19 unscored ones and custom exercises) appear only under All.
+    - The subtitle shows `group` when `muscle_group` is null.
+
+### 15.6 Ambiguities resolved
+
+- **Phase 1 lists `log_as`, `note`, `is_custom` and `owner_user_id` as columns to add.** They already exist under other names, so I mapped them (item 1).
+- **"161 exercises":** that's 161 global rows with a slug. The table also keeps 19 unscored legacy rows, so it holds 180 global rows.
+- **"Library chains are ≤ 3 hops":** checked on the library, which leaves one hop for a custom exercise (item 5).
+- **"Per-user overrides":** the plan names keys like `base_recovery_hours.default`, but Phase 9 also sets base hours per muscle. So `base_recovery_hours.<muscle>` is the one kind of key an override may add (item 15).
+
+---
+
+## 16. Phase 2: decisions made
+
+Phase 2 output · 2026-10-16. The engine: `app/src/lib/recovery/engine.ts` and `types.ts`.
+
+### 16.1 Result
+
+- **Fixtures:** all 31 pass in `npm test`. The runner compares 198 values, the same 198 that `scripts/verify_spec_fixtures.py` compares, and fails any fixture that compares nothing.
+- **Cross-check against the reference (one-off, not committed):**
+  - 400 random timelines (1,851 workouts), scored by both `scripts/load_model.py` and the engine;
+  - covering both manual-PB policies, lapsed and estimated PBs, calibration, bodyweight snapshots (including 0), RPE 0 and 11, warm-ups, per-side sets and repeated blocks;
+  - 558,312 values compared, with 0 mismatches. The largest difference is 8.9 × 10⁻¹⁶.
+
+### 16.2 Shape of the port
+
+1. **Same functions, same order, camelCase names.** For example, `score_exercise` → `scoreExercise` and `hours_until_below` → `hoursUntilBelow`.
+   - `_records` and `_own_pb` stay private, as `records` and `ownPb`.
+   - `level_info`, which `muscle_state` uses but the plan's list leaves out, is `levelInfo`.
+2. **The reference's globals become arguments.** `C` and `EX` become a `Model` (`{ c: Thresholds, lib: Library }`), passed as the first argument.
+   - A fixture's `extra_exercises` and `constants_override` build a `Model` for that case only, through `buildLibrary` and Phase 1's `withOverride`. Nothing global changes.
+   - The `Library` is a `Map` keyed by slug.
+3. **Field names follow the reference and the library JSON.**
+   - Exercises use `load_mode`, `bw_factor` and `pb_estimate`.
+   - Sets use `w`, `r`, `rpe`, `warmup`, `seconds`, `side` and `bodyweight`.
+   - Results keep the spec's symbols (`L_e`, `L_m`, `R`, `F`, `W`), plus the snake_case names Phase 5 returns (`ready_in_h`, `trainable_in_h`, `pb_source`).
+   - **For Phase 3:** the repository maps `workout_sets` rows onto `LiftSet`: `weight_kg` → `w`, `reps` → `r`, `set_type = 'warmup'` → `warmup`, and the workout's bodyweight → `bodyweight`.
+
+### 16.3 Where the port deliberately differs from the reference
+
+4. **`scoreWorkout` doesn't touch the history it's given.** It returns the workout's PB records, dated at its end, in `records`.
+   - `scoreWorkouts(m, workouts, history)` scores workouts in the order given and carries each one's records into the next, as the reference's shared list does.
+   - Callers pass workouts in the order they happened.
+   - Phase 4's recompute should use `scoreWorkouts`.
+5. **Unknown exercises never throw from a workout.**
+   - `scoreWorkout` and `muscleLoads` skip a slug that isn't in the library. Python raises a `KeyError` there.
+   - `scoreExercise`, called directly with an unknown slug, throws.
+   - A `pb_estimate` link to an exercise missing from the library ends the chain, which means calibration.
+   - `muscleLoads` ignores muscle IDs outside the 17.
+6. **Sets that can't be scored are skipped.**
+   - A set with no reps is skipped like a zero-weight set; Python would raise.
+   - A bodyweight or assisted exercise without a `bw_factor` gives no effective weight. Phase 1's constraint already rules that out in the database.
+7. **Python's truthiness is spelt out.**
+   - A missing or zero bodyweight snapshot falls back to the current bodyweight, and a missing weight counts as no added load.
+   - RPE 0 still counts as an RPE (`rpe == null` is the test).
+   - On ties, the first record wins, as Python's `max()` does. This decides whether a reference shows as manual or logged.
+8. **`firstTime` drops the reference's unused `terms` parameter.**
+9. **Two extra output fields.** `muscleState` and `sessionMap` also return `fill_dark`, and `muscleState` returns `advice`. Phase 5 lists both.
+10. **`fmtHours` rounds exact halves to even,** as Python's `round()` and `format` do: 12.5 h shows as "12 h" and 54 h as "2.2 days". JavaScript's `Math.round` and `toFixed` would round them up.
+
+### 16.4 Constants and fixed numbers
+
+11. **Every tunable number comes from `Thresholds`.** The numbers that stay in code are named at the top of `engine.ts`, with the same values the reference hard-codes:
+    - the RPE scale's 10, and the RIR clamp of 0 to 5 (the constants file states this only as text, in `e1rm.rir_from_rpe`);
+    - the fixed-set RPE pivot of 8 (in `fixed_set._doc` only);
+    - INOL's 100;
+    - 24 hours per day;
+    - the 15-minute scan step (§9).
+
+### 16.5 Ambiguities resolved
+
+- **Exact solve or the 15-minute scan (Phase 2, item 3):** I kept the scan. The fixtures were computed on the 15-minute grid. In F24, chest's exact ready time is 53.69 h against the fixture's 53.75 h, which is 0.057 off, more than the 0.01 tolerance.
+- **The plan names `_records` and `_own_pb` with Python's leading underscore.** They're ported as private functions without it.
+- **Node 22 in CI:** `tsc --erasableSyntaxOnly` finds nothing in the engine or test files, so Node can strip their types. `app.yml` runs `npm test` only on main and on pull requests, so CI hasn't run it on this branch yet.
+
+### 16.6 Tests
+
+- **`engine.test.ts`:** the fixture runner. One test per fixture, one checking that F01 to F31 are all present, and a closing summary line.
+- **`engine.edge.test.ts`:** 14 tests, covering:
+  - `fmtHours` against the reference's output;
+  - RIR clamping and the fixed-set cost clamp;
+  - the bodyweight snapshot fallback;
+  - inclusive level boundaries and the weekly guard;
+  - thresholds flowing through (`lookbackHours`; base hours 72 give chest 89.6 h);
+  - the §14 skips;
+  - purity: frozen inputs, and history carried from workout to workout.
+- **`npm test` now runs 69 tests.**
+
+---
+
+## 17. Phase 3: decisions made
+
+Phase 3 output · 2026-10-16. Set fields, the stored e1RM, manual PBs, and the PB section of the exercise screen.
+
+### 17.1 Decisions from §12, now settled
+
+| # | Settled as |
+|---|---|
+| D4 | **One e1RM everywhere.** `lift_pbs` (1RM) and `exercise_records` (`best_e1rm_kg`) read `workout_sets.e1rm`, and both still leave warm-ups out. The logger's "new PB 🏆", the Progress chart and the finished-workout screen read it too. `epley()` is gone. Side effects: sets logged with RPE read higher, 13–20-rep sets count, and a bodyweight lift's 1RM includes bodyweight. A single shows as "tested" only when it is its own e1RM, i.e. no reps in reserve |
+| D5 | **Bodyweight snapshot per workout.** `workouts.bodyweight_kg` is filled when a workout starts, or by the workout screen as soon as the bodyweight has loaded. The engine reads it for every set. There's no `workout_sets.bodyweight_kg` |
+| UI | **RPE** is a per-exercise switch in the logger, on automatically if a set already has an RPE. **The PB section** sits on the exercise detail screen, above Records |
+
+### 17.2 Schema (`20261016000200_recovery_sets_pbs.sql`)
+
+1. **`workout_sets`:**
+   - gains `side` (left/right) and `e1rm` (double precision, > 0);
+   - `rpe` is checked to 6–10 in half steps;
+   - warm-ups stay `set_type = 'warmup'`, so there's no `is_warmup` column (notes §3).
+2. **`profiles`:** gains `bodyweight_kg` (20–400) and `bodyweight_updated_at`, with update grants.
+3. **`manual_pbs`:**
+   - columns `weight_kg`, `reps`, `e1rm`, `dated_at` (a `date`), plus `created_at` and `updated_at`;
+   - owner-only, with `lww_guard`;
+   - a user can only add one for an exercise they can see, because the RLS check re-reads `exercises` under their own rules.
+4. **`pb_history` view:**
+   - every completed set of a finished workout that has an e1RM, warm-ups included, dated at `finished_at`;
+   - plus every manual PB, dated at the start of `dated_at` in `profiles.timezone`, worked out in SQL (notes §7);
+   - the app pages through it 1,000 rows at a time, PostgREST's cap.
+5. **No maths in SQL.** The views read the stored e1RM. The migration changes no existing data.
+
+### 17.3 Computing the e1RM: one path, through the engine
+
+6. **`src/lib/recovery/sets.ts`:**
+   - `setE1rm` chains the engine's `effectiveWeight`, `rirFromRpe` and `e1rm`, with `rir_default` when there's no RPE. That's the rule `scoreExercise` uses for the records it creates, and a test checks the two agree.
+   - `exerciseDef` turns an `exercises` row into the engine's library entry.
+   - `currentBodyweight` picks the newer of the profile entry and the latest weigh-in. A profile entry made on a weigh-in's day wins. With neither, it uses `bodyweight_default_kg`.
+7. **Exercises outside the library** that are logged as weight × reps count as plain weight mode, keyed by id. So custom and legacy lifts keep a 1RM in the trophy cabinet (D4). Holds, carries and cardio get no e1RM.
+8. **`src/lib/lifting/setRow.ts`** builds the `workout_sets` row. It's moved out of the store so Node can build the identical row.
+   - The store keeps each exercise's library facts on its block: slug, load mode, bodyweight factor, one-sided, bodyweight.
+   - The store holds the user's thresholds, which the workout screen sets.
+   - A block saved before Phase 3 has only its measure, so it gets weight mode.
+9. **When the bodyweight snapshot arrives late,** sets of bodyweight and assisted exercises are saved again, so their e1RMs follow it.
+10. **`app/scripts/recovery-cli.ts`** gives Python the same code: JSON in, JSON out. The backfill and the database tests use it. No engine maths was ported to Python.
+
+### 17.4 Logging
+
+11. **RPE:** the cell opens a picker of 6 · 6.5 … 10, or none. The column narrows the row, and "previous" truncates to make room.
+12. **Sides:** one-sided exercises get "Each side".
+    - Turning it on gives open sets without a side alternating L/R, and new sets alternate too.
+    - Turning it off clears the sides, so one set covers both again.
+    - The L/R chip on a set toggles it.
+13. **e1RM display:** a ticked set shows "e1RM …", and the finished-workout screen shows the stored value and the side.
+14. **"New PB 🏆"** compares the session's best e1RM with the all-time best: the `lift_pbs` 1RM or your best manual entry, whichever is higher. Manual PBs stay out of the trophy cabinet, whose rows link to logged sets.
+
+### 17.5 PB section (exercise detail screen)
+
+15. **What it shows:**
+    - the reference a session starting now would use, from `pbBefore`;
+    - its source: Logged, Manual, Lapsed, "Estimated from <exercise>" or Calibrating. The window and lapse in the label come from the thresholds;
+    - the best in the last `pb.window_days` (both sources);
+    - the all-time best.
+
+    Fixed-cost exercises say they need no reference.
+16. **Which history it loads:** only the exercise and the exercises its estimate chain can reach.
+17. **PB history list:** each workout's best set plus each manual entry, newest first, with logged/manual badges. A logged row opens its workout; a manual row offers to delete it.
+18. **"Add a known best":**
+    - weight × reps, dated today unless a past date (YYYY-MM-DD) is typed;
+    - for bodyweight and assisted exercises, the weight is the added load or the assistance, and today's bodyweight counts;
+    - the e1RM is computed in the app by the same `setE1rm`.
+
+### 17.6 Backfill (`supabase/backfill_e1rm.py`)
+
+19. **It only ever fills nulls:**
+    - `workouts.bodyweight_kg` on workouts with a bodyweight or assisted set, using the current bodyweight, once;
+    - `workout_sets.e1rm` wherever the engine gives one.
+20. **It leaves everything else alone:** weights, reps, RPE, set types and `updated_at` are untouched. A second run changes nothing, and `--dry-run` rolls back.
+21. **The demo seed calls it too,** so a rebuilt demo has e1RMs. `seed_demo.py` now needs Node.
+
+### 17.7 Ambiguities resolved
+
+- **"`sets`: add `rpe`, `seconds`, `is_warmup`, `bodyweight_kg`":** `rpe` and `seconds` already existed (`rpe` gained the check), `is_warmup` is `set_type`, and the bodyweight snapshot is per workout (D5).
+- **`manual_pbs.weight` and `dated_at`:** the column is `weight_kg`, as elsewhere in the repo, and `dated_at` is a `date`.
+- **"Backfill every historical set in a migration":** SQL can't run the engine, and porting the e1RM to SQL would rewrite the maths. So the migration only adds the column, and `backfill_e1rm.py` fills it using the engine.
+- **"The real logging path" in the database tests:** the store needs React Native storage. So the tests build rows with the store's own row builder through the CLI, and insert them as the signed-in user under RLS.
+- **The e1RM of a 0-rep set** is its weight, as in the engine. A set with no reps gets none.
+
+### 17.8 Tests
+
+- **`npm test`: 94 tests.** The new ones are `sets.test.ts`, `setRow.test.ts` and `pbHistory.test.ts`. They cover:
+  - F02 storing 126.5 and 125.0;
+  - RPE (F04), the 20-rep cap (F03) and the bodyweight snapshot (F31);
+  - agreement with the engine's own records;
+  - the saved row;
+  - the reference cases F14, F17 and F18.
+- **`db-tests` (CI): 21 database tests,** now with Node on the runner. They cover:
+  - F02 sets saved through the app's row builder as the signed-in user;
+  - `pb_history`, `lift_pbs` and `exercise_records` reading the stored e1RM;
+  - F18 dated at local midnight in Melbourne;
+  - F14 and F17;
+  - the backfill, including that a second run changes nothing;
+  - the access rules, and the RPE and side checks.
+- **Failures show on the PR.** `supabase/tests/conftest.py` turns failing tests, test files that won't load, and a one-line summary into GitHub annotations, because job logs need sign-in to read. That's how the backfill's mixed int/float bug (JSON returns 105 as an integer) was found and fixed before it reached the real database.
+
+### 17.9 On splitset-dev (2026-10-16)
+
+- **Migration:** `20261016000200_recovery_sets_pbs` was pushed by Conor.
+- **Backfill:**
+  - 1,680 of the demo's 1,836 sets got an e1RM; the other 156 are holds, carries or sets with no weight;
+  - no workout needed a bodyweight;
+  - a second run finds nothing.
+- **Regenerated types** matched the hand-written ones exactly.
+- **Checked in the web preview as the demo user:**
+  - the logger stores 115 × 3 as 126.5, and 134.2 at RPE 8;
+  - "new PB" fires;
+  - per-side sets store `left` and `right`;
+  - the workout's bodyweight snapshot is 72.8 kg, from the latest weigh-in;
+  - the PB section shows Logged, Manual, "Estimated from Bench press (barbell)" (86.4 kg from a 120 kg known best), Calibrating, and "needs no reference" for a plank;
+  - adding and deleting a known best works.
+
+  The test workout and known best were deleted afterwards.
+
+---
+
+## 18. Phase 4: decisions made
+
+Phase 4 output · 2026-10-16. The per-workout cache, the recompute rule, live scoring, the rescore backfill and the F26 seed.
+
+### 18.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| D6 | **Finish and the cache write are one transaction.** `finish_workout()` (security invoker) sets `finished_at` and replaces the workout's cache rows. `save_workout_loads()` does the replacing on its own, for recompute |
+| F26 seed | **For the demo athlete only**, the same guard as `seed_demo.py`. F26's PBs come from a "PBs (fixture F26)" workout of singles 168 h before Monday, so `pb_history` holds them exactly as the fixture does: logged, at −168 h. It was run once on splitset-dev |
+| Library changes | `migrate.yml` runs `rescore_workouts.py` after `seed_library.py`, since a change to an exercise's muscles or fatigue class changes every cached workout that used it (§14). The job now sets up Node |
+| Existing workouts | Dummy data. They were rescored, then replaced by the F26 week without asking, as Conor said |
+
+### 18.2 Schema (`20261016000300_recovery_loads.sql`)
+
+1. **`workout_muscle_loads`:**
+   - one row per muscle a workout loaded (L > 0), so no row means 0;
+   - columns: `load` (L), `recovery_hours` (R), `finished_at` (t_w), `source` (lift or activity);
+   - a row belongs to a workout or an activity, never both, enforced by a check. This is ready for Phase 10, since activities have text ids (§3);
+   - a unique index per (workout, muscle), and per (activity, muscle);
+   - an index on (user, `finished_at`) for Phase 5's reads.
+2. **`workout_exercise_loads`:**
+   - one row per (workout, exercise): `load` (L_e, both blocks of an exercise summed, F28), `pb_source`, `pb_detail`;
+   - plus **`pb_value`**, the reference e1RM the session started from. The plan doesn't list it, but Phase 5's contribution list and Phase 6's tap detail need it, and it costs nothing to store.
+3. **Access:** both tables are owner-only, with select, insert and delete; there are no updates, because rows are replaced as a set.
+4. **Function checks:**
+   - both functions raise an error for a workout the caller can't see (RLS hides it), and `save_workout_loads` also for an unfinished one;
+   - `finish_workout` only moves `updated_at` forward (`greatest(updated_at, now())`), so a device whose clock ran ahead can't make the last-write-wins guard drop the finish.
+
+### 18.3 Scoring: one path, through the engine
+
+5. **The PB history is `pb_history`:** stored set e1RMs (Phase 3) plus manual PBs.
+   - A workout is scored with `scoreWorkout` against the records dated before it started, which is what the reference gets by appending records as it goes. So the "rebuild PB history as it goes" of §14 is the stored history itself, and a workout's rows don't depend on which other workouts are rescored with it.
+   - Workouts are still processed in time order.
+6. **`src/lib/recovery/workoutLoads.ts` (pure):**
+   - **Rows to the engine:** `libraryFromRows` builds the library, now with muscles by role. `engineWorkout` turns a stored workout into its blocks in order, with ticked sets only and the workout's bodyweight on each set.
+   - **Engine to cache:** `scoreFinishedWorkouts` scores, and `cacheRows` shapes the rows.
+   - **Live workouts:** `scoreLiveWorkout` scores the logger's in-progress workout with t_w = now.
+   - **Reading the cache:** `recoveryMapFromLoads` is the recovery map over cache rows, one term per row (§8). Phase 5 builds on it.
+7. **The CLI gains `score-workouts` and `recovery-map`.** `rescore_workouts.py`, `seed_f26.py` and the database tests score through them, so Python never computes a load.
+
+### 18.4 In the app
+
+8. **Finish:**
+   - The save queue gets a `finish` step after the workout's last upserts. It fetches what scoring needs, scores the workout with t_w = its finish time, and calls `finish_workout`.
+   - Offline, the step stays queued and the sheet stays open, as before. A step persisted from an older app version replays the same way.
+   - If a finished workout started after this one, the recompute rule runs from here.
+9. **The recompute rule (§14), in the background (`recomputeFrom`, `useRecomputeStatus`):**
+   - **Deleting a finished workout:** rescore from its start.
+   - **Adding or deleting a manual PB:** rescore from the day before its date, which safely covers the start of that date in any time zone.
+   - **Changing an exercise's muscles or fatigue:** today that only happens through the library, so `migrate.yml` handles it. Phase 8's custom exercises will call `recomputeFrom` themselves.
+   - **Changing a threshold:** Phase 9.
+   - **"Updating…":** `useRecomputeStatus` reports `running` for Phase 6's figure, and the last error if one failed.
+10. **`useLiveSession()`:** the workout in progress, scored from its ticked sets against the full PB history, with its session map. Nothing is cached until Finish. Phase 7 draws it.
+11. **Reading in pages:** exercises, `exercise_muscles` and `pb_history` 1,000 rows at a time, and workouts with their blocks and sets 100 at a time.
+
+### 18.5 Scripts
+
+12. **`supabase/rescore_workouts.py`** (`--dry-run`, `--user`, `--from`):
+    - it's the one-off backfill and the recompute rule outside the app;
+    - it reports how many workouts' rows actually changed, so a second run says 0;
+    - `seed_demo.py` calls it too, so a rebuilt demo has its cache.
+13. **`supabase/seed_f26.py`** (`--now`):
+    - **Clears:** the demo's workouts (their sets, cache rows and plan links go with them) and its manual PBs.
+    - **Loads:** the PBs workout, then Push, Pull and Legs at F26's hours, with t0 = now − 68 h. They end 50, 26 and 2 hours before now, so their weekday names follow the real calendar, not the fixture's.
+    - **Reports:** each muscle's level and F at now against F26, and it notes any threshold overrides (F26 assumes the defaults).
+    - It reads the fixture straight from `data/load_model_fixtures.json`.
+
+### 18.6 Tests
+
+- **`npm test`: 100 tests.** The new `workoutLoads.test.ts` covers:
+  - F20's cache rows (L, R, L_e, and the pre-session reference, lateral raise 13);
+  - F28 as one bench row of 0.6181;
+  - time order;
+  - Monday's bench edit rescoring Tuesday's curls (the reference is bench × 0.85 × 0.45 × 0.9, and biceps load drops);
+  - the live score;
+  - F26's levels and F read back from cache rows.
+- **`db-tests` (CI): 48 tests, 9 of them new:**
+  - finishing F20 through `finish_workout` as the user;
+  - F28;
+  - the Monday edit with the rescore;
+  - a second rescore changing nothing;
+  - access to the cache and the functions;
+  - the workout-or-activity check;
+  - unfinished workouts refused;
+  - the F26 seed reproducing the fixture and replacing rather than adding on a second run.
+
+### 18.7 On splitset-dev (2026-10-16)
+
+- **Migration:** `20261016000300_recovery_loads` was pushed from a Terminal tab.
+- **Rescore backfill:** all 101 finished demo workouts in about 5 s, giving 1,010 muscle rows and 530 exercise rows. A second run changed 0.
+- **The F26 seed:** run once. All 17 muscles matched F26's levels, and hamstrings 2.56, quads 2.43 and biceps 2.07 matched its F values.
+- **Regenerated types** matched the hand-written ones exactly.
+- **Checked in the web preview:** finishing a one-set workout (bench 90 × 8) wrote chest 0.32 (R 28.6 h), triceps and front delts 0.128, and bench as "monthly, logged, 120", with t_w equal to `finished_at`. Deleting it removed its rows. The demo now holds just the F26 week.
+
+### 18.8 Ambiguities resolved
+
+- **"One row per touched muscle … zeros elsewhere":** muscles with L = 0 get no row, and a missing row reads as 0.
+- **"Rebuilding PB history as it goes":** the stored e1RMs already are that history (item 5). The recompute rescores against them, in time order.
+- **"Run it as a background job if it takes more than a moment":** the app always runs recompute in the background and shows its status. For one athlete it takes a few seconds; the demo's 101 workouts took about 5 s from Python.
+- **"Editing a finished workout":** the app still can't. The recompute is wired to the edits that exist today (delete, manual PBs), and the database test simulates an edit.
+- **Dates in the F26 seed:** "now falls on the Wednesday at 20:00" is relative: now becomes fixture hour 68. `--now` pins another instant.

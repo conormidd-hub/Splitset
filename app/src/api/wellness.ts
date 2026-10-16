@@ -38,6 +38,29 @@ export function useWellness(days = 30) {
   });
 }
 
+/** The most recent weigh-in (Garmin, through intervals.icu), however old: the bodyweight source
+ *  the recovery map compares with the profile's. */
+export function useLatestWeighIn() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: keys.latestWeighIn(uid),
+    enabled: !!uid,
+    staleTime: 60 * 60_000,
+    queryFn: async (): Promise<{ date: string; weight_kg: number | null } | null> => {
+      const { data, error } = await supabase
+        .from('wellness')
+        .select('date, weight_kg')
+        .eq('user_id', uid)
+        .not('weight_kg', 'is', null)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 /** Mean of the last `n` non-null values of a metric, or null. */
 export function rollingMean(rows: WellnessDay[], key: keyof WellnessDay, n: number): number | null {
   const vals = rows

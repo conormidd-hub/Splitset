@@ -1,0 +1,58 @@
+name: db-tests
+
+# Database tests for the recovery map (supabase/tests). The runner starts its own throwaway
+# Supabase database with every migration applied. The tests seed the exercise library into it
+# twice and check the result (counts, roles, PB-estimate chains, "seed twice changes nothing",
+# custom exercises left alone, RLS), then save sets the way the app does and check their e1RMs,
+# manual PBs, pb_history, the e1RM backfill and the access rules (build phase 3). Never a hosted
+# project: SPLITSET_TEST_DB_URL is the runner's local database, and the tests refuse anything
+# that is not local.
+#
+# Runs on push to any branch, so work branches without a pull request are covered too.
+
+on:
+  push:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "app/src/lib/recovery/**"
+      - "app/src/lib/lifting/**"
+      - "app/scripts/recovery-cli.ts"
+      - ".github/workflows/db-tests.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "app/src/lib/recovery/**"
+      - "app/src/lib/lifting/**"
+      - "app/scripts/recovery-cli.ts"
+      - ".github/workflows/db-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  seed-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+      - name: Start a local database and apply every migration
+        run: supabase db start
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - run: uv sync --frozen
+        working-directory: sync
+      # the phase 3 tests get every number from the app's engine (app/scripts/recovery-cli.ts),
+      # which plain Node runs by stripping types
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Database tests against the local database
+        working-directory: sync
+        env:
+          SPLITSET_TEST_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: uv run pytest ../supabase/tests -v -rs
