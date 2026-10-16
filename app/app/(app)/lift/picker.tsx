@@ -4,11 +4,13 @@ import { FlatList, View } from 'react-native';
 
 import { useExercises, type Exercise } from '@/api/lifting';
 import { ExerciseForm } from '@/components/lift/ExerciseForm';
+import { GroupFilter } from '@/components/lift/GroupFilter';
 import { Button } from '@/components/ui/Button';
 import { ListRow } from '@/components/ui/ListRow';
 import { Loading } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
+import { filterExercises } from '@/lib/exerciseSearch';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { useRoutineDraft } from '@/stores/routineDraft';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -19,14 +21,14 @@ export default function ExercisePicker() {
   const { palette } = useTheme();
   const exercises = useExercises();
   const [query, setQuery] = useState('');
+  const [group, setGroup] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const all = exercises.data ?? [];
-    const filtered = q ? all.filter((e) => e.name.toLowerCase().includes(q) || (e.muscle_group ?? '').includes(q)) : all;
-    return [...filtered].sort((a, b) => (a.owner_id ? 0 : 1) - (b.owner_id ? 0 : 1) || a.name.localeCompare(b.name));
-  }, [exercises.data, query]);
+  const rows = useMemo(
+    () => filterExercises(exercises.data ?? [], query, group)
+      .sort((a, b) => (a.owner_id ? 0 : 1) - (b.owner_id ? 0 : 1) || a.name.localeCompare(b.name)),
+    [exercises.data, query, group],
+  );
 
   const choose = (e: Exercise) => {
     if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
@@ -48,6 +50,7 @@ export default function ExercisePicker() {
             ) : (
               <>
                 <TextField value={query} onChangeText={setQuery} placeholder="Search exercises" autoCapitalize="none" autoFocus />
+                <GroupFilter value={group} onChange={setGroup} />
                 <Button title={query.trim() ? `Create "${query.trim()}"` : 'Create a new exercise'} variant="secondary" small onPress={() => setCreating(true)} />
               </>
             )}
@@ -57,7 +60,7 @@ export default function ExercisePicker() {
           <ListRow
             first={index === 0}
             title={item.name}
-            subtitle={[item.muscle_group, item.equipment, item.owner_id ? 'yours' : null].filter(Boolean).join(' · ')}
+            subtitle={[item.muscle_group ?? item.group, item.equipment, item.owner_id ? 'yours' : null].filter(Boolean).join(' · ')}
             onPress={() => choose(item)}
           />
         )}

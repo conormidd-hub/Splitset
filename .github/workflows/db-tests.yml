@@ -1,0 +1,39 @@
+name: db-tests
+
+# Database tests for the recovery map (supabase/tests). The runner starts its own throwaway
+# Supabase database with every migration applied, then the tests seed the exercise library into
+# it twice and check the result: counts, roles, PB-estimate chains, "seed twice changes
+# nothing", custom exercises left alone, and RLS. Never a hosted project: SPLITSET_TEST_DB_URL
+# is the runner's local database, and the tests refuse anything that is not local.
+#
+# Runs on push to any branch, so work branches without a pull request are covered too.
+
+on:
+  push:
+    paths: ["supabase/**", "data/**", ".github/workflows/db-tests.yml"]
+  pull_request:
+    paths: ["supabase/**", "data/**", ".github/workflows/db-tests.yml"]
+  workflow_dispatch:
+
+jobs:
+  seed-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+      - name: Start a local database and apply every migration
+        run: supabase db start
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - run: uv sync --frozen
+        working-directory: sync
+      - name: Seed tests against the local database
+        working-directory: sync
+        env:
+          SPLITSET_TEST_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: uv run pytest ../supabase/tests -v -rs

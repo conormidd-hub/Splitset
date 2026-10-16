@@ -395,3 +395,102 @@ select count(*) filter (where rpe is not null) as with_rpe,
        count(*) as total
   from workout_sets where completed;
 ```
+
+---
+
+## 15. Phase 1: decisions made
+
+Phase 1 output · 2026-10-16. Muscles, the library and the constants loader.
+
+### 15.1 Decisions from §12, now settled
+
+| # | Settled as |
+|---|---|
+| D1 | `node --test`. `cd app && npm test` runs `src/**/*.test.ts`, and `app.yml` runs it too. TypeScript 6 no longer loads `@types` packages on its own, so each test file starts with `/// <reference types="node" />`. `@types/node` is now an explicit dev dependency, the version Expo already brought in |
+| D2 | The new `db-tests` workflow starts a throwaway local Supabase database on the runner (`supabase db start`, which applies every migration). The tests then seed it. It runs on push to any branch. The database tests skip unless `SPLITSET_TEST_DB_URL` points at a local host, and they never read `SUPABASE_DB_URL` |
+| D3 | Matched global rows take the library name. `seed_demo.py` still looks exercises up by its old names, and resolves them through `LEGACY_NAMES` → slug |
+| D7 | The §4.3 picks as recommended. Single-leg calf raise stays unscored. Result: 57 rows matched, 104 inserted, 19 left unscored. Global `exercises` rows: 76 + 104 = 180, of which 161 have a slug |
+| Seeding | By hand once, after the Phase 1 migration is pushed. `migrate.yml` then runs `seed_library.py` after every `db push` on main, and also when only the loader or `data/exercise_library.json` changes |
+
+### 15.2 Schema
+
+1. **`exercises` gets eight columns:** `slug`, `"group"`, `load_mode`, `bw_factor`, `fatigue`, `load_split`, `pb_estimate_from` and `pb_estimate_ratio`. The rest of the plan's list maps onto existing columns (§3): `log_as` → `measure`, `note` → `instructions`, `unilateral` → `is_unilateral`, `is_custom` → `owner_id is not null`, `owner_user_id` → `owner_id`.
+2. **The column is called `group`, as in the spec.** That's a reserved word, so SQL quotes it (`"group"`). supabase-js and PostgREST handle it unquoted.
+3. **`pb_estimate_from` holds the slug, not the uuid,** because the engine works in slugs.
+   - It's a foreign key to `exercises.slug`, deferrable, so the loader can write in file order.
+   - It's set to null if the target is deleted. The ratio may then linger, and is ignored.
+   - `slug` is a plain `unique` column; nulls don't clash.
+4. **`bw_factor` and `pb_estimate_ratio` are `double precision`, not `real`,** so a ratio of 0.38 reads back as 0.38.
+5. **Not enforced in SQL:**
+   - role caps;
+   - at least one primary;
+   - library chains of 3 hops or fewer.
+
+   The first two would hard-code numbers from `role_caps`. `validate()` in the loader enforces all three, and the Phase 8 create flow must too. The chain limit is derived as `pb.estimate_max_hops − 1`, so a custom exercise's extra hop always resolves (F30). It's not a new constant.
+6. **The constraints SQL does enforce:**
+   - `bw_factor` is set exactly when `load_mode` is `bodyweight` or `assisted`;
+   - a row with a slug has `load_mode` and `fatigue`;
+   - `load_split` is a JSON object;
+   - a user's own row can only carry a slug starting with `custom_`, so nobody can claim a library slug before the seed does.
+7. **`exercise_muscles`:**
+   - no `updated_at` and no `lww_guard`, because an exercise's rows are always replaced as a set;
+   - users can read rows for global exercises and their own, and can write rows only for their own exercises (ready for Phase 8);
+   - an index on `(muscle_id, role)` serves "train next".
+8. **`user_thresholds` is created now,** because the loader reads it:
+   - `value jsonb`, with the key's format checked;
+   - owner-only, with `lww_guard`;
+   - primary key `(user_id, key)`.
+
+### 15.3 Seed loader (`supabase/seed_library.py`)
+
+9. **Who owns which columns on a matched row.** The library owns:
+   - `name`, `slug`, `group`, `equipment`, `is_unilateral`;
+   - the library columns;
+   - `instructions`, taken from `note`; an empty note becomes null.
+
+   The row keeps its own `measure`, `is_bodyweight` and `muscle_group`, so existing logs and PB views read the same (§4.6). For example, Farmer's carry stays `weight_duration`.
+10. **New rows:**
+    - `measure` and `is_bodyweight` follow §4.6. A `fixed` exercise counts as bodyweight when its equipment is bodyweight.
+    - `muscle_group` comes from the first primary muscle, in the older vocabulary.
+    - Forearms and adductors have no match there, so they get null.
+    - The Full body group gets `full_body`.
+11. **What runs twice changes nothing.**
+    - Rows are written only when a value differs, and `updated_at` moves only then.
+    - An exercise's `exercise_muscles` rows are replaced only when its set differs from the library's.
+    - So a second run reports 0 changes, and the snapshots match, `updated_at` included.
+    - Renames run before inserts.
+12. **Matching:** by slug first, then by the explicit `LEGACY_NAMES` map (§4.1 to §4.3). There's no fuzzy match. A global row the map doesn't know about, but which has a library name, makes the insert fail on the unique-name index rather than being guessed at.
+13. **`--dry-run`** does everything, checks the deferred foreign key, prints the counts and rolls back.
+
+### 15.4 Constants loader (`app/src/lib/recovery/`)
+
+14. **`library.ts`** holds identifiers only: `MUSCLE_IDS` (§2 order), `EXERCISE_GROUPS` and `ROLES`. Tests check them against the library JSON.
+15. **`thresholds.ts`:** the `Thresholds` type mirrors the JSON.
+    - `parseConstants` drops `_doc` and deep-freezes the result.
+    - Dotted keys can index arrays, so `levels.3.min` works.
+    - **What an override may do:**
+      - replace an existing leaf with a value of the same type;
+      - add `base_recovery_hours.<muscle>` for any of the 17 muscles.
+
+      Whole sections, `__proto__`-style keys and non-finite numbers are rejected. `pb.manual_policy` must be `max` or `replace_on_log`.
+    - **`thresholdsFor`** ignores other users' rows and silently skips invalid ones, so a stale key can't break the map. With nothing to apply, it returns the frozen defaults object itself.
+    - **`withOverride` and `isValidOverride`** are for Phase 9's settings writer. `withOverride` throws on an invalid override.
+16. **`constants.ts` is the only file that imports `data/recovery_constants.json`.** `app/metro.config.js` adds `../data` to `watchFolders`. I checked this: without it, Metro fails with "Unable to resolve module", despite SDK 56's on-demand filesystem.
+    - Metro also resolves the `.ts`-extension imports Node needs.
+    - A Vercel build needs files outside the root directory available, which is Vercel's default.
+17. **`useThresholds()`** in `app/src/api/recovery.ts`, query key `['thresholds', uid]`. It returns the defaults while loading or on error.
+
+### 15.5 Picker
+
+18. **One `filterExercises` for both screens.**
+    - Search matches name, slug, group and `muscle_group`, so "rdl" finds both RDLs.
+    - The chips are All plus the 7 groups.
+    - Rows without a group (the 19 unscored ones and custom exercises) appear only under All.
+    - The subtitle shows `group` when `muscle_group` is null.
+
+### 15.6 Ambiguities resolved
+
+- **Phase 1 lists `log_as`, `note`, `is_custom` and `owner_user_id` as columns to add.** They already exist under other names, so I mapped them (item 1).
+- **"161 exercises":** that's 161 global rows with a slug. The table also keeps 19 unscored legacy rows, so it holds 180 global rows.
+- **"Library chains are ≤ 3 hops":** checked on the library, which leaves one hop for a custom exercise (item 5).
+- **"Per-user overrides":** the plan names keys like `base_recovery_hours.default`, but Phase 9 also sets base hours per muscle. So `base_recovery_hours.<muscle>` is the one kind of key an override may add (item 15).

@@ -225,6 +225,39 @@ export type Database = {
           },
         ]
       }
+      exercise_muscles: {
+        Row: {
+          exercise_id: string
+          muscle_id: string
+          role: string
+        }
+        Insert: {
+          exercise_id: string
+          muscle_id: string
+          role: string
+        }
+        Update: {
+          exercise_id?: string
+          muscle_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_muscles_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_muscles_muscle_id_fkey"
+            columns: ["muscle_id"]
+            isOneToOne: false
+            referencedRelation: "muscles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercises: {
         Row: {
           id: string
@@ -239,6 +272,14 @@ export type Database = {
           archived: boolean
           created_at: string
           updated_at: string
+          slug: string | null
+          group: string | null
+          load_mode: string | null
+          bw_factor: number | null
+          fatigue: string | null
+          load_split: Json | null
+          pb_estimate_from: string | null
+          pb_estimate_ratio: number | null
         }
         Insert: {
           id?: string
@@ -253,6 +294,14 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          slug?: string | null
+          group?: string | null
+          load_mode?: string | null
+          bw_factor?: number | null
+          fatigue?: string | null
+          load_split?: Json | null
+          pb_estimate_from?: string | null
+          pb_estimate_ratio?: number | null
         }
         Update: {
           id?: string
@@ -267,6 +316,14 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          slug?: string | null
+          group?: string | null
+          load_mode?: string | null
+          bw_factor?: number | null
+          fatigue?: string | null
+          load_split?: Json | null
+          pb_estimate_from?: string | null
+          pb_estimate_ratio?: number | null
         }
         Relationships: [
           {
@@ -275,6 +332,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercises_pb_estimate_from_fkey"
+            columns: ["pb_estimate_from"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["slug"]
           },
         ]
       }
@@ -329,6 +393,28 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      muscles: {
+        Row: {
+          id: string
+          group: string
+          name: string
+          views: string[]
+        }
+        Insert: {
+          id: string
+          group: string
+          name: string
+          views: string[]
+        }
+        Update: {
+          id?: string
+          group?: string
+          name?: string
+          views?: string[]
+        }
+        Relationships: [
         ]
       }
       plan_event_deletions: {
@@ -923,6 +1009,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sync_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_thresholds: {
+        Row: {
+          user_id: string
+          key: string
+          value: Json
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          key: string
+          value: Json
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          key?: string
+          value?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_thresholds_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"

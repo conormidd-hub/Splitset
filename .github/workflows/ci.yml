@@ -3,9 +3,9 @@ name: ci
 on:
   push:
     branches: [main]
-    paths: ["sync/**", ".github/workflows/ci.yml"]
+    paths: ["sync/**", "supabase/*.py", "supabase/tests/**", "data/**", ".github/workflows/ci.yml"]
   pull_request:
-    paths: ["sync/**", ".github/workflows/ci.yml"]
+    paths: ["sync/**", "supabase/*.py", "supabase/tests/**", "data/**", ".github/workflows/ci.yml"]
 
 jobs:
   sync-tests:
