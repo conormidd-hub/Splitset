@@ -213,7 +213,7 @@ def test_db_recovery_loads_window_bounds(conn, f26_week):
 
 
 def test_db_recovery_loads_is_owner_only(conn, f26_week):
-    assert recovery_loads(conn, U_OTHER, at(-1000), None) == {"muscles": [], "exercises": []}
+    assert recovery_loads(conn, U_OTHER, at(-1000), None) == {"muscles": [], "exercises": [], "activities": []}   # phase 10 adds activities
     try:
         conn.execute("set local role anon")
         with pytest.raises(psycopg.errors.InsufficientPrivilege):

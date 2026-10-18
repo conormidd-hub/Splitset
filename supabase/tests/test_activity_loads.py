@@ -83,9 +83,10 @@ def conn():
             c.execute("insert into auth.users (instance_id, id, aud, role, email) "
                       "values ('00000000-0000-0000-0000-000000000000', %s, 'authenticated', 'authenticated', %s) "
                       "on conflict (id) do nothing", (uid, f"phase10-{str(uid)[-2:]}@splitset.test"))
-        # a 90-minute run with 60 minutes in zones 3+, an easy ride with no heart rate, and a walk
+        # a 90-minute run with 60 minutes in zones 3+; an easy ride with no heart rate three days before,
+        # its fatigue worn off by then (quads R about 37 h), so the run stands alone at t = 0; and a walk
         add_activity(c, U_RUNNER, "t10-run", "Run", "Long run", START, 90, [600, 1200, 1800, 1200, 600, 0, 0])
-        add_activity(c, U_RUNNER, "t10-ride", "Ride", "Coffee ride", START - timedelta(days=1), 60, None)
+        add_activity(c, U_RUNNER, "t10-ride", "Ride", "Coffee ride", START - timedelta(days=3), 60, None)
         add_activity(c, U_RUNNER, "t10-walk", "Walk", "Evening walk", START - timedelta(hours=10), 45, None)
         c.commit()
         yield c
