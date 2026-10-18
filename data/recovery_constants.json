@@ -64,17 +64,17 @@
 
   "levels": [
     { "level": 0, "key": "ready",     "label": "Ready",     "min": 0.0,  "fill": null,      "fill_dark": null,      "advice": "Good to train" },
-    { "level": 1, "key": "low",       "label": "Low",       "min": 0.25, "fill": "#FFE58A", "fill_dark": "#FFE58A", "advice": "Good to train" },
-    { "level": 2, "key": "moderate",  "label": "Moderate",  "min": 0.75, "fill": "#FDBA4D", "fill_dark": "#FDBA4D", "advice": "Can train; expect slightly lower performance" },
-    { "level": 3, "key": "high",      "label": "High",      "min": 1.5,  "fill": "#F77B30", "fill_dark": "#F77B30", "advice": "Rest, or train it lightly" },
-    { "level": 4, "key": "very_high", "label": "Very high", "min": 2.5,  "fill": "#DE3A24", "fill_dark": "#E5432C", "advice": "Rest" },
-    { "level": 5, "key": "extreme",   "label": "Extreme",   "min": 4.0,  "fill": "#9C0E25", "fill_dark": "#C0182F", "advice": "Rest; well past a normal session" }
+    { "level": 1, "key": "low",       "label": "Low",       "min": 0.25, "fill": "#FFD9CC", "fill_dark": "#FFD9CC", "advice": "Good to train" },
+    { "level": 2, "key": "moderate",  "label": "Moderate",  "min": 0.75, "fill": "#FFA488", "fill_dark": "#FFA488", "advice": "Can train; expect slightly lower performance" },
+    { "level": 3, "key": "high",      "label": "High",      "min": 1.5,  "fill": "#F26B4F", "fill_dark": "#F26B4F", "advice": "Rest, or train it lightly" },
+    { "level": 4, "key": "very_high", "label": "Very high", "min": 2.5,  "fill": "#C9362B", "fill_dark": "#D9483B", "advice": "Rest" },
+    { "level": 5, "key": "extreme",   "label": "Extreme",   "min": 4.0,  "fill": "#7F1D1D", "fill_dark": "#B23A3A", "advice": "Rest; well past a normal session" }
   ],
   "trainable_max_level": 2,
   "ready_fill": "#D9DDE3",
   "ready_fill_dark": "#3A3F47",
-  "silhouette_fill": "#EEF0F3",
-  "silhouette_fill_dark": "#262A31",
+  "silhouette_fill": "#D9DDE3",
+  "silhouette_fill_dark": "#3A3F47",
   "region_stroke": "#FFFFFF",
   "region_stroke_dark": "#16181C",
 

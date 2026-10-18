@@ -1019,3 +1019,57 @@ Phase 7 replaces this screen and its Lift link.
 - **"Swipe on mobile":** a horizontal pan with react-native-gesture-handler, which is already installed (its root view is in `app/_layout.tsx`). Left shows the back, right the front.
 - **"Mark contributions whose `pb_source` is estimated or calibration":** a small "estimated" or "calibrating" badge next to the exercise's name.
 - **"Put it on a temporary dev screen":** `lift/recovery-dev.tsx`, development builds only, linked from Lift.
+
+---
+
+## 21. Between Phases 6 and 7: the coral figure
+
+2026-10-18. Conor's own artwork and palette replace the generated figure. He approved editing `assets/` and `data/` for this, and checked a labelled image of every shape before the commit.
+
+### 21.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Master shape | **The light SVG** (`assets/source/split-set-coral-light.svg`). The dark SVG was traced separately and has different shapes, so it only supplied its colours. Both originals are kept in `assets/source/` |
+| Palette | **Coral**, light / dark: Low `#FFD9CC` / `#FFD9CC`, Moderate `#FFA488` / `#FFA488`, High `#F26B4F` / `#F26B4F`, Very high `#C9362B` / `#D9483B`, Extreme `#7F1D1D` / `#B23A3A`. Ready and the region outlines are unchanged |
+| Body colour | **`silhouette_fill` is now the Ready grey**, `#D9DDE3` light and `#3A3F47` dark, as in both coral SVGs: the head, hands and shins look like a Ready muscle |
+| Labels | Every shape's muscle was confirmed on the check image, including the calls in 21.3 |
+
+### 21.2 From artwork to figure (`assets/source/build_figure.py`)
+
+1. **Why a conversion step:** the artwork is a traced drawing grouped by colour, for one state of the F26 week:
+   - shapes have no muscle tags;
+   - front and back share one canvas, with a legend;
+   - the tracer left slivers in the gaps.
+2. **What the script does:**
+   - **Tags every shape** by its position in the source file: a muscle and a side, or `data-role="silhouette"`.
+   - **Drops** the traced base outline and the slivers.
+   - **Splits the views:** front and back become their own 561 × 1290 files, each body centred in its canvas by moving its points sideways (the figure contract allows no transforms).
+   - **Ids** are `front-…` and `back-…`.
+   - **Outlines:** every region gets `stroke-width` 1.9 with round joins.
+3. **The table maps all 125 source shapes,** and the script refuses to run if the source file's contents change (a SHA-256 of the text with LF line endings), because positions would then mean something else. Run it with `python assets/source/build_figure.py`, then `cd app && npm run gen:body-figure`.
+4. **The gaps between shapes show the page behind the figure:** white in light, the app's near-black surface in dark. The artwork's own gap colours were `#EEF0F3` and `#262A31`.
+5. **Sides:** `data-side` is the side of the body's midline a shape is on, from the viewer. The abs are a single shape across the midline, so they get `data-side="both"`, which the figure test now allows.
+
+### 21.3 Judgement calls (confirmed by Conor)
+
+- **Left lower obliques:** they're part of the abs shape in the artwork, while the right side has separate oblique pieces. So the left lower torso colours with abs. Fixing that needs that shape split in the artwork.
+- **Serratus:** the right-hand piece below the armpit has no partner on the left. It's body (silhouette).
+- **Outer strips of the front upper arm:** biceps.
+- **Back:**
+  - the shapes below the rear delts (over the shoulder blade): rear delts;
+  - the flanks below the lats: obliques, so obliques now appear on both views;
+  - the small shapes above the glutes (glute medius): glutes;
+  - the outer hip strips: body.
+- **Muscles split into several shapes,** such as three hamstring strips per leg, two or three calf heads, and four forearm pieces: each shape carries the same muscle.
+
+### 21.4 Result
+
+- **Front:** 42 muscle shapes and 9 body shapes. **Back:** 48 muscle shapes and 10 body shapes. All 17 muscles appear.
+- **`npm test`: 127 passed.** The figure-contract tests pass on the new art unchanged, apart from allowing `both`. The 10 snapshots were rewritten, and tsc and lint are clean.
+- **Checked in the web preview** at the seeded Wednesday 20:00: the figure matches Conor's light and dark designs.
+
+### 21.5 Out of date until someone updates them (folders this work doesn't edit)
+
+- **`scripts/build_body_map.py`** still generates the old figure. Running it would overwrite the coral files; regenerate from `assets/source/build_figure.py` instead.
+- **Spec §9's colour table,** and its note that the silhouette differs from Ready, describe the old palette. `recovery_constants.json` is the source of truth.

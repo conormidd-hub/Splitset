@@ -76,7 +76,7 @@ describe('the SVG figure', () => {
       const regions = FIGURES[v].shapes.filter((s) => s.muscle);
       const silhouette = FIGURES[v].shapes.filter((s) => s.silhouette);
       assert.ok(regions.length > 0 && silhouette.length > 0, v);
-      for (const s of regions) assert.ok(s.side === 'left' || s.side === 'right', s.key);
+      for (const s of regions) assert.ok(['left', 'right', 'both'].includes(s.side!), s.key);   // both: one shape across the midline
       for (const s of silhouette) assert.equal(s.muscle, null, s.key);
     }
     assert.deepEqual(musclesIn(FIGURES.front), ['chest', 'traps', 'front_delts', 'side_delts', 'biceps', 'forearms', 'abs', 'obliques', 'quads', 'adductors', 'calves']);
