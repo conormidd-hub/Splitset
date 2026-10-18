@@ -91,7 +91,8 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
   const use = (e: Exercise) => {
     if (target === 'workout') useActiveWorkout.getState().addExercise(e);
     else if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
-    if (target) router.back();
+    // opened from the picker: close this screen and the picker, back to the workout or routine
+    if (target) router.dismiss(2);
     else router.replace(`/lift/exercises/${e.id}`);
   };
   const pickSimilar = (e: Exercise) => {

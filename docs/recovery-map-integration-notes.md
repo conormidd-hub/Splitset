@@ -1176,3 +1176,99 @@ Phase 7 output · 2026-10-18. The map on real screens.
 - **"Muscles becoming trainable in the next 24 h":** only muscles not trainable now, so a muscle that's already trainable isn't "becoming" it.
 - **"trainable in 24 h" on the workout summary:** counted from the workout's finish (22.2, item 5).
 - **"PB source line" in the picker:** a one-line form of the Phase 3 source label, beside the reference it gives.
+
+---
+
+## 23. Phase 8: decisions made
+
+Phase 8 output · 2026-10-18. Creating and editing custom exercises.
+
+### 23.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Saving | **One database function per action:** `create_custom_exercise(p)` and `update_custom_exercise(id, p)` (`20261018000100_custom_exercises.sql`). The exercise, its muscles and an optional known best are written in one transaction, so there's never a half-made exercise |
+| Flow | **Its own screen,** `lift/exercises/new.tsx`. The picker's Create button opens it, carrying the searched name, and so does the Exercises list's New exercise. Saved from the picker, the exercise goes straight into the workout or routine |
+| Bodyweight factor | **Presets plus fine steps:** core 0.3, push-up-like 0.65, pull-up-like 1.0, legs 0.8, and −/+ 0.05, kept to 0.2–1.0. No slider package is installed, and this needs no new dependency |
+| Editing | **Edit on your own exercise's detail screen** opens the same screen prefilled. Saving reruns the recompute rule (spec §14) |
+
+### 23.2 The flow (`src/lib/recovery/customExercise.ts`, pure, tested)
+
+1. **Name, with "Did you mean …?" (`matchExercises`):**
+   - Each query word scores 1 if it's a whole word of the exercise's name or slug, or 0.8 if it's inside a longer one. Adjacent words also count joined, so "pull down" matches "pulldown".
+   - Word order doesn't matter, so "pull down lat" finds `lat_pulldown`.
+   - The top three at 0.6 or more are shown, ties going to the shorter name.
+   - Picking one abandons the create and uses that exercise.
+2. **Start from a similar exercise:**
+   - **Suggestions (`similarSuggestions`):** the plan's keywords (curl, row, press, raise, fly, squat, lunge, deadlift/RDL, pulldown, pull-up, extension, crunch, plank) pick a family of library exercises, best name match first. A search box finds any other.
+   - **What it copies (`fromSimilar`):** equipment, load mode, bodyweight factor, one-sided, fatigue class and all three muscle tiers, and it sets `pb_estimate_from` to the similar exercise's slug.
+   - **Less / about the same / more** sets `pb_estimate_ratio` to 0.6 / 1.0 / 1.3 (`RATIOS`, the plan's numbers).
+3. **Equipment (`EQUIPMENT`, `withEquipment`):** exactly the plan's table.
+   - **Load mode:** band → fixed, logged as reps; timed → fixed, logged as seconds; bodyweight → bodyweight; assisted machine → assisted; everything else → weight.
+   - **Default fatigue:** machine, cable and band → low; everything else → standard.
+   - **Bodyweight factor:** bodyweight and assisted get one (0.65 and 1.0 to start).
+   - **Fatigue on change:** a similar exercise's fatigue class stays when the equipment changes.
+4. **Muscles:**
+   - **The mini figure (Phase 6 `BodyMap`, Phase 7 role tints):** tapping a muscle cycles none → primary → secondary → tertiary → none (`cycleRole`), skipping any role already at its `role_caps` limit.
+   - **The text list:** the same 17 muscles with P/S/T chips (`setRole`). A capped chip is disabled.
+   - **Below them:** a live load split bar (spec §6) and the role counts against the caps.
+5. **"How hard is this on the body?"** Light / Normal / Heavy → low / standard / high, pre-set from the similar exercise or the equipment. Whatever it shows when you save is stored.
+6. **Your best (optional):** weight × reps, today. Its e1RM comes from the existing `setE1rm`, with today's bodyweight for bodyweight and assisted exercises. It's saved as a `manual_pbs` row. Fixed-cost exercises don't ask.
+7. **Save (`validateDraft`, `toPayload`):**
+   - **Validation:** a name, at least one primary, the caps, and a factor in range.
+   - **Identity:** slug `custom_<uuid without dashes>`; `group` from the first primary muscle (`MUSCLE_GROUPS`).
+   - **Logging:** the older `muscle_group` word for search, as `seed_library.py` sets it for new rows; `measure` and `is_bodyweight` per notes §4.6.
+   - **Muscles:** `load_split` by spec §6.
+
+### 23.3 Database
+
+8. **Both functions** are security invoker, so RLS decides what you can write; another user's exercise reads as "not found". Both refuse an exercise with no primary muscle.
+   - **The caps stay app-side, as Phase 1 decided,** so no constant is copied into SQL.
+   - **The existing checks still apply:** custom slugs only, a load mode and fatigue class with a slug, the factor's pairing, and the estimate pair. So a user can't claim a library slug.
+9. **An edit never changes `measure`,** so sets already logged keep their meaning. The screen only offers equipment that logs the same way. An older custom exercise (no slug, unscored) gets a slug the first time it's edited, so editing scores it.
+10. **Edit's recompute:** after `update_custom_exercise`, the app reruns `recomputeFrom` from the first finished workout that used the exercise.
+
+### 23.4 In the app
+
+11. **The old simple form is gone** (`ExerciseForm.tsx`, `useCreateExercise`); notes §8 had planned that. The picker's and Exercises list's Create buttons open the new screen.
+12. **`src/api/recovery.ts`** gains `useCreateCustomExercise()` and `useUpdateCustomExercise()`. They invalidate the exercises, library rows and PB history.
+13. **The CLI** gains `custom-payload`, so the database tests save exactly what the screen saves.
+
+### 23.5 Tests
+
+- **`npm test`: 148 tests.** The new `customExercise.test.ts` covers the plan's list:
+  - "Incline Smith press" from `incline_bench_bb` copies its tiers and estimates 86.4 through it (120 × 0.80 × 1.0 × 0.9);
+  - a custom curl based on `db_curl` reaches bench in four hops: 18.59, F30;
+  - "pull down lat" surfaces `lat_pulldown`;
+  - no primary is rejected, and the caps hold, both on a tap and on a chip;
+  - a manual 80 is the first set's reference, and a later logged 95 takes over (spec §3.6);
+  - plus the ratios, keyword suggestions, equipment defaults, factor steps, the payload, and a saved exercise reading back into the same draft for Edit.
+- **`db-tests` (CI): 63 tests, 7 of them new (`test_custom_exercises.py`).** They cover:
+  - creating from a similar exercise as the user;
+  - the estimated reference through it ("Estimated from Bench press (barbell)", 86.4);
+  - a known best saved with it;
+  - no primary refused;
+  - a library slug can't be claimed;
+  - another user can neither see nor edit it;
+  - editing the muscles, then rescoring, moving the cached rows (quads primary, chest tertiary at 0.2 × quads).
+- **pytest locally:** 79 passed, 45 skipped (the database tests).
+
+### 23.6 On splitset-dev (2026-10-18)
+
+- **Migration:** `20261018000100_custom_exercises` was pushed by Conor. Signed-in users can execute both functions and `anon` can't. The regenerated types matched exactly.
+- **The done-when, in the web preview:**
+  - **Creating it:** from the picker, "Incline Smith press" offered "Did you mean Incline bench press (Smith machine)" and suggested the press family. I started it from Incline bench press (barbell), which copied chest primary and front delts and triceps secondary, and set the equipment to Smith.
+  - **The figure:** tapping the abs cycled primary → tertiary (secondary was full) → none.
+  - **Saving** went straight into the workout.
+  - **First workout:** two sets of 60 × 8, scored against the estimated 86.4, gave chest 0.52 (Low) and front delts and triceps 0.21 each.
+  - **Edit:** setting it to Heavy saved fatigue `high`, kept `weight_reps`, and the recompute rewrote the cached load from 0.524 to 0.628 (× 1.2).
+- **Fix found in the check:** saving from the picker first went back only to the picker. It now closes both screens (`router.dismiss(2)`).
+- **Afterwards:** the F26 seed was re-run. The custom "Incline Smith press" stays on the demo account as an example.
+
+### 23.7 Ambiguities resolved
+
+- **"Fuzzy-match library and their own custom exercises":** a word-based match rather than an edit-distance one, so reordered and joined words match. The scores are described in item 1.
+- **"`bw_factor` slider":** presets and steps (23.1).
+- **"Editing its muscles or fatigue later triggers the Phase 4 recompute":** Edit exists now (23.1). The recompute starts from the first finished workout that used the exercise.
+- **"Save with `is_custom = true`, `owner_user_id`":** that's `owner_id` (notes §3). `is_custom` is `owner_id is not null`.
+- **The assisted machine's equipment word:** stored as `machine`, with load mode `assisted`. Timed is stored as `bodyweight` with load mode `fixed` and logged in seconds.
