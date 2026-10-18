@@ -3,48 +3,27 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { keys } from './keys';
 import { useProfile, useUpdateProfile, type Profile } from './profile';
+import { DEFAULT_GLANCE, RECOVERY, parseLayout as parseLayoutOf, sameLayout, type Layout } from '@/lib/homeLayout';
 import { METRICS, type MetricId } from '@/lib/metrics';
 import { useUserId } from '@/lib/session';
 import { homeLayoutKey, storage } from '@/lib/storage';
 
 /**
- * The Today screen's layout, Garmin Connect style: one In focus metric above the At a glance
- * tiles. It lives on the profile row so every device shows the same home, with a copy in device
- * storage so the screen draws straight away and never flickers to the default while the profile
- * loads.
+ * The Today screen's layout, Garmin Connect style: two In focus slots (a metric on the left; on
+ * the right the recovery body figure, or another metric) above the At a glance tiles. It lives on
+ * the profile row so every device shows the same home, with a copy in device storage so the
+ * screen draws straight away and never flickers to the default while the profile loads.
  */
-export type HomeLayout = { v: 1; focus: MetricId | null; glance: MetricId[] };
+export type FocusId = MetricId | typeof RECOVERY;
+export type HomeLayout = Layout<MetricId>;
 
-export const DEFAULT_LAYOUT: HomeLayout = {
-  v: 1,
-  focus: 'readiness',
-  glance: ['resting_hr', 'hrv', 'sleep', 'training_status', 'vo2max', 'steps', 'weekly_distance', 'fitness'],
-};
+export const DEFAULT_LAYOUT: HomeLayout = { v: 1, focus: 'readiness', focus2: RECOVERY, glance: DEFAULT_GLANCE as MetricId[] };
 
 const isMetricId = (v: unknown): v is MetricId => typeof v === 'string' && v in METRICS;
 
-/** A layout from storage or the profile, or null when it is not one. Unknown ids are dropped, repeats folded. */
-export function parseLayout(json: unknown): HomeLayout | null {
-  const raw = typeof json === 'string' ? safeParse(json) : json;
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as { v?: unknown; focus?: unknown; glance?: unknown };
-  if (o.v !== 1 || !Array.isArray(o.glance)) return null;
-  const glance: MetricId[] = [];
-  for (const id of o.glance) if (isMetricId(id) && !glance.includes(id)) glance.push(id);
-  return { v: 1, focus: isMetricId(o.focus) ? o.focus : null, glance };
-}
-
-function safeParse(s: string): unknown {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
-  }
-}
-
-export function sameLayout(a: HomeLayout, b: HomeLayout): boolean {
-  return a.focus === b.focus && a.glance.length === b.glance.length && a.glance.every((id, i) => id === b.glance[i]);
-}
+/** A layout from storage or the profile, or null when it is not one (src/lib/homeLayout.ts). */
+export const parseLayout = (json: unknown): HomeLayout | null => parseLayoutOf(json, isMetricId, DEFAULT_LAYOUT.glance);
+export { RECOVERY, sameLayout };
 
 export function useHomeLayout() {
   const uid = useUserId();

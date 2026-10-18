@@ -1796,3 +1796,33 @@ Follow-up to §27 · 2026-10-19, from Conor's requests. Commits `a16ba61` and th
 
 - **`npm test`: 271 tests,** adding `sortable.test.ts`.
 - **Type check and lint:** clean.
+
+## 29. Today: two In focus tiles, four At a glance tiles, and the plan as one line
+
+Follow-up · 2026-10-19, from Conor's request.
+
+1. **In focus is two tiles side by side** (`InFocusPair`).
+   - **Left:** a metric, chosen as before.
+   - **Right:** the recovery body figure by default (front and back, with the two most tired muscles), or any metric.
+   - **The pencil** in each tile's corner opens the picker for that tile; the picker for the right one also offers "Recovery body map".
+   - **The pencil sits beside the tile's button, not inside it:** a button can't hold another.
+   - **The Recovery card further down** only shows when the right tile isn't already the body figure.
+2. **The layout** (`src/lib/homeLayout.ts`, tested) gains `focus2`.
+   - **No migration:** it lives in the same `profiles.home_layout` JSON.
+   - **A layout saved before this** gets the recovery figure on the right.
+3. **At a glance defaults to four tiles:** resting HR, HRV, sleep, weekly running.
+   - **A saved layout still exactly the old eight-tile default** (one never customised) shows the new four.
+   - **A customised one is kept.** "Reset to default" in edit mode gives the four.
+   - **More tiles:** added with Edit, as before.
+4. **Today's plan is one thin line straight under the streak** (`PlanStrip`).
+   - **What it shows:** the session's icon, "Today", the title, then the kind and distance, plus "+N" for more sessions and a done or skipped badge.
+   - **Rest day:** "Rest day: nothing planned".
+   - **Tapping it:** opens the session, or the Plan tab.
+   - **The old Today's plan card** further down is gone.
+5. **Checked in the web preview (375 pt, demo athlete):**
+   - the strip read "Today · Easy spin · Ride · 22.0 km";
+   - In focus showed the demo's metric and the recovery figure;
+   - At a glance showed four;
+   - the right tile switched to Sleep and back to the body map;
+   - the console was clean.
+6. **Tests:** `npm test`, 276 tests (`homeLayout.test.ts` is new). Type check and lint are clean.

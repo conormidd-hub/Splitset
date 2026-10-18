@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { HomeLayout } from '@/api/home';
+import { RECOVERY, type FocusId, type HomeLayout } from '@/api/home';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { ICONS } from '@/lib/icons';
@@ -13,12 +13,14 @@ import { radius, space } from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
-  /** `add` appends to At a glance and stays open; `pick` chooses the one In focus metric and closes. */
+  /** `add` appends to At a glance and stays open; `pick` chooses what an In focus slot shows and closes. */
   mode: 'add' | 'pick';
+  /** Which In focus slot `pick` fills; the right one can also show the recovery body figure. */
+  slot?: 'left' | 'right';
   layout: HomeLayout;
   onClose: () => void;
   onAdd: (id: MetricId) => void;
-  onPick: (id: MetricId) => void;
+  onPick: (id: FocusId) => void;
 };
 
 const WIDE = 640;
@@ -34,7 +36,7 @@ function firstSentence(text: string): string {
  * reach intervals.icu greyed out and explained rather than hidden. A bottom sheet on a phone, a
  * centred card on a wide screen.
  */
-export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }: Props) {
+export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, onAdd, onPick }: Props) {
   const { palette, name } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -61,18 +63,19 @@ export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }
     setExpanded(null);
     onClose();
   };
-  const choose = (id: MetricId) => {
+  const current = slot === 'right' ? layout.focus2 : layout.focus;
+  const choose = (id: FocusId) => {
     if (mode === 'pick') {
       onPick(id);
       close();
     } else {
-      onAdd(id);
+      if (id !== RECOVERY) onAdd(id);
     }
   };
 
   // the scrim is the dark of whichever palette is on: the page's own black at night, ink by day
   const scrim = name === 'night' ? palette.bg : palette.ink;
-  const title = mode === 'pick' ? 'Choose In focus' : 'Add to At a glance';
+  const title = mode === 'pick' ? (slot === 'right' ? 'In focus, right' : 'In focus, left') : 'Add to At a glance';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close} aria-label={title}>
@@ -119,6 +122,24 @@ export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }
               />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.lg }}>
+              {mode === 'pick' && slot === 'right' && !query.trim() ? (
+                <View style={{ marginTop: space.sm }}>
+                  <T variant="label" tone="mut" style={{ paddingVertical: space.sm }}>Body</T>
+                  <Pressable
+                    onPress={() => choose(RECOVERY)}
+                    accessibilityRole="button"
+                    accessibilityLabel={current === RECOVERY ? 'Recovery body map, in focus' : 'Choose the recovery body map'}
+                    style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, backgroundColor: palette.surface,
+                      borderRadius: radius.md, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1 })}>
+                    <SymbolView name={ICONS.lift} tintColor={current === RECOVERY ? palette.accent : palette.mut} size={20} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <T variant="h3">Recovery body map</T>
+                      <T variant="small" tone="mut" numberOfLines={2}>How tired each muscle is from recent workouts and runs, on the body figure.</T>
+                    </View>
+                    {current === RECOVERY ? <SymbolView name={ICONS.check} tintColor={palette.pos} size={18} /> : <T tone="mut">›</T>}
+                  </Pressable>
+                </View>
+              ) : null}
               {groups.length ? groups.map(([group, defs]) => (
                 <View key={group} style={{ marginTop: space.sm }}>
                   <T variant="label" tone="mut" style={{ paddingVertical: space.sm }}>{GROUP_LABELS[group]}</T>
@@ -129,7 +150,7 @@ export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }
                         def={d}
                         first={i === 0}
                         mode={mode}
-                        added={mode === 'add' ? layout.glance.includes(d.id) : layout.focus === d.id}
+                        added={mode === 'add' ? layout.glance.includes(d.id) : current === d.id}
                         expanded={expanded === d.id}
                         onToggle={() => setExpanded((cur) => (cur === d.id ? null : d.id))}
                         onChoose={() => choose(d.id)}

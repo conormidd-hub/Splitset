@@ -5,16 +5,17 @@ import { View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
-import { DEFAULT_LAYOUT, useHomeLayout } from '@/api/home';
+import { DEFAULT_LAYOUT, RECOVERY, useHomeLayout, type FocusId } from '@/api/home';
 import { useWorkouts } from '@/api/lifting';
 import { useLiftPbs, useRunPbs } from '@/api/pbs';
-import { planTypeLabel, usePlanRange } from '@/api/plan';
+import { usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { useTrainingSessions } from '@/api/streaks';
 import { useWellness } from '@/api/wellness';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
-import { InFocusCard } from '@/components/home/InFocusCard';
+import { InFocusPair, type FocusContent, type FocusSlot } from '@/components/home/InFocusCard';
+import { PlanStrip } from '@/components/home/PlanStrip';
 import { StreakButton } from '@/components/home/StreakButton';
 import { StreakHeat } from '@/components/home/StreakHeat';
 import { PbButton } from '@/components/pbs/PbButton';
@@ -117,8 +118,8 @@ export default function Today() {
   const [editing, setEditing] = useState(params.edit === '1');
   const [dragging, setDragging] = useState(false);
   // the sheet's mode outlives its visibility, so the title holds still while it slides away
-  const [sheet, setSheet] = useState<{ open: boolean; mode: 'add' | 'pick' }>({ open: false, mode: 'add' });
-  const openSheet = (mode: 'add' | 'pick') => setSheet({ open: true, mode });
+  const [sheet, setSheet] = useState<{ open: boolean; mode: 'add' | 'pick'; slot: FocusSlot }>({ open: false, mode: 'add', slot: 'left' });
+  const openSheet = (mode: 'add' | 'pick', slot: FocusSlot = 'left') => setSheet({ open: true, mode, slot });
   const closeSheet = () => setSheet((s) => ({ ...s, open: false }));
   // a drag near the top or bottom of the screen scrolls the page under the finger
   const scrollRef = useRef<ScrollView | null>(null);
@@ -150,7 +151,10 @@ export default function Today() {
   }, [saved]);
   const note = saving ? 'Saving…' : saveError ? 'Not saved' : saved ? 'Saved' : null;
 
-  const setFocus = (id: MetricId) => { if (layout.focus !== id) save({ ...layout, focus: id }); };
+  const setFocus = (id: FocusId) => {
+    if (sheet.slot === 'right') { if (layout.focus2 !== id) save({ ...layout, focus2: id }); }
+    else if (id !== RECOVERY && layout.focus !== id) save({ ...layout, focus: id });
+  };
   const addGlance = (id: MetricId) => { if (!layout.glance.includes(id)) save({ ...layout, glance: [...layout.glance, id] }); };
   const removeGlance = (id: MetricId) => save({ ...layout, glance: layout.glance.filter((g) => g !== id) });
   const reorderGlance = (glance: MetricId[]) => save({ ...layout, glance });
@@ -158,7 +162,11 @@ export default function Today() {
     if (await confirm('Reset the home screen?', 'In focus and At a glance go back to the defaults.', 'Reset', true)) save(DEFAULT_LAYOUT);
   };
 
-  const focusSnap = useMemo(() => (layout.focus ? snapshot(layout.focus, inputs) : null), [layout.focus, inputs]);
+  const focusLeft = useMemo<FocusContent>(() => (layout.focus ? { kind: 'metric', snapshot: snapshot(layout.focus, inputs) } : null), [layout.focus, inputs]);
+  const focusRight = useMemo<FocusContent>(() => (
+    layout.focus2 === RECOVERY ? { kind: 'recovery' } : layout.focus2 ? { kind: 'metric', snapshot: snapshot(layout.focus2, inputs) } : null
+  ), [layout.focus2, inputs]);
+  const planToday = plan.data ?? [];
   const week = useMemo(() => ({
     distance: snapshot('weekly_distance', inputs),
     sessions: snapshot('sessions', inputs),
@@ -185,6 +193,8 @@ export default function Today() {
       scrollRef={scrollRef}
       onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
       {training.isSuccess ? <StreakHeat count={heatCount} style={{ marginTop: -space.sm }} /> : null}
+      {/* today's plan, thin, straight under the streak */}
+      <PlanStrip sessions={planToday} loaded={plan.isSuccess} units={units} />
       {connection.isSuccess && !conn ? (
         <Card tone="accent" title="Connect your watch" subtitle="Two minutes: an intervals.icu account, your Garmin, and one key." onPress={() => router.push('/settings/connect')}>
           <Button title="Connect" small onPress={() => router.push('/settings/connect')} />
@@ -198,7 +208,7 @@ export default function Today() {
         <>
           <View style={{ gap: space.sm }}>
             <T variant="label" tone="mut">In focus</T>
-            <InFocusCard snapshot={focusSnap} onChange={() => openSheet('pick')} />
+            <InFocusPair left={focusLeft} right={focusRight} onChange={(slot) => openSheet('pick', slot)} />
           </View>
 
           <View style={{ gap: space.sm }}>
@@ -226,23 +236,6 @@ export default function Today() {
           </View>
         </>
       ) : null}
-
-      <Card title="Today's plan" right={<Button title="Plan" variant="ghost" small onPress={() => router.push('/plan')} />}>
-        {plan.data?.length ? (
-          plan.data.map((s, i) => (
-            <ListRow
-              key={s.id}
-              first={i === 0}
-              title={s.title}
-              subtitle={[planTypeLabel(s.type), s.subtype, s.target_distance_m ? formatDistance(s.target_distance_m, units, 1) : null].filter(Boolean).join(' · ')}
-              badge={<Badge label={s.status} tone={s.status === 'done' ? 'pos' : s.status === 'skipped' ? 'neg' : 'mut'} />}
-              onPress={() => router.push(`/plan/${s.id}`)}
-            />
-          ))
-        ) : (
-          <T tone="mut">Nothing planned today.{plan.isSuccess ? ' Rest day, or add a session from the Plan tab.' : ''}</T>
-        )}
-      </Card>
 
       <Card title="This week" subtitle="Monday to today">
         <Grid>
@@ -292,7 +285,8 @@ export default function Today() {
         )}
       </Card>
 
-      <RecoveryHomeCard />
+      {/* the recovery figure is already up top when it's the right In focus tile */}
+      {layout.focus2 === RECOVERY ? null : <RecoveryHomeCard />}
 
       <TrophyCabinet units={units} />
 
@@ -301,6 +295,7 @@ export default function Today() {
       <AddMetricSheet
         visible={sheet.open}
         mode={sheet.mode}
+        slot={sheet.slot}
         layout={layout}
         onClose={closeSheet}
         onAdd={addGlance}
