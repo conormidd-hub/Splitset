@@ -6,6 +6,7 @@ import { useUnits } from '@/api/profile';
 import { useExerciseRoles, useMuscleNames } from '@/api/recovery';
 import { LineChart } from '@/components/charts/LineChart';
 import { StrengthReference } from '@/components/pbs/StrengthReference';
+import { Button } from '@/components/ui/Button';
 import { ExerciseMuscles } from '@/components/recovery/ExerciseMuscles';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
@@ -38,6 +39,11 @@ export default function ExerciseDetail() {
           <View>
             <T variant="h1">{exercise.name}</T>
             <T tone="mut">{[exercise.muscle_group, exercise.equipment, exercise.is_unilateral ? 'one side at a time' : null].filter(Boolean).join(' · ')}</T>
+            {exercise.owner_id ? (
+              <View style={{ flexDirection: 'row', marginTop: 8 }}>
+                <Button title="Edit" small variant="secondary" onPress={() => router.push({ pathname: '/lift/exercises/new', params: { edit: exercise.id } })} />
+              </View>
+            ) : null}
           </View>
         ) : null}
 

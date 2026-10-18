@@ -4,7 +4,6 @@ import { FlatList, View } from 'react-native';
 
 import { useExercises, useRecords } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
-import { ExerciseForm } from '@/components/lift/ExerciseForm';
 import { GroupFilter } from '@/components/lift/GroupFilter';
 import { Button } from '@/components/ui/Button';
 import { ListRow } from '@/components/ui/ListRow';
@@ -22,7 +21,6 @@ export default function ExerciseLibrary() {
   const records = useRecords();
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
 
   const best = useMemo(() => new Map((records.data ?? []).map((r) => [r.exercise_id, r])), [records.data]);
   const rows = useMemo(
@@ -34,21 +32,15 @@ export default function ExerciseLibrary() {
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
       <FlatList
-        data={creating ? [] : rows}
+        data={rows}
         keyExtractor={(e) => e.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}
         ListHeaderComponent={
           <View style={{ gap: space.md, marginBottom: space.md }}>
-            {creating ? (
-              <ExerciseForm initialName={query} onDone={() => setCreating(false)} />
-            ) : (
-              <>
-                <TextField value={query} onChangeText={setQuery} placeholder="Search exercises" autoCapitalize="none" />
-                <GroupFilter value={group} onChange={setGroup} />
-                <Button title="New exercise" variant="secondary" small onPress={() => setCreating(true)} />
-              </>
-            )}
+            <TextField value={query} onChangeText={setQuery} placeholder="Search exercises" autoCapitalize="none" />
+            <GroupFilter value={group} onChange={setGroup} />
+            <Button title="New exercise" variant="secondary" small onPress={() => router.push({ pathname: '/lift/exercises/new', params: { name: query.trim() } })} />
           </View>
         }
         renderItem={({ item, index }) => {
@@ -64,7 +56,7 @@ export default function ExerciseLibrary() {
             />
           );
         }}
-        ListEmptyComponent={creating ? null : exercises.isLoading ? <Loading /> : null}
+        ListEmptyComponent={exercises.isLoading ? <Loading /> : null}
       />
     </View>
   );

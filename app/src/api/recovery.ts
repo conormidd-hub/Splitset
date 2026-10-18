@@ -7,6 +7,7 @@ import { fetchLibraryRows, fetchPbHistoryRows, fetchThresholds, loadKeys, recomp
 import { useNowHour, useNowMinute } from '@/lib/clock';
 import { buildLibrary, sessionMap } from '@/lib/recovery/engine';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
+import type { Payload } from '@/lib/recovery/customExercise';
 import { muscleFallbackName } from '@/lib/recovery/figure';
 import { trainNext, type TrainExercise } from '@/lib/recovery/screens';
 import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory } from '@/lib/recovery/pbHistory';
@@ -392,4 +393,52 @@ export function useReferenceLines(formatKg: (kg: number) => string): ((exercise:
       default: return `PB ${formatKg(ref.pb)} · logged`;
     }
   };
+}
+
+// ---------------------------------------------------------------- custom exercises (build phase 8)
+
+/** Saves a new custom exercise, its muscles and its known best in one transaction
+ *  (create_custom_exercise). Resolves to the new exercises row. */
+export function useCreateCustomExercise() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Payload): Promise<Exercise> => {
+      const { data: id, error } = await supabase.rpc('create_custom_exercise', { p: payload as never });
+      if (error) throw error;
+      const { data, error: readError } = await supabase.from('exercises').select('*').eq('id', id).single();
+      if (readError) throw readError;
+      return data;
+    },
+    onSuccess: () => invalidateExercises(qc, uid),
+  });
+}
+
+/** Saves an edit to one of the user's exercises (update_custom_exercise), then runs the recompute
+ *  rule (spec §14) from the first finished workout that used it, since its muscles or fatigue
+ *  may have changed. */
+export function useUpdateCustomExercise() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Payload }) => {
+      const { error } = await supabase.rpc('update_custom_exercise', { p_id: id, p: payload as never });
+      if (error) throw error;
+      const first = await supabase.from('workouts').select('started_at, workout_exercises!inner(exercise_id)')
+        .eq('user_id', uid).eq('workout_exercises.exercise_id', id).not('finished_at', 'is', null)
+        .order('started_at').limit(1);
+      if (first.error) throw first.error;
+      return first.data[0]?.started_at ?? null;
+    },
+    onSuccess: (from) => {
+      invalidateExercises(qc, uid);
+      if (from) recomputeInBackground(uid, from);
+    },
+  });
+}
+
+function invalidateExercises(qc: ReturnType<typeof useQueryClient>, uid: string) {
+  qc.invalidateQueries({ queryKey: ['exercises', uid] });
+  qc.invalidateQueries({ queryKey: recoveryKeys.libraryRows() });
+  qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
 }

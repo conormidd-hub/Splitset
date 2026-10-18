@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { recomputeInBackground } from '@/api/workoutLoads';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
-import type { Tables, TablesInsert, Views } from '@/types/database';
+import type { Tables, Views } from '@/types/database';
 
 export type Exercise = Tables<'exercises'>;
 export type Routine = Tables<'routines'>;
@@ -39,23 +39,6 @@ export function useExercises() {
       if (error) throw error;
       return data;
     },
-  });
-}
-
-export function useCreateExercise() {
-  const uid = useUserId();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: Pick<TablesInsert<'exercises'>, 'name' | 'muscle_group' | 'equipment' | 'measure' | 'is_bodyweight' | 'is_unilateral'>) => {
-      const { data, error } = await supabase
-        .from('exercises')
-        .insert({ ...input, owner_id: uid, name: input.name.trim() })
-        .select('*')
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: liftKeys.exercises(uid) }),
   });
 }
 

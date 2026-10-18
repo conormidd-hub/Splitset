@@ -1629,6 +1629,12 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_custom_exercise: {
+        Args: {
+          p: Json
+        }
+        Returns: string
+      }
       delete_my_account: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -1681,6 +1687,13 @@ export type Database = {
           p_request: number
         }
         Returns: Json
+      }
+      update_custom_exercise: {
+        Args: {
+          p_id: string
+          p: Json
+        }
+        Returns: undefined
       }
       verify_intervals_key: {
         Args: {

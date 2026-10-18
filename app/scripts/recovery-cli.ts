@@ -29,9 +29,14 @@
 //       → SessionMap: session_map(workout) over that workout's workout_muscle_loads rows
 //   { "command": "recovery-history", "exercises", "muscles", "loads": LoadWindow, "from": iso, "to": iso, "step_h"?: 24 }
 //       → RecoverySample[]: recovery_history(user, from, to, step)
+//   { "command": "custom-payload", "draft": Partial<Draft>, "similar"?: { "row": ExerciseRow & { name, equipment }, "roles": [...] },
+//     "slug", "today", "bodyweight_kg"? }
+//       → Payload: what the New exercise screen saves (build phase 8), starting from the similar
+//         exercise when one is given
 
 import { readFileSync } from 'node:fs';
 
+import { emptyDraft, fromSimilar, toPayload, type Draft, type SourceRow } from '../src/lib/recovery/customExercise.ts';
 import { setRowPayload, type ExerciseFacts, type SetRow, type WorkoutRef } from '../src/lib/lifting/setRow.ts';
 import { buildLibrary } from '../src/lib/recovery/engine.ts';
 import { hoursOf, strengthReference, toPbHistory, type PbHistoryRow } from '../src/lib/recovery/pbHistory.ts';
@@ -99,6 +104,12 @@ function handle(req: Request): unknown {
       const { lib, keyOf } = libraryFromRows(req.exercises as ExerciseRow[], req.muscles as ExerciseMuscleRow[]);
       return recoveryHistory({ c, lib }, keyOf, req.loads as LoadWindow, hoursOf(String(req.from)), hoursOf(String(req.to)),
         (req.step_h as number | undefined) ?? 24);
+    }
+    case 'custom-payload': {
+      const sim = req.similar as { row: SourceRow; roles: { muscle_id: string; role: string }[] } | undefined;
+      let draft: Draft = { ...emptyDraft(), ...(req.draft as Partial<Draft>) };
+      if (sim) draft = { ...fromSimilar(draft, sim.row, sim.roles), ...(req.draft as Partial<Draft>), similar: sim.row.slug };
+      return toPayload(c, draft, { slug: String(req.slug), today: String(req.today), bodyweightKg: (req.bodyweight_kg as number | undefined) ?? null });
     }
     default:
       throw new Error(`unknown command ${req.command}`);

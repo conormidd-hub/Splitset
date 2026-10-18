@@ -5,7 +5,6 @@ import { FlatList, View } from 'react-native';
 import { useExercises, type Exercise } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { useExerciseRoles, useMuscleNames, useReferenceLines } from '@/api/recovery';
-import { ExerciseForm } from '@/components/lift/ExerciseForm';
 import { GroupFilter } from '@/components/lift/GroupFilter';
 import { PickerRow } from '@/components/lift/PickerRow';
 import { Button } from '@/components/ui/Button';
@@ -25,7 +24,6 @@ export default function ExercisePicker() {
   const exercises = useExercises();
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const units = useUnits();
   const roles = useExerciseRoles();
@@ -47,21 +45,20 @@ export default function ExercisePicker() {
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
       <FlatList
-        data={creating ? [] : rows}
+        data={rows}
         keyExtractor={(e) => e.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: space.lg, paddingBottom: space.xxl }}
         ListHeaderComponent={
           <View style={{ gap: space.md, marginBottom: space.md }}>
-            {creating ? (
-              <ExerciseForm initialName={query} onDone={(e) => (e ? choose(e) : setCreating(false))} />
-            ) : (
-              <>
-                <TextField value={query} onChangeText={setQuery} placeholder="Search exercises" autoCapitalize="none" autoFocus />
-                <GroupFilter value={group} onChange={setGroup} />
-                <Button title={query.trim() ? `Create "${query.trim()}"` : 'Create a new exercise'} variant="secondary" small onPress={() => setCreating(true)} />
-              </>
-            )}
+            <TextField value={query} onChangeText={setQuery} placeholder="Search exercises" autoCapitalize="none" autoFocus />
+            <GroupFilter value={group} onChange={setGroup} />
+            <Button
+              title={query.trim() ? `Create "${query.trim()}"` : 'Create a new exercise'}
+              variant="secondary"
+              small
+              onPress={() => router.push({ pathname: '/lift/exercises/new', params: { name: query.trim(), target: target === 'routine' ? 'routine' : 'workout' } })}
+            />
           </View>
         }
         renderItem={({ item, index }) => (
@@ -76,7 +73,7 @@ export default function ExercisePicker() {
             nameOf={names}
           />
         )}
-        ListEmptyComponent={creating ? null : exercises.isLoading ? <Loading /> : <T tone="mut" align="center">No matches. Create it above.</T>}
+        ListEmptyComponent={exercises.isLoading ? <Loading /> : <T tone="mut" align="center">No matches. Create it above.</T>}
       />
     </View>
   );
