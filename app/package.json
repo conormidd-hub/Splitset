@@ -53,6 +53,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "gen:body-figure": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-body-figure.ts",
+    "gen:library-order": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-library-order.ts",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
   },
   "private": true

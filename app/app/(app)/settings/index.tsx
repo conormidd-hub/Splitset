@@ -164,6 +164,13 @@ export default function Settings() {
         />
       </Card>
 
+      {/* development builds only: the recovery map at any instant, light or dark (build phase 6) */}
+      {__DEV__ ? (
+        <Card title="Developer" subtitle="Only in development builds">
+          <Button title="Recovery map preview" variant="secondary" small onPress={() => router.push('/lift/recovery-dev')} />
+        </Card>
+      ) : null}
+
       <Card title="Account">
         <View style={{ gap: space.sm }}>
           <Button title="Sign out" variant="secondary" onPress={() => signOut()} />

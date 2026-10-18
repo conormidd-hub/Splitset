@@ -1,6 +1,6 @@
-// TEMPORARY (build phase 6): a dev-only screen to look at the body map before Phase 7 places it.
-// It shows the recovery map at any instant, or one finished workout's session map, in the app's
-// theme or forced light or dark. Development builds only; Phase 7 replaces it.
+// Development builds only (build phases 6 and 7): the recovery map at any instant, or one
+// finished workout's session map, in the app's theme or forced light or dark. Opened from
+// Settings → Developer; production builds show neither the card nor this screen.
 
 import { useState } from 'react';
 import { View } from 'react-native';
@@ -73,7 +73,7 @@ function RecoveryDevScreen() {
 
   return (
     <Screen>
-      <Card title="Recovery map (dev preview)" subtitle="Temporary: Phase 7 puts the figure in its real places.">
+      <Card title="Recovery map (dev preview)" subtitle="Development builds only. The real screens are Lift → Recovery and the Today card.">
         <View style={{ gap: space.md }}>
           <Segmented options={[{ value: 'recovery', label: 'Recovery' }, { value: 'session', label: 'Session' }]} value={mode} onChange={setMode} />
           {mode === 'recovery' ? (

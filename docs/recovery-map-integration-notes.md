@@ -1073,3 +1073,106 @@ Phase 7 replaces this screen and its Lift link.
 
 - **`scripts/build_body_map.py`** still generates the old figure. Running it would overwrite the coral files; regenerate from `assets/source/build_figure.py` instead.
 - **Spec §9's colour table,** and its note that the silhouette differs from Ready, describe the old palette. `recovery_constants.json` is the source of truth.
+
+---
+
+## 22. Phase 7: decisions made
+
+Phase 7 output · 2026-10-18. The map on real screens.
+
+### 22.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Role tints | **Three tints of the app accent** (purple in light, green in dark), mixed towards the Ready grey: primary is the accent, then 45 % and 72 % of the way to the grey. They're unlike the coral tiredness colours, so an exercise's mini figure never reads as fatigue. Not a model constant: `recovery_constants.json` has none for this, and it's UI theming |
+| "Biggest groups first" | **By body region:** Legs, Back, Chest, Shoulders, Arms, Core (`REGION_ORDER`), then spec §2 order within a region |
+| Train next placement | **On the Recovery screen only.** The Today card stays compact |
+| Picker | **Every row shows the load split bar and the PB source line;** an info button expands the row to show the mini figure. The detail screen always shows it |
+
+### 22.2 Pure helpers (`src/lib/recovery/screens.ts`, tested)
+
+1. **`nextReady(c, map)`:** muscles not trainable now (level above `trainable_max_level`) that become trainable within `NEXT_READY_HOURS` (24, from the plan), soonest first.
+2. **`mostTired(map, n)`:** highest level, then F. It gives the Today card's line.
+3. **`trainNext(map, exercises)`:** Ready muscles in region order, each with up to three exercises (`TRAIN_NEXT_EXERCISES`) where it's primary. They're ordered by that muscle's `load_split` share, then library order. Only library exercises qualify (custom and legacy ones have no slug), and a Ready muscle with none is left out.
+4. **Library order:** `data/exercise_library.json` stays out of the bundle. `npm run gen:library-order` (`app/scripts/gen-library-order.ts`) copies just its exercise order and each muscle's group into `src/lib/recovery/libraryOrder.ts`, and a test fails if they ever differ. This is the same pattern as the figure.
+5. **`sessionRows(session, nameOf)`:** one row per muscle the workout loaded, heaviest first, worded as the plan's example: "Chest · load 2.48 · High · trainable in 24 h · ready in 2.2 days".
+   - **Times count from the workout's finish** (`trainable_after_h` and `ready_after_h`), so on an old workout they say how long recovery took, not how long is left.
+   - **At zero,** the row says "trainable now".
+6. **`roleFigure(roles, tints, ready)`:** an exercise's `exercise_muscles` as a figure map the Phase 6 `BodyMap` draws unchanged.
+7. **`loadSplit(c, stored, roles)`:**
+   - the stored `load_split`;
+   - for an exercise without one (a Phase 8 custom exercise), spec §6's formula: role weight ÷ the sum, rounded by largest remainder to add to 100.
+
+   A test checks the formula reproduces the stored split for all 161 library exercises.
+
+### 22.3 Screens
+
+8. **Recovery screen (`lift/recovery.tsx`):**
+   - **Layout:** the Phase 6 `RecoveryFigure` (front first on a phone, side by side from 640 px, the Figure/List toggle, legend, tap sheet, "Updating…"), then "Next ready", then Train next, whose exercises open their detail screens.
+   - **Reached from:** a Recovery button on the Lift screen, and the Today card.
+9. **Today card (`RecoveryHomeCard`, after the Lifting card):** a small front-and-back figure, the two most tired muscles, and the next muscle to become trainable. Tapping it opens the Recovery screen.
+10. **Workout summary (`history/[id]`):**
+    - a "Muscles worked" card at the top, with the session figure (tappable for the Phase 6 sheet) and `sessionRows`;
+    - Finish already lands on this screen;
+    - unfinished workouts don't show the card.
+11. **Live workout:** `LiveSessionFigure` sits above the exercises, from Phase 4's `useLiveSession()`.
+    - It fills in as sets are ticked and names the muscles above Ready.
+    - A sliver of load on a muscle reads as nothing yet, rather than "front delts ready".
+    - Tapping a muscle shows its L and when it'll be trainable and ready after this session.
+    - Logging itself is unchanged.
+12. **Picker (`PickerRow`):** name and kind, the load split bar, and the PB source line:
+    - "PB 120 kg · logged", "PB … · manual", "PB … · lapsed";
+    - "~41 kg · estimated from Bench press (barbell)";
+    - "calibrating: …".
+
+    Fixed-cost exercises show no line. The PB lines come from one read of the whole PB history, resolved per row by the Phase 3 `strengthReference`.
+13. **Exercise detail:** a "Muscles" card (mini figure, split bar and a key to the tints) above the Phase 3 PB section, which already shows the PB source line.
+14. **Dev screen:** the Lift link is gone. Settings has a "Developer" card in development builds only (`__DEV__`), which opens the same preview with its time picker. Production and Vercel builds show neither the card nor the screen.
+
+### 22.4 Hooks and components
+
+15. **`src/api/recovery.ts` gains:**
+    - `useExerciseRoles()`: `exercise_muscles` by exercise;
+    - `useTrainNext(map)`;
+    - `useReferenceLines(formatKg)`: the picker's PB lines.
+16. **`src/components/recovery/` gains:**
+    - `FigurePair`: front and back at a fixed size, with optional tap detail;
+    - `ExerciseMuscles` with `LoadSplitBar` and `useRoleTints`;
+    - `NextReadyStrip`, `TrainNextCard` and `SessionMuscleRows` (in `RecoveryExtras.tsx`);
+    - `RecoveryHomeCard` and `LiveSessionFigure`.
+
+    `src/components/lift/PickerRow.tsx` is the picker's row.
+
+### 22.5 Tests
+
+- **`npm test`: 135 tests.** The new `screens.test.ts` covers:
+  - **The library copy:** the generated order and groups match the library.
+  - **F26 at Wednesday 20:00:**
+    - Next ready is traps, biceps, glutes, quads (hamstrings need just over 24 h);
+    - most tired is hamstrings, then quads;
+    - Train next lists front delts, side delts, forearms, abs, obliques, with exact exercises for side delts (cable, machine, dumbbell lateral raise) and front delts (dumbbell and cable front raise, Arnold press);
+    - custom exercises are never suggested.
+  - **F20's summary rows:** exact strings, including chest's "trainable in 24 h · ready in 2.2 days".
+  - **Role tints and the load split,** including the formula against every library exercise.
+- **pytest:** 79 passed, 38 skipped (the database tests, unchanged).
+
+### 22.6 Checked in the web preview (2026-10-18, demo athlete)
+
+- **Recovery screen, at the seeded Wednesday 20:00:** "Next ready" shows traps 1 h, biceps 12 h, glutes 17 h and quads 22 h, and Train next is as the test says.
+- **Today card:** "Hamstrings · Very high, Quads · High, Traps & upper back trainable in 1 h".
+- **Legs summary:** the rows read "Hamstrings · load 2.61 · Very high · trainable in 1.1 days · ready in 2.3 days", and so on.
+- **Exercise detail (bench):** chest primary, with front delts and triceps secondary on the front and back views.
+- **Picker:** split bars, PB lines, and the expanding mini figure.
+- **Settings → Developer:** opens the preview.
+- **"Done when":**
+  - I logged a push day through the logger (bench 3 × 90 × 8, dumbbell shoulder press 2 × 22.5 × 8, lateral raise 2 × 10 × 15), and the live figure filled in as sets were ticked.
+  - Finish showed the session map and rows: side delts 1.16, front delts 1.02, chest 0.96, triceps 0.64, traps 0.31.
+  - The Recovery screen, opened without a reload, moved accordingly: chest went from Low (0.40) to Moderate (1.36), and front and side delts from Ready to Moderate.
+- **Afterwards:** the F26 seed was re-run, so the demo again holds just the F26 week.
+
+### 22.7 Ambiguities resolved
+
+- **"Biggest groups first," "three tints of one colour" and where Train next lives:** settled with Conor (22.1).
+- **"Muscles becoming trainable in the next 24 h":** only muscles not trainable now, so a muscle that's already trainable isn't "becoming" it.
+- **"trainable in 24 h" on the workout summary:** counted from the workout's finish (22.2, item 5).
+- **"PB source line" in the picker:** a one-line form of the Phase 3 source label, beside the reference it gives.

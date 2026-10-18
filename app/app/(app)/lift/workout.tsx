@@ -10,6 +10,7 @@ import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { useCurrentBodyweight, useManualBests, useThresholds } from '@/api/recovery';
 import { LivePbPanel, metricsFor } from '@/components/pbs/LivePbPanel';
+import { LiveSessionFigure } from '@/components/recovery/LiveSessionFigure';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
@@ -150,6 +151,8 @@ export default function ActiveWorkoutScreen() {
               <Button title="Retry now" small variant="secondary" onPress={() => flush()} />
             </View>
           ) : null}
+
+          {workout.exercises.length ? <LiveSessionFigure /> : null}
 
           {workout.exercises.map((block) => (
             <ExerciseCard key={block.id} block={block} units={units} />

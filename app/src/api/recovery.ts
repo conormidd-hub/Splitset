@@ -8,6 +8,7 @@ import { useNowHour, useNowMinute } from '@/lib/clock';
 import { buildLibrary, sessionMap } from '@/lib/recovery/engine';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
 import { muscleFallbackName } from '@/lib/recovery/figure';
+import { trainNext, type TrainExercise } from '@/lib/recovery/screens';
 import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory } from '@/lib/recovery/pbHistory';
 import {
   historyWindow, isoOfHours, readSpanHours, readWindow, recoveryHistory, recoveryMapAt, sessionMapFromLoads, sessionView,
@@ -330,4 +331,65 @@ export function useMuscleNames(): (id: string) => string {
     },
   });
   return (id: string) => q.data?.get(id) ?? muscleFallbackName(id);
+}
+
+// ---------------------------------------------------------------- the screens (build phase 7)
+
+export type MuscleRole = { muscle_id: string; role: string };
+
+/** Each exercise's muscles by role (exercise_muscles), by exercise id. */
+export function useExerciseRoles(): Map<string, MuscleRole[]> | null {
+  const library = useLibraryRows();
+  if (!library.data) return null;
+  const out = new Map<string, MuscleRole[]>();
+  for (const m of library.data.muscles) {
+    const list = out.get(m.exercise_id);
+    if (list) list.push(m);
+    else out.set(m.exercise_id, [m]);
+  }
+  return out;
+}
+
+/** Train next (build phase 7) for a recovery map: Ready muscles with three exercises each. */
+export function useTrainNext(map: RecoveryMap | null) {
+  const exercises = useExercises();
+  const roles = useExerciseRoles();
+  if (!map || !exercises.data || !roles) return null;
+  const candidates: TrainExercise[] = exercises.data.map((e) => ({
+    id: e.id, name: e.name, slug: e.slug,
+    primary: (roles.get(e.id) ?? []).filter((r) => r.role === 'primary').map((r) => r.muscle_id),
+    split: e.load_split && typeof e.load_split === 'object' && !Array.isArray(e.load_split) ? (e.load_split as Record<string, number>) : {},
+  }));
+  return trainNext(map, candidates);
+}
+
+/**
+ * The picker's PB source line for any exercise: "PB 120 kg · logged", "~86 kg · estimated from
+ * Bench press (barbell)", "calibrating", or null for exercises that need no reference. Reads the
+ * whole PB history once; `formatKg` is the units-aware weight formatter.
+ */
+export function useReferenceLines(formatKg: (kg: number) => string): ((exercise: Exercise) => string | null) | null {
+  const uid = useUserId();
+  const c = useThresholds();
+  const exercises = useExercises();
+  const nowMs = useNowHour();
+  const rows = useQuery({ queryKey: recoveryKeys.allHistory(uid), queryFn: () => fetchPbHistoryRows(uid, null), enabled: !!uid });
+  if (!exercises.data || !rows.data) return null;
+  const { lib, keyOf, nameOf } = libraryOf(exercises.data);
+  const m: Model = { c, lib };
+  const history = toPbHistory(rows.data, (id) => keyOf.get(id));
+  const now = hoursOf(nowMs);
+  return (exercise) => {
+    const key = engineKey(exercise);
+    const def = lib.get(key);
+    if (!def || def.load_mode === 'fixed') return null;
+    const ref = strengthReference(m, key, now, history, (k) => nameOf.get(k));
+    if (ref.pb == null) return 'calibrating: the first session sets the reference';
+    switch (ref.tone) {
+      case 'estimated': return `~${formatKg(ref.pb)} · ${ref.label.charAt(0).toLowerCase()}${ref.label.slice(1)}`;
+      case 'lapsed': return `PB ${formatKg(ref.pb)} · lapsed`;
+      case 'manual': return `PB ${formatKg(ref.pb)} · manual`;
+      default: return `PB ${formatKg(ref.pb)} · logged`;
+    }
+  };
 }

@@ -2,7 +2,10 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
 
 import { useDeleteWorkout, useWorkout } from '@/api/lifting';
-import { useUnits } from '@/api/profile';
+import { useProfile, useUnits } from '@/api/profile';
+import { useMuscleNames, useSessionMap } from '@/api/recovery';
+import { FigurePair } from '@/components/recovery/FigurePair';
+import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
@@ -22,6 +25,9 @@ export default function WorkoutHistory() {
   const { palette } = useTheme();
   const q = useWorkout(id);
   const del = useDeleteWorkout();
+  const session = useSessionMap(q.data?.finished_at ? id : undefined);
+  const names = useMuscleNames();
+  const profile = useProfile();
   const w = q.data;
 
   if (q.isLoading) return <Screen><Loading /></Screen>;
@@ -46,6 +52,15 @@ export default function WorkoutHistory() {
           <T variant="h1">{w.name}</T>
           <T tone="mut">{longDate(w.started_at)} · {shortTime(w.started_at)}{w.finished_at ? ` to ${shortTime(w.finished_at)}` : ' · unfinished'}</T>
         </View>
+        {w.finished_at && session.data ? (
+          <Card title="Muscles worked" subtitle="This workout's load on each muscle, and when each is trainable and ready again after it">
+            <View style={{ gap: space.md }}>
+              <FigurePair map={session.data} mode="session" figureWidth={110} nameOf={names} detail labels timeZone={profile.data?.timezone} />
+              <SessionMuscleRows session={session.data} nameOf={names} />
+            </View>
+          </Card>
+        ) : null}
+
         <Card>
           <Grid>
             <StatTile label="Duration" value={formatDurationShort(duration)} />

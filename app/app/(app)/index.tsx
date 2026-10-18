@@ -18,6 +18,7 @@ import { InFocusCard } from '@/components/home/InFocusCard';
 import { StreakButton } from '@/components/home/StreakButton';
 import { StreakHeat } from '@/components/home/StreakHeat';
 import { PbButton } from '@/components/pbs/PbButton';
+import { RecoveryHomeCard } from '@/components/recovery/RecoveryHomeCard';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
@@ -288,6 +289,8 @@ export default function Today() {
           </View>
         )}
       </Card>
+
+      <RecoveryHomeCard />
 
       <TrophyCabinet units={units} />
 

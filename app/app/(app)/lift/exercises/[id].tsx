@@ -3,8 +3,10 @@ import { View } from 'react-native';
 
 import { useExerciseHistory, useExercises, useRecords } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
+import { useExerciseRoles, useMuscleNames } from '@/api/recovery';
 import { LineChart } from '@/components/charts/LineChart';
 import { StrengthReference } from '@/components/pbs/StrengthReference';
+import { ExerciseMuscles } from '@/components/recovery/ExerciseMuscles';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
@@ -22,6 +24,8 @@ export default function ExerciseDetail() {
   const exercises = useExercises();
   const records = useRecords();
   const history = useExerciseHistory(id, 30);
+  const roles = useExerciseRoles();
+  const names = useMuscleNames();
   const exercise = exercises.data?.find((e) => e.id === id);
   const record = records.data?.find((r) => r.exercise_id === id);
   const unit = units === 'imperial' ? 'lb' : 'kg';
@@ -35,6 +39,14 @@ export default function ExerciseDetail() {
             <T variant="h1">{exercise.name}</T>
             <T tone="mut">{[exercise.muscle_group, exercise.equipment, exercise.is_unilateral ? 'one side at a time' : null].filter(Boolean).join(' · ')}</T>
           </View>
+        ) : null}
+
+        {exercise && roles ? (
+          <Card title="Muscles" subtitle="Where one set's load lands">
+            {roles.get(exercise.id)?.length
+              ? <ExerciseMuscles split={exercise.load_split} roles={roles.get(exercise.id)!} nameOf={names} figureWidth={96} />
+              : <T tone="mut">No muscles are mapped to this exercise, so it adds no load to the recovery map.</T>}
+          </Card>
         ) : null}
 
         {exercise ? <StrengthReference exercise={exercise} /> : null}
