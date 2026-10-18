@@ -1366,3 +1366,102 @@ Phase 9 output · 2026-10-18. Recovery map settings and the history slider. No m
 - **"Level boundaries (must stay increasing)":** levels 1 to 5's lower bounds, strictly increasing. Ready always starts at 0.
 - **"Changing any of them triggers the Phase 4 recompute":** on Save, over every workout, since a changed threshold can move any of them.
 - **"A date slider over the last 28 days":** 28 daily samples ending now, with the last one live.
+
+## 25. Phase 10: decisions made
+
+Phase 10 output · 2026-10-18. Runs, rides, swims, hikes and rows on the body map. One migration, `20261019000100_activity_loads.sql`, applied to splitset-dev by Conor on 2026-10-18.
+
+### 25.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Are activities imported already? | **Yes.** The intervals.icu sync job (which brings in Garmin and Strava) writes `activities`, heart-rate zone times included (`hr_zone_times`, seconds per zone, zone 1 first). Nothing new to import |
+| Who scores them | **The app**, with the same engine as lifting. The sync job stays as it is; the database never scores |
+| Walks | **Don't count.** Only the five kinds in `cardio.activity_muscles` |
+| Wrap-up | As usual: tests, notes, commit and push |
+
+### 25.2 The scoring (`src/lib/recovery/cardio.ts`, pure, tested)
+
+1. **Activity types map to the five kinds:**
+
+   | Kind | intervals.icu types |
+   |---|---|
+   | run | Run, VirtualRun, TrailRun, Treadmill |
+   | ride | Ride, VirtualRide, GravelRide, MountainBikeRide, EBikeRide, EMountainBikeRide |
+   | swim | Swim, OpenWaterSwim |
+   | hike | Hike |
+   | row | Rowing, VirtualRow |
+
+   Everything else doesn't count: Walk, Workout, WeightTraining (logged as lifting), Tennis, Golf and the rest.
+2. **Equivalent sets, as the plan says:**
+   - minutes in zone `hard_hr_zone_min` (3) or above count at `equiv_sets_per_10min_hard` (1.0 per 10 min);
+   - the rest count at `equiv_sets_per_10min_easy` (0.5 per 10 min);
+   - with no zone data (or all zeros), every minute is easy.
+3. **Minutes are moving time** (elapsed time when there's none). Hard minutes are capped at the moving minutes, since a watch's zone times can add up to slightly more.
+4. **Each kind scores as a library entry built from `cardio.activity_muscles`.** It uses fixed-cost sets (`fixed_set.base`), fatigue standard, and the lifting role weights, through the same `muscleLoads` and `recoveryHours` as a lift.
+   - So L_e = sets × 0.30.
+   - The plan's 90-minute run with 60 minutes hard gives 7.5 sets → 2.25.
+5. **The activity's time is its end:** start plus elapsed time (moving time when there's none). A lift's time is when it finished, so this matches.
+6. **Cardio off** (`cardio.enabled_default` false, a user override) scores nothing.
+
+### 25.3 The database
+
+7. **Activity rows go in `workout_muscle_loads`** with `source = 'activity'`, `activity_id` set and `workout_id` null. That table already allowed this (Phase 2), so Phases 5–7 read them unchanged.
+8. **`save_activity_loads(p)`, security invoker, does the writing.** For each activity it replaces that activity's rows (delete, then insert), so saving twice never doubles a load.
+   - An activity the caller can't see raises "activity … not found".
+   - The end time is computed in SQL from the `activities` row, not trusted from the app.
+   - An activity sent with no muscles just clears its rows.
+9. **`clear_activity_loads()` removes all of the caller's activity rows.** It's used when cardio is turned off.
+10. **`recovery_loads()` now also returns `activities`:** each activity with rows in the window, with its name, type and end. The tap detail uses these to name the activity.
+11. **Execute is granted to `authenticated` only.** It's revoked from `public` and `anon`, as for the earlier functions.
+
+### 25.4 The app
+
+12. **New activities are scored by a catch-up.** It finds the user's countable activities that have no rows yet, scores them and saves them in batches of 50.
+    - The Recovery screen and the Today card start it, at most once every 10 minutes per user.
+    - It reports through `useRecomputeStatus` like the recompute rule.
+    - The sync job runs on its own schedule, so the app can't know when a new run lands. Checking on open is the smallest thing that works without touching the sync job.
+13. **The recompute rule rescores activities too** (from the same point in time). A settings change such as role weights or base hours moves runs as well as lifts. With cardio off, it clears them instead.
+14. **The tap detail lists an activity like an exercise.** It shows the activity's name (its type when it has none), its role for that muscle, when it ended and its load, for example "6 × 1 km · primary · Tue 13 Oct, 07:04 · 1.22". It never gets a "calibrating" tag, since there's no PB to calibrate.
+15. **The Settings toggle is a new Cardio card in Settings → Recovery map:** "Count runs, rides, swims, hikes and rows", On or Off. Choosing Off and saving stores the override `cardio.enabled_default = false`. "Reset to default (on)" deletes it. Saving runs the recompute, which clears or rescores the activities.
+16. **`seed_f26.py`'s check reads only lifting rows.** F26 is a lifting week, and the demo athlete's imported runs now count too.
+
+### 25.5 Tests
+
+- **`npm test`: 161 tests.** The new `cardio.test.ts` covers:
+  - the plan's run: 7.5 equivalent sets → 2.25, giving quads and calves 2.25, hamstrings and glutes 0.90, adductors 0.45;
+  - at t = 0, quads High, with "Long run" the primary contribution of 2.25;
+  - the same run with no heart rate: 90 easy minutes, 4.5 sets → 1.35;
+  - the type mapping, with walks and the rest excluded;
+  - cardio off scores nothing;
+  - calves' recovery window, 24 × (0.5 + 0.3 × 2.25) h.
+- **`db-tests` (CI): 72 tests, 5 of them new (`test_activity_loads.py`):**
+  - the run saved as activity rows with the plan's numbers, and the walk left out;
+  - `recovery_loads` names the run, and the map read back gives quads High with "Long run" on top;
+  - saving again replaces rather than adds;
+  - another user can't save my activity;
+  - cardio off scores nothing, and clearing removes only the caller's rows.
+- **CI fixes:** the first CI run had 2 failures, both in my test expectations:
+  - the Phase 5 owner-only test now expects the `activities` key;
+  - the test ride moved to three days before the run, so the run alone sets the level.
+
+  Green on `517bcc8`.
+- **pytest locally:** 79 passed, 54 skipped (the database tests).
+- **Generated types:** `gen_types.py` against splitset-dev matches the hand-written `database.ts` exactly.
+
+### 25.6 Checked in the web preview (2026-10-18, demo athlete)
+
+- **Catch-up:** opening the Recovery screen scored all 216 of the demo athlete's runs, rides and hikes (1,067 rows). The 124 activities on Conor's own account are untouched until he opens the screen himself.
+- **Tap detail:** quads now lists "6 × 1 km · Tue 13 Oct · 1.22" among the week's lifts, with weekly load 3.90.
+- **The plan's "done when":** the slider on Tue 13 Oct, 22:00 shows the legs coloured, with quads Moderate and calves Low and almost no lifting that week. The quads sheet lists Long run 1.74, 6 × 1 km 1.22, Parkrun 0.57 and Morning Run 0.49.
+- **Cardio Off + Save:** every activity row was cleared, the run left the quads sheet, and weekly load fell from 3.90 to 2.68 (exactly the run's 1.22).
+- **"Reset to default (on)" + Save:** all 216 were scored again, with the same 1,067 rows.
+- **Console:** clean.
+- **Afterwards:** the F26 seed was re-run.
+
+### 25.7 Ambiguities resolved
+
+- **"Same role weights as lifting":** the user's own role weights, overrides included, so the Phase 9 settings apply to runs too.
+- **"The tap detail shows 'Long run (Sun): load 2.25'":** the activity appears as a row in the existing sheet, in the same format as a lift (name, day and time, load), rather than in a new layout.
+- **"Settings toggle stored as the user override":** an override row only while it's off, deleted when reset, the same as every other setting (Phase 9). The default in `recovery_constants.json` is unchanged.
+- **Time of an activity:** its end, the same as a lift's.
