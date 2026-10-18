@@ -7,7 +7,7 @@ import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
 import { DEFAULT_LAYOUT, useHomeLayout } from '@/api/home';
 import { useWorkouts } from '@/api/lifting';
-import { useRunPbs } from '@/api/pbs';
+import { useLiftPbs, useRunPbs } from '@/api/pbs';
 import { planTypeLabel, usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { useTrainingSessions } from '@/api/streaks';
@@ -59,6 +59,7 @@ export default function Today() {
   const wellness = useWellness(90);
   const workouts = useWorkouts(60);
   const runPbs = useRunPbs();
+  const liftPbs = useLiftPbs();
   const training = useTrainingSessions();
   const today = todayIso();
   const plan = usePlanRange(today, today);
@@ -72,10 +73,11 @@ export default function Today() {
     activities: recent.data ?? [],
     workouts: workouts.data ?? [],
     runPbs: runPbs.data,
+    liftPbs: liftPbs.data,
     profile: profile.data ?? null,
     units,
     today,
-  }), [wellness.data, recent.data, workouts.data, runPbs.data, profile.data, units, today]);
+  }), [wellness.data, recent.data, workouts.data, runPbs.data, liftPbs.data, profile.data, units, today]);
 
   // the streak and the heat line read two years of workouts, lightly
   const sessions = useMemo(

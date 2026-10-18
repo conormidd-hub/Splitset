@@ -1,6 +1,9 @@
 """Database tests for build phase 10: imported activities saved to workout_muscle_loads with
 source = 'activity' through save_activity_loads() as their owner, read back by recovery_loads()
 with their names for the tap detail, cleared when cardio is off, and refused for anyone else.
+Then the activity's life after its first scoring, as the app's catch-up meets it: saving again
+moves t_w when the activity was cropped, an activity retyped to Walk is cleared by saving it
+with no muscles, and deleting an activity takes its rows with it.
 Every number comes from the app's engine (app/scripts/recovery-cli.ts `score-activities`).
 
 Like the other database tests, these run only when SPLITSET_TEST_DB_URL points at a local
@@ -157,3 +160,55 @@ def test_db_cardio_off_scores_nothing_and_clears(conn, saved):
         conn.rollback()
         raise
     assert n == 5 + 4 and rows(conn, "t10-run") == {} and rows(conn, "t10-ride") == {}   # run: 5 muscles; ride: 4
+
+
+# ---------------------------------------------------------------- after the first scoring
+# These run after the cardio-off test (pytest keeps file order) and remove their own activities,
+# so its count of cleared rows stays the run's and the ride's.
+
+def as_sync(conn, sql: str, params: tuple = ()) -> None:
+    """A change the sync job makes to an activity (it writes them; the app can't)."""
+    conn.execute(sql, params)
+    conn.commit()
+
+
+def test_db_saving_again_moves_t_w_when_the_activity_was_cropped(conn):
+    start = START + timedelta(days=2)
+    add_activity(conn, U_RUNNER, "t10-crop", "Run", "Cropped run", start, 60, None)
+    conn.commit()
+    try:
+        save(conn, U_RUNNER, scored(conn, U_RUNNER, ["t10-crop"]))
+        assert {r["finished_at"] for r in rows(conn, "t10-crop").values()} == {start + timedelta(minutes=60)}
+        # a later sync brings the activity back with more elapsed time (a pause kept, say); the
+        # moving time and so the load stay, t_w moves once the app sends it again
+        as_sync(conn, "update public.activities set elapsed_time_s = 75 * 60 where id = 't10-crop'")
+        save(conn, U_RUNNER, scored(conn, U_RUNNER, ["t10-crop"]))
+        run = rows(conn, "t10-crop")
+        assert {r["finished_at"] for r in run.values()} == {start + timedelta(minutes=75)}
+        assert run["quads"]["load"] == pytest.approx(6 * 0.5 * 0.30)    # 60 easy minutes, no heart rate
+    finally:
+        as_sync(conn, "delete from public.activities where id = 't10-crop'")
+
+
+def test_db_a_run_retyped_to_walk_is_cleared_by_saving_it_with_no_muscles(conn):
+    add_activity(conn, U_RUNNER, "t10-retyped", "Run", "Evening walk", START + timedelta(days=3), 45, None)
+    conn.commit()
+    try:
+        save(conn, U_RUNNER, scored(conn, U_RUNNER, ["t10-retyped"]))
+        assert len(rows(conn, "t10-retyped")) == 5
+        as_sync(conn, "update public.activities set type = 'Walk' where id = 't10-retyped'")
+        assert scored(conn, U_RUNNER, ["t10-retyped"]) == []     # a walk doesn't count
+        # what the app's catch-up sends for an activity with rows that no longer counts (activityChanges)
+        save(conn, U_RUNNER, [{"activity_id": "t10-retyped", "muscles": []}])
+        assert rows(conn, "t10-retyped") == {}
+    finally:
+        as_sync(conn, "delete from public.activities where id = 't10-retyped'")
+
+
+def test_db_deleting_an_activity_takes_its_rows_with_it(conn):
+    add_activity(conn, U_RUNNER, "t10-gone", "Run", "Deleted run", START + timedelta(days=4), 30, None)
+    conn.commit()
+    save(conn, U_RUNNER, scored(conn, U_RUNNER, ["t10-gone"]))
+    assert len(rows(conn, "t10-gone")) == 5
+    as_sync(conn, "delete from public.activities where id = 't10-gone'")     # the foreign key cascades
+    assert rows(conn, "t10-gone") == {}

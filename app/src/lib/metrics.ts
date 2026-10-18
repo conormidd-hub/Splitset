@@ -1,11 +1,12 @@
 import { isRun, type ActivityListRow } from '@/api/activities';
 import type { WorkoutSummary } from '@/api/lifting';
-import type { PbPeriods, RunPb } from '@/api/pbs';
+import type { LiftPbIndex, PbPeriods, RunPb } from '@/api/pbs';
 import type { Profile } from '@/api/profile';
 import type { WellnessDay } from '@/api/wellness';
 import type { Point } from '@/components/charts/LineChart';
 import { isoDate, relativeDay, weekStartIso } from './dates';
 import { ICONS, type IconName } from './icons';
+import { countNewPbs } from './newPbs';
 import { isNewThisMonth } from './pbs';
 import { hrvStatus, readinessSeries, trainingReadiness, trainingStatus } from './readiness';
 import { acwr, dayMs, rolling } from './trends';
@@ -293,6 +294,8 @@ export type MetricInputs = {
   /** Newest first, as useWorkouts returns. */
   workouts: WorkoutSummary[];
   runPbs?: Map<string, PbPeriods<RunPb>>;
+  /** Lifting bests, so the PBs tile counts them as the trophy cabinet does. */
+  liftPbs?: LiftPbIndex;
   profile?: Pick<Profile, 'birth_year' | 'sex' | 'timezone'> | null;
   units: Units;
   /** isoDate of today in the device's zone. */
@@ -640,8 +643,7 @@ export function snapshot(id: MetricId, inputs: MetricInputs): Snapshot {
       return { id, value: null, text: a.name ?? a.type, sub: `${relativeDay(a.start_time_local)} · ${main}`, subTone: 'mut', date: localDate(a), spark: [], href: `/run/${a.id}` };
     }
     case 'pbs': {
-      let n = 0;
-      for (const p of inputs.runPbs?.values() ?? []) if (isNewThisMonth(p.all?.start_time_local)) n++;
+      const n = countNewPbs(inputs.runPbs, inputs.liftPbs, isNewThisMonth);
       return { id, value: n, text: `${n}`, sub: n ? `new this month` : 'none yet this month', subTone: n ? 'accent' : 'mut', spark: [], href: '/pbs' };
     }
     default: {

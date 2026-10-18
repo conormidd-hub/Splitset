@@ -142,19 +142,56 @@ export interface ScoringRows {
   history: readonly PbHistoryRow[];
 }
 
+/** Items grouped by key, each group in the items' original order. */
+function groupBy<T>(items: readonly T[], key: (x: T) => string): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const x of items) {
+    const k = key(x);
+    const list = out.get(k);
+    if (list) list.push(x);
+    else out.set(k, [x]);
+  }
+  return out;
+}
+
 /**
  * The cache rows of every finished workout in `rows.workouts`, in time order (by finished_at):
  * each scored by the engine against the PB history dated before it started. This is the
  * recompute rule's scoring (§14) and finishing's, for one workout or many.
+ *
+ * A full recompute scores every workout, so the rows are grouped once rather than scanned per
+ * workout: each workout gets only its own blocks and sets, and only the PB records of its
+ * exercises and the ones they estimate from (the only records pbBefore reads, in their original
+ * order), so the results are the same as scoring against everything.
  */
 export function scoreFinishedWorkouts(rows: ScoringRows): WorkoutLoads[] {
   const { lib, keyOf, idOf } = libraryFromRows(rows.exercises, rows.muscles);
   const m: Model = { c: rows.thresholds, lib };
   const history = toPbHistory(rows.history, (id) => keyOf.get(id));
+  const blocksOf = groupBy(rows.blocks, (b) => b.workout_id);
+  const setsOf = groupBy(rows.sets, (s) => s.workout_exercise_id);
+  const historyOf = groupBy(history, (h) => h.slug);
+  // an exercise and every exercise its pb_estimate links lead to (a loop ends where it repeats)
+  const chains = new Map<string, string[]>();
+  const chain = (key: string): string[] => {
+    let keys = chains.get(key);
+    if (!keys) {
+      keys = [];
+      for (let cur: string | undefined = key; cur != null && !keys.includes(cur); cur = lib.get(cur)?.pb_estimate?.from) keys.push(cur);
+      chains.set(key, keys);
+    }
+    return keys;
+  };
   return rows.workouts
     .filter((w) => w.finished_at)
     .sort((a, b) => Date.parse(a.finished_at!) - Date.parse(b.finished_at!))
-    .map((w) => cacheRows(w.id, scoreWorkout(m, engineWorkout(w, rows.blocks, rows.sets, keyOf), history, w.bodyweight_kg), idOf));
+    .map((w) => {
+      const blocks = blocksOf.get(w.id) ?? [];
+      const workout = engineWorkout(w, blocks, blocks.flatMap((b) => setsOf.get(b.id) ?? []), keyOf);
+      const slugs = new Set(workout.exercises.flatMap(([key]) => chain(key)));
+      const relevant = [...slugs].flatMap((slug) => historyOf.get(slug) ?? []);
+      return cacheRows(w.id, scoreWorkout(m, workout, relevant, w.bodyweight_kg), idOf);
+    });
 }
 
 // ---------------------------------------------------------------- a workout in progress

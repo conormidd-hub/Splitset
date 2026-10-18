@@ -119,6 +119,33 @@ export function isOverridden(rows: readonly ThresholdOverride[], edits: Edits, k
   return key in edits ? edits[key] != null : rows.some((r) => r.key === key);
 }
 
+/**
+ * The value `key` would have with no row of its own, under the user's other rows and edits: what
+ * "Reset to default" gives it. For a muscle without its own base hours in the constants, that is
+ * "Every other muscle", the user's value of it included.
+ */
+export function resetValue(base: Thresholds, userId: string, rows: readonly ThresholdOverride[], edits: Edits, key: string): number | string | boolean {
+  return valueAt(afterEdits(base, userId, rows, { ...edits, [key]: null }), key);
+}
+
+/** Whether a setting is a muscle's base hours that follows "Every other muscle" when reset. */
+export function followsDefault(base: Thresholds, key: string): boolean {
+  return key.startsWith('base_recovery_hours.') && key !== 'base_recovery_hours.default' && leaf(base, key) === undefined;
+}
+
+/**
+ * `edits` with `key` set to `value` (null resets it). A value equal to the key's reset value is a
+ * reset, a reset of a key with no row is no edit at all, and a value equal to the saved row is no
+ * edit either, so a + then a − leaves nothing to save.
+ */
+export function withEdit(base: Thresholds, userId: string, rows: readonly ThresholdOverride[], edits: Edits,
+  key: string, value: number | string | boolean | null): Edits {
+  const rest = Object.fromEntries(Object.entries(edits).filter(([k]) => k !== key));
+  const row = rows.find((r) => r.user_id === userId && r.key === key);
+  if (value != null && value !== resetValue(base, userId, rows, edits, key)) return row && row.value === value ? rest : { ...rest, [key]: value };
+  return row ? { ...rest, [key]: null } : rest;
+}
+
 /** What stops `edits` saving, in words; empty when they can be saved. */
 export function validateEdits(base: Thresholds, userId: string, rows: readonly ThresholdOverride[], edits: Edits, defs: readonly Setting[]): string[] {
   const out: string[] = [];
@@ -144,14 +171,17 @@ export function validateEdits(base: Thresholds, userId: string, rows: readonly T
 }
 
 /**
- * The writes that save `edits`: rows to upsert, and keys to delete (a reset, or a value equal to
- * the constants' own default, so no copy of a default is ever stored).
+ * The writes that save `edits` over the user's `rows`: rows to upsert, and keys to delete (a
+ * reset, or a value equal to the key's reset value, so no copy of a default is ever stored and a
+ * muscle at "Every other muscle"'s hours keeps following it).
  */
-export function diffOverrides(base: Thresholds, edits: Edits): { upsert: { key: string; value: number | string | boolean }[]; remove: string[] } {
+export function diffOverrides(base: Thresholds, userId: string, rows: readonly ThresholdOverride[], edits: Edits): {
+  upsert: { key: string; value: number | string | boolean }[]; remove: string[];
+} {
   const upsert: { key: string; value: number | string | boolean }[] = [];
   const remove: string[] = [];
   for (const [key, value] of Object.entries(edits)) {
-    if (value == null || leaf(base, key) === value) remove.push(key);
+    if (value == null || value === resetValue(base, userId, rows, edits, key)) remove.push(key);
     else upsert.push({ key, value });
   }
   return { upsert, remove };

@@ -12,9 +12,10 @@ import { lookbackHours, recoveryHours, sessionMap } from './engine.ts';
 import { isMuscleId, MUSCLE_IDS, ROLES, type MuscleId, type Role } from './library.ts';
 import { hoursOf } from './pbHistory.ts';
 import type { Model, MuscleState, ScoredWorkout, SessionMuscle } from './types.ts';
-import { recoveryMapFromLoads, type MuscleLoadRow } from './workoutLoads.ts';
+import { cacheRows, recoveryMapFromLoads, type MuscleLoadRow } from './workoutLoads.ts';
 
 const MS_PER_HOUR = 3_600_000;
+const MS_PER_MINUTE = 60_000;
 /** recovery_history refuses more samples than this. */
 export const MAX_SAMPLES = 1000;
 
@@ -118,6 +119,16 @@ export function historyWindow(m: Model, from: number, to: number): { from: numbe
   return { from: from - readSpanHours(m), to };
 }
 
+/**
+ * The map at "now" from the current minute (epoch ms), notes 19.4 #10 and 20.5: `at` is the end of
+ * that minute, so a workout finished seconds ago already counts; `from` is hour-aligned and an
+ * hour early, so its rows (read with no end) only refetch on the hour and always reach back past
+ * readWindow(m, at).from.
+ */
+export function nowWindow(m: Model, nowMinuteMs: number): { at: number; from: number } {
+  return { at: (nowMinuteMs + MS_PER_MINUTE) / MS_PER_HOUR, from: Math.floor(nowMinuteMs / MS_PER_HOUR) - readSpanHours(m) - 1 };
+}
+
 // ---------------------------------------------------------------- recovery_map
 
 /**
@@ -142,11 +153,13 @@ export function recoveryMapAt(m: Model, keyOf: ReadonlyMap<string, string>, load
     const def = m.lib.get(keyOf.get(x.exercise_id) ?? '');
     if (!def) continue;
     for (const role of ROLES) {
+      const load = m.c.role_weights[role] * x.load;
+      if (!(load > 0)) continue;   // a role weighted 0 adds nothing to W, so it isn't listed
       for (const muscle of def[role]) {
         if (!isMuscleId(muscle)) continue;
         contributing[muscle].push({
           exercise_id: x.exercise_id, exercise: x.name, workout_id: x.workout_id, workout_date: x.finished_at, role,
-          load: m.c.role_weights[role] * x.load, pb_source: x.pb_source, pb_detail: x.pb_detail,
+          load, pb_source: x.pb_source, pb_detail: x.pb_detail,
         });
       }
     }
@@ -208,10 +221,92 @@ export function sampleTimes(from: number, to: number, step: number): number[] {
   return Array.from({ length: n }, (_, k) => to - (n - 1 - k) * step);
 }
 
+/**
+ * A day-step history's sample times on one wall-clock time in `timeZone` (IANA; null or unknown:
+ * the device's zone, as the slider's labels fall back to): `to`'s local time on each date back to
+ * `from`, oldest first, the last exactly `to`. Plain 24 h steps drift an hour across a DST change,
+ * which near midnight skips or repeats a date. A time missing on a spring-forward date moves to
+ * just after the gap, on the same date.
+ */
+export function localDayTimes(from: number, to: number, timeZone: string | null): number[] {
+  const times = sampleTimes(from, to, 24);
+  const offset = zoneOffset(timeZone);
+  if (!offset) return times;
+  const wall = to + offset(to);
+  return times.map((t) => {
+    const want = wall - (to - t);   // `to`'s wall-clock time, (to − t) / 24 dates earlier
+    const lands = (x: number) => Math.abs(x + offset(x) - want) < 1e-6;
+    const a = want - offset(t);
+    if (lands(a)) return a;
+    const b = want - offset(a);
+    return lands(b) ? b : Math.max(a, b);
+  });
+}
+
+/** Reads a zone's UTC offset, in hours, at an instant in engine hours, off Intl's wall clock; null
+ *  when this engine can't give one. format() rather than formatToParts, which not every Hermes
+ *  build has. */
+function zoneOffset(timeZone: string | null): ((h: number) => number) | null {
+  const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: timeZone ?? undefined });
+  } catch {
+    fmt = new Intl.DateTimeFormat('en-US', opts);
+  }
+  const offset = (h: number) => {
+    const ms = Math.round(h * MS_PER_HOUR);
+    const shown = fmt.format(new Date(ms));
+    // en-US reads month/day/year, hour:minute
+    const p = /(\d{1,2})\D+(\d{1,2})\D+(\d{4})\D+(\d{1,2})\D+(\d{1,2})/.exec(shown);
+    if (!p) throw new Error(`unreadable date ${shown}`);
+    let hour = +p[4] % 24;
+    if (/pm/i.test(shown)) hour = (hour % 12) + 12;
+    else if (/am/i.test(shown)) hour %= 12;
+    return (Date.UTC(+p[3], +p[1] - 1, +p[2], hour, +p[5]) - Math.floor(ms / MS_PER_MINUTE) * MS_PER_MINUTE) / MS_PER_HOUR;
+  };
+  try {
+    offset(0);
+    return offset;
+  } catch {
+    return null;
+  }
+}
+
+/** recovery_map at each of `times` (hours, oldest first). `loads` must cover
+ *  historyWindow(m, times[0], the last). */
+export function recoveryHistoryAt(
+  m: Model, keyOf: ReadonlyMap<string, string>, loads: LoadWindow, times: readonly number[],
+): RecoverySample[] {
+  return times.map((t) => ({ at: isoOfHours(t), map: recoveryMapAt(m, keyOf, loads, t) }));
+}
+
 /** recovery_map at each sample time from `from` to `to` (hours), oldest first. `loads` must cover
  *  historyWindow(m, from, to). */
 export function recoveryHistory(
   m: Model, keyOf: ReadonlyMap<string, string>, loads: LoadWindow, from: number, to: number, step = 24,
 ): RecoverySample[] {
-  return sampleTimes(from, to, step).map((t) => ({ at: isoOfHours(t), map: recoveryMapAt(m, keyOf, loads, t) }));
+  return recoveryHistoryAt(m, keyOf, loads, sampleTimes(from, to, step));
+}
+
+// ---------------------------------------------------------------- the workout in progress
+
+/**
+ * A load window with the workout in progress added as if it finished at `at` (spec §14: its
+ * completed sets are scored with t_w = now, so the recovery view follows them live). Once its own
+ * cache rows are in the window (Finish has landed), the window comes back as it is, so the
+ * workout never counts twice. `nameOf` names its exercises by id for the tap detail.
+ */
+export function withLiveWorkout(
+  loads: LoadWindow, workoutId: string, scored: ScoredWorkout, idOf: ReadonlyMap<string, string>,
+  nameOf: (exerciseId: string) => string, at: number,
+): LoadWindow {
+  if (loads.muscles.some((r) => r.workout_id === workoutId) || loads.exercises.some((x) => x.workout_id === workoutId)) return loads;
+  const rows = cacheRows(workoutId, scored, idOf);
+  const finished_at = isoOfHours(at);
+  return {
+    ...loads,
+    muscles: [...loads.muscles, ...rows.muscles.map((r) => ({ ...r, workout_id: workoutId, finished_at }))],
+    exercises: [...loads.exercises, ...rows.exercises.map((x) => ({ ...x, workout_id: workoutId, name: nameOf(x.exercise_id), finished_at }))],
+  };
 }

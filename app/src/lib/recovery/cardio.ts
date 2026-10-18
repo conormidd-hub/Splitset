@@ -94,10 +94,60 @@ export function scoreActivity(m: Model, a: ActivityRow): ScoredActivity | null {
   };
 }
 
+/** One activity as save_activity_loads() takes it; no muscles clears its rows. */
+export interface ActivityLoads { activity_id: string; muscles: ScoredActivity['muscles'] }
+
 /** What save_activity_loads() takes for these activities: every countable one, scored. With
  *  cardio off (cardio.enabled_default, a user override) nothing counts. */
-export function activityLoads(m: Model, activities: readonly ActivityRow[]): { activity_id: string; muscles: ScoredActivity['muscles'] }[] {
+export function activityLoads(m: Model, activities: readonly ActivityRow[]): ActivityLoads[] {
   if (!m.c.cardio.enabled_default) return [];
   return activities.map((a) => scoreActivity(m, a)).filter((s): s is ScoredActivity => s != null)
     .map((s) => ({ activity_id: s.activity_id, muscles: s.muscles }));
+}
+
+/** A workout_muscle_loads row of an activity, as the app reads it back. */
+export interface ActivityLoadRow {
+  activity_id: string | null;
+  muscle_id: string;
+  load: number;
+  recovery_hours: number;
+  finished_at: string;
+}
+
+const close = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+
+/**
+ * What save_activity_loads() must be sent so the cached rows match the activities: every
+ * countable activity whose score differs from its rows (new; or changed after it was first
+ * scored: heart-rate zones that arrived late, a crop, a new start, Run to Ride, new thresholds),
+ * and, with no muscles (which clears them), every activity with rows that no longer counts
+ * (retyped to Walk; all of them with cardio off). `countable` is all of the user's countable
+ * activities, `rows` all of their activity rows. An activity that scores nothing and has no rows
+ * is left alone, so it isn't sent again on every catch-up.
+ */
+export function activityChanges(m: Model, countable: readonly ActivityRow[], rows: readonly ActivityLoadRow[]): ActivityLoads[] {
+  const stored = new Map<string, ActivityLoadRow[]>();
+  for (const r of rows) {
+    if (!r.activity_id) continue;
+    const list = stored.get(r.activity_id);
+    if (list) list.push(r);
+    else stored.set(r.activity_id, [r]);
+  }
+  const out: ActivityLoads[] = [];
+  const counted = new Set<string>();
+  for (const a of countable) {
+    const s = m.c.cardio.enabled_default ? scoreActivity(m, a) : null;
+    if (!s) continue;
+    counted.add(a.id);
+    const old = stored.get(a.id) ?? [];
+    // t_w is start + elapsed (save_activity_loads works it out); to the second, as timestamps differ below that
+    const same = old.length === s.muscles.length && s.muscles.every((x) => {
+      const r = old.find((o) => o.muscle_id === x.muscle_id);
+      return r != null && close(r.load, x.load) && close(r.recovery_hours, x.recovery_hours)
+        && Math.abs(Date.parse(r.finished_at) / 3_600_000 - s.end) < 1 / 3600;
+    });
+    if (!same) out.push({ activity_id: a.id, muscles: s.muscles });
+  }
+  for (const id of stored.keys()) if (!counted.has(id)) out.push({ activity_id: id, muscles: [] });
+  return out;
 }

@@ -41,6 +41,27 @@ export function toPbHistory(rows: readonly PbHistoryRow[], keyOf: (exerciseId: s
   return out;
 }
 
+/**
+ * The exercise ids whose pb_history rows can change how `exerciseIds` score: each exercise and
+ * every exercise its pb_estimate chain reaches, walked as pbBefore walks it (up to
+ * estimate_max_hops). `keyOf` maps exercise ids to engine keys. Finishing a workout reads only
+ * these, dated before it started, instead of the whole history.
+ */
+export function historyScope(m: Model, keyOf: ReadonlyMap<string, string>, exerciseIds: Iterable<string>): string[] {
+  const keys = new Set<string>();
+  for (const id of exerciseIds) {
+    const key = keyOf.get(id);
+    if (key === undefined) continue;
+    keys.add(key);
+    let cur = m.lib.get(key);
+    for (let hops = 0; cur?.pb_estimate && hops < m.c.pb.estimate_max_hops; hops++) {
+      keys.add(cur.pb_estimate.from);
+      cur = m.lib.get(cur.pb_estimate.from);
+    }
+  }
+  return [...keyOf].filter(([, key]) => keys.has(key)).map(([id]) => id);
+}
+
 /** Best e1RM of one exercise over the PB window before `now` (both sources) and of all time. */
 export function bests(m: Model, history: readonly PbRecord[], key: string, now: number): { window: number | null; allTime: number | null } {
   const from = now - m.c.pb.window_days * HOURS_PER_DAY;

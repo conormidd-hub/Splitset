@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 
-import { buildLibrary } from './engine.ts';
-import { bests, hoursOf, pbHistoryItems, referenceSource, strengthReference, toPbHistory, type PbHistoryRow } from './pbHistory.ts';
+import { buildLibrary, pbBefore } from './engine.ts';
+import {
+  bests, historyScope, hoursOf, pbHistoryItems, referenceSource, strengthReference, toPbHistory, type PbHistoryRow,
+} from './pbHistory.ts';
 import { parseConstants, withOverride } from './thresholds.ts';
 import type { ExerciseDef, Model } from './types.ts';
 
@@ -64,6 +66,34 @@ describe('the reference and its source (build phase 3 tests, through the engine)
     assert.ok(Math.abs(lapsed.pb! - 114) < 0.01);
     const c = withOverride(C, 'pb.window_days', 28);
     assert.equal(referenceSource(c, { pb: 1, source: 'monthly', detail: 'logged' }, nameOf).label, 'Logged in the last 28 days');
+  });
+});
+
+describe('historyScope (what finishing a workout reads)', () => {
+  const ids = new Map(LIBRARY.map((e) => [`id-${e.slug}`, e.slug] as const));
+  const scope = (mm: Model, exerciseIds: string[]) => historyScope(mm, ids, exerciseIds).sort();
+
+  test('each exercise and every exercise its estimate chain reaches, up to estimate_max_hops', () => {
+    assert.deepEqual(scope(m, ['id-sumo_deadlift']), ['id-deadlift', 'id-squat_bb', 'id-sumo_deadlift']);
+    assert.deepEqual(scope(m, ['id-landmine_press']), ['id-landmine_press']);   // no estimate link
+    assert.deepEqual(scope(m, ['id-incline_bench_db', 'id-bench_press_bb']), ['id-bench_press_bb', 'id-incline_bench_db']);
+    assert.deepEqual(scope({ c: withOverride(C, 'pb.estimate_max_hops', 1), lib: m.lib }, ['id-sumo_deadlift']), ['id-deadlift', 'id-sumo_deadlift']);
+    assert.deepEqual(scope(m, ['not-an-exercise']), []);
+  });
+
+  test('the references from those rows, dated before the start, are the ones the whole history gives', () => {
+    const start = hoursOf(DAY0);
+    const rows = [
+      row('squat_bb', 150, day(-50)), row('squat_bb', 160, day(-12)), row('bench_press_bb', 100, day(-3)),
+      row('lat_pulldown', 80, day(-2)), row('deadlift', 210, day(1)), row('sumo_deadlift', 200, day(2)),   // after the start
+    ];
+    const wanted = new Set(historyScope(m, ids, ['id-sumo_deadlift', 'id-incline_bench_db']));
+    const some = rows.filter((r) => wanted.has(r.exercise_id) && Date.parse(r.at) < Date.parse(DAY0));
+    assert.equal(some.length, 3);
+    for (const key of ['sumo_deadlift', 'incline_bench_db']) {
+      assert.deepEqual(pbBefore(m, key, start, toPbHistory(some, keyOf)), pbBefore(m, key, start, toPbHistory(rows, keyOf)), key);
+    }
+    assert.equal(pbBefore(m, 'sumo_deadlift', start, toPbHistory(some, keyOf)).source, 'estimated');   // through deadlift to squat
   });
 });
 

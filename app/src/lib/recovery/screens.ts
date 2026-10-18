@@ -155,8 +155,10 @@ export function loadSplit(c: Thresholds, stored: unknown, roles: readonly { musc
       .filter((e): e is [MuscleId, number] => isMuscleId(e[0]) && typeof e[1] === 'number' && e[1] > 0);
     if (parts.length) return parts.map(([muscle, pct]) => ({ muscle, pct }));
   }
+  // a role weighted 0 (Settings allows it) takes no share, so it gets no part
   const weighted = ROLES.flatMap((role) => roles.filter((r) => r.role === role && isMuscleId(r.muscle_id))
-    .map((r) => ({ muscle: r.muscle_id as MuscleId, w: c.role_weights[role] })));
+    .map((r) => ({ muscle: r.muscle_id as MuscleId, w: c.role_weights[role] })))
+    .filter((x) => x.w > 0);
   const total = weighted.reduce((s, x) => s + x.w, 0);
   if (!total) return [];
   // largest remainder, so the rounded parts add to exactly 100

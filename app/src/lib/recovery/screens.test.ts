@@ -100,4 +100,22 @@ describe('an exercise\'s muscles', () => {
     }
     assert.deepEqual(loadSplit(C, null, []), []);
   });
+
+  test('load split from the roles follows the user\'s role weights, as the split bar shows it', () => {
+    const bench = LIBRARY.find((e) => e.slug === 'bench_press_bb') as unknown as { load_split: Record<string, number> };
+    const mine = { ...C, role_weights: { ...C.role_weights, secondary: 0.6 } };
+    // the stored split assumes the default weights; the engine shares a set 1 : 0.6 : 0.6
+    assert.deepEqual(loadSplit(mine, bench.load_split, roles('bench_press_bb')).map((p) => p.pct), [56, 22, 22]);
+    assert.deepEqual(loadSplit(mine, null, roles('bench_press_bb')), [
+      { muscle: 'chest', pct: 46 }, { muscle: 'triceps', pct: 27 }, { muscle: 'front_delts', pct: 27 }]);
+  });
+
+  test('a role weighted 0 gets no part of the split', () => {
+    const tertiary = roles('push_up').filter((r) => r.role === 'tertiary').map((r) => r.muscle_id);
+    assert.ok(tertiary.length > 0);
+    const parts = loadSplit({ ...C, role_weights: { ...C.role_weights, tertiary: 0 } }, null, roles('push_up'));
+    assert.ok(parts.every((p) => p.pct > 0 && !tertiary.includes(p.muscle)));
+    assert.equal(parts.reduce((s, p) => s + p.pct, 0), 100);
+    assert.deepEqual(loadSplit({ ...C, role_weights: { primary: 0, secondary: 0, tertiary: 0 } }, null, roles('push_up')), []);
+  });
 });

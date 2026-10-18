@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { recomputeInBackground } from '@/api/workoutLoads';
+import { volumeKg } from '@/lib/lifting/sideCounts';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 import type { Tables, Views } from '@/types/database';
@@ -194,7 +195,7 @@ export function useWorkouts(limit = 30) {
 }
 
 export type WorkoutWithStructure = Workout & {
-  workout_exercises: (WorkoutExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure'> | null; workout_sets: WorkoutSet[] })[];
+  workout_exercises: (WorkoutExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure' | 'load_mode'> | null; workout_sets: WorkoutSet[] })[];
 };
 
 export function useWorkout(id: string | undefined) {
@@ -204,7 +205,7 @@ export function useWorkout(id: string | undefined) {
     queryFn: async (): Promise<WorkoutWithStructure> => {
       const { data, error } = await supabase
         .from('workouts')
-        .select('*, workout_exercises(*, exercise:exercises(id, name, measure), workout_sets(*))')
+        .select('*, workout_exercises(*, exercise:exercises(id, name, measure, load_mode), workout_sets(*))')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -260,7 +261,7 @@ export function useRecords() {
   });
 }
 
-export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'e1rm' | 'completed_at'>;
+export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'e1rm' | 'side' | 'completed_at'>;
 export type HistoryWorkout = { workoutId: string; name: string; startedAt: string; sets: HistorySet[]; bestWeight: number | null; volume: number };
 
 /** Completed sets of one exercise, grouped by workout, newest first. */
@@ -272,7 +273,7 @@ export function useExerciseHistory(exerciseId: string | undefined, workouts = 30
     queryFn: async (): Promise<HistoryWorkout[]> => {
       const { data, error } = await supabase
         .from('workout_sets')
-        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, e1rm, completed_at, workout:workouts!inner(name, started_at, finished_at)')
+        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, e1rm, side, completed_at, workout:workouts!inner(name, started_at, finished_at)')
         .eq('user_id', uid)
         .eq('exercise_id', exerciseId!)
         .eq('completed', true)
@@ -290,7 +291,7 @@ export function useExerciseHistory(exerciseId: string | undefined, workouts = 30
         g.sets.push(row);
         if (row.set_type !== 'warmup') {
           if (row.weight_kg != null && (g.bestWeight == null || row.weight_kg > g.bestWeight)) g.bestWeight = row.weight_kg;
-          g.volume += (row.weight_kg ?? 0) * (row.reps ?? 0);
+          g.volume += volumeKg([row]);
         }
       }
       const out = [...groups.values()].slice(0, workouts);

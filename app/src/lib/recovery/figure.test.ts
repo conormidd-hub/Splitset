@@ -8,8 +8,10 @@
 //   the F20 push day at 0, 24 and 48 h (chest High → Moderate → Low, as in F23), light
 //
 // A missing or changed snapshot fails. After a deliberate change, rewrite them with
-//   UPDATE_SNAPSHOTS=1 npm test          (PowerShell: $env:UPDATE_SNAPSHOTS=1; npm test)
-// and look at the new files before committing them.
+//   UPDATE_SNAPSHOTS=1 npm test          (PowerShell: $env:UPDATE_SNAPSHOTS=1; npm test; Remove-Item Env:UPDATE_SNAPSHOTS)
+// and look at the new files before committing them. That run still fails once for each file it
+// rewrites, so a variable left set in the shell can never turn a changed figure green; run again
+// without it to check. Only the value 1 rewrites, and never under CI.
 
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -17,8 +19,8 @@ import { describe, test } from 'node:test';
 
 import { BODY_SVG } from './bodySvg.ts';
 import {
-  figureColours, figureOf, figureSvgText, legendRows, levelFill, listRows, musclesIn, paintFigure, parseSvg, referenceMarker,
-  type FigureMap, type FigureTheme, type FigureView,
+  figureColours, figureOf, figureSvgText, legendRows, levelFill, LIST_COMPACT_BELOW, listCompact, listLine, listRows, musclesIn, paintFigure,
+  parseSvg, referenceMarker, type FigureMap, type FigureTheme, type FigureView,
 } from './figure.ts';
 import { MUSCLE_IDS, type MuscleId } from './library.ts';
 import { recoveryMapAt, type RecoveryMap } from './read.ts';
@@ -37,16 +39,18 @@ const mapAt = (workouts: FixtureWorkout[], pbs: unknown, h: number): RecoveryMap
 // page backgrounds behind the snapshots, for viewing only (the app's light and night surfaces)
 const PAGE: Record<FigureTheme, string> = { light: '#ffffff', dark: '#1a1a19' };
 const SNAPSHOTS = new URL('./__snapshots__/', import.meta.url);
+const UPDATING = process.env.UPDATE_SNAPSHOTS === '1' && !process.env.CI;
 
 function matchSnapshot(name: string, text: string) {
   const file = new URL(`${name}.svg`, SNAPSHOTS);
-  if (process.env.UPDATE_SNAPSHOTS) {
+  const old = existsSync(file) ? readFileSync(file, 'utf8') : null;
+  if (UPDATING && old !== text) {
     mkdirSync(SNAPSHOTS, { recursive: true });
     writeFileSync(file, text);
-    return;
+    assert.fail(`${name}.svg ${old === null ? 'written' : 'rewritten'}: look at it, then run npm test again without UPDATE_SNAPSHOTS`);
   }
-  assert.ok(existsSync(file), `no snapshot ${name}.svg yet: run UPDATE_SNAPSHOTS=1 npm test, then look at it`);
-  assert.equal(text, readFileSync(file, 'utf8'), `${name}.svg changed; if that is intended, run UPDATE_SNAPSHOTS=1 npm test`);
+  assert.ok(old !== null, `no snapshot ${name}.svg yet: run UPDATE_SNAPSHOTS=1 npm test, then look at it`);
+  assert.equal(text, old, `${name}.svg changed; if that is intended, run UPDATE_SNAPSHOTS=1 npm test`);
 }
 
 const snapshot = (name: string, view: FigureView, map: FigureMap, theme: FigureTheme) =>
@@ -146,12 +150,11 @@ describe('snapshots', () => {
   const f20 = fixture('F20');
   const push: FixtureWorkout[] = [{ start: -1, end: 0, exercises: f20.inputs.exercises as FixtureWorkout['exercises'] }];
   const chest = { 0: 'High', 24: 'Moderate', 48: 'Low' } as const;   // F23
+  // one test per view, so an update run rewrites every changed file at once
   for (const h of [0, 24, 48] as const) {
-    test(`F20 push day at ${h} h: chest ${chest[h]}`, () => {
-      const map = mapAt(push, f20.inputs.history, h);
-      assert.equal(map.chest.label, chest[h]);
-      for (const v of VIEWS) snapshot(`f20-${h}h-${v}-light`, v, map, 'light');
-    });
+    const map = mapAt(push, f20.inputs.history, h);
+    test(`F20 push day at ${h} h: chest ${chest[h]}`, () => assert.equal(map.chest.label, chest[h]));
+    for (const v of VIEWS) test(`F20 push day at ${h} h, ${v}`, () => snapshot(`f20-${h}h-${v}-light`, v, map, 'light'));
   }
 });
 
@@ -177,6 +180,23 @@ describe('legend, list and tap detail', () => {
       [['2.56', 'Very high', '1.0 days', '2.2 days'], ['2.43', 'High', '22 h', '2.2 days']]);
     const firstReady = rows.findIndex((r) => r.level === 0);
     assert.ok(rows.slice(firstReady).every((r) => r.level === 0));
+  });
+
+  test('a list row reads as one phrase, with no "in" before now', () => {
+    const f26 = fixture('F26');
+    const rows = listRows(mapAt(f26.inputs.workouts as FixtureWorkout[], f26.inputs.history, 68), 'recovery');
+    assert.equal(listLine(rows[0], 'recovery'), 'F 2.56 · trainable in 1.0 days · ready in 2.2 days');
+    assert.equal(listLine(rows.at(-1)!, 'recovery'), 'F 0.00 · trainable now · ready now');
+    assert.equal(listLine({ ...rows[1], trainable: 'now' }, 'recovery', ', '), 'F 2.43, trainable now, ready in 2.2 days');
+    const session = { muscle: 'quads', level: 3, label: 'High', value: 1.8, trainable: '24 h', ready: '1.8 days' } as const;
+    assert.equal(listLine(session, 'session'), 'L 1.80 · trainable after 24 h · ready after 1.8 days');
+    assert.equal(listLine({ ...session, value: 0, trainable: 'now', ready: 'now' }, 'session'), 'L 0.00 · trainable now · ready now');
+  });
+
+  test('the list uses two-line rows on every phone, columns from tablet width', () => {
+    // a 375, 393 and 430 pt phone, less the screen's and the card's padding
+    for (const width of [309, 327, 364]) assert.equal(listCompact(width), true, `${width}`);
+    for (const width of [LIST_COMPACT_BELOW, 600, 900]) assert.equal(listCompact(width), false, `${width}`);
   });
 
   test('provisional references are marked', () => {

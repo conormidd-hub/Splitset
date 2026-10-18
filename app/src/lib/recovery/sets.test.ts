@@ -61,6 +61,13 @@ describe('setE1rm: the e1RM a set stores', () => {
     assert.equal(setE1rm(C, null, set(100, 5), null), null);
   });
 
+  test('negative or non-finite reps give no e1RM, so a typo cannot become a PB; zero reps keep the weight', () => {
+    assert.equal(setE1rm(C, bench, set(140, -5), null), null);
+    assert.equal(setE1rm(C, bench, set(140, Number.NaN), null), null);
+    assert.equal(setE1rm(C, bench, set(140, Number.POSITIVE_INFINITY), null), null);
+    assert.equal(setE1rm(C, bench, set(140, 0), null), 140);
+  });
+
   test('a user override of the e1RM constants flows through', () => {
     near(setE1rm(withOverride(C, 'e1rm.max_reps', 10), bench, set(60, 20), null), 60 * (1 + 10 / 30));
   });
@@ -111,6 +118,24 @@ describe('currentBodyweight', () => {
   });
   test('a profile entry made on the day of a weigh-in wins', () => {
     assert.equal(currentBodyweight(C, profile(80, '2026-10-12T06:00:00Z'), { weight_kg: 82, date: '2026-10-12' }).source, 'profile');
+  });
+  test('"the day" is the user\'s local day, as the weigh-in\'s date is', () => {
+    const weighIn = { weight_kg: 79.4, date: '2026-10-18' };
+    const at = (iso: string, timezone?: string | null) => currentBodyweight(C, { ...profile(82, iso), timezone }, weighIn).source;
+    // Melbourne (UTC+11): 09:00 on the weigh-in's day is 22:00 UTC the day before
+    assert.equal(at('2026-10-17T22:00:00Z', 'Australia/Melbourne'), 'profile');
+    // 23:30 the evening before is still the day before
+    assert.equal(at('2026-10-17T12:30:00Z', 'Australia/Melbourne'), 'weigh-in');
+    // New York (UTC-4): 21:00 on the evening before is 01:00 UTC on the weigh-in's day
+    assert.equal(at('2026-10-18T01:00:00Z', 'America/New_York'), 'weigh-in');
+    assert.equal(at('2026-10-18T13:00:00Z', 'America/New_York'), 'profile');
+    // no zone, or one Intl does not know: UTC, as before
+    assert.equal(at('2026-10-17T22:00:00Z'), 'weigh-in');
+    assert.equal(at('2026-10-17T22:00:00Z', null), 'weigh-in');
+    assert.equal(at('2026-10-17T22:00:00Z', 'Not/AZone'), 'weigh-in');
+    assert.equal(at('2026-10-18T00:00:00Z', 'Not/AZone'), 'profile');
+    // an unreadable time loses to the weigh-in, as before
+    assert.equal(at('not a time', 'Australia/Melbourne'), 'weigh-in');
   });
   test('either alone, else the default from the constants', () => {
     assert.equal(currentBodyweight(C, profile(80, '2026-10-13T08:00:00Z'), null).kg, 80);

@@ -1,5 +1,6 @@
 import { SymbolView } from 'expo-symbols';
-import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Badge } from '@/components/ui/Chip';
@@ -55,15 +56,37 @@ export function MuscleSheet({ muscle, name, theme, state, timeZone, onClose }: P
   const insets = useSafeAreaInsets();
   const wide = width >= WIDE;
   const scrim = themeName === 'night' ? palette.bg : palette.ink;
-  const recovery = state && 'F' in state ? state : null;
-  const session = state && 'L' in state ? state : null;
+  const open = muscle && state ? { name, state } : null;
+  const visible = !!open;
+  // the last muscle shown stays drawn while the sheet slides away, rather than blanking as it goes
+  const [last, setLast] = useState(open);
+  if (open && (open.state !== last?.state || open.name !== last?.name)) setLast(open);
+  const shown = open ?? last;
+  const recovery = shown && 'F' in shown.state ? shown.state : null;
+  const session = shown && 'L' in shown.state ? shown.state : null;
+
+  // a set field on the live workout keeps its number pad up through a tap on the figure, and the
+  // pad would cover this sheet
+  useEffect(() => {
+    if (visible) Keyboard.dismiss();
+  }, [visible]);
 
   return (
-    <Modal visible={!!muscle && !!state} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} aria-label={shown?.name}>
       <View style={{ flex: 1 }}>
-        <Pressable onPress={onClose} accessibilityLabel="Close" style={[StyleSheet.absoluteFill, { backgroundColor: scrim, opacity: 0.5 }]} />
-        <View style={{ flex: 1, justifyContent: wide ? 'center' : 'flex-end', alignItems: wide ? 'center' : 'stretch', pointerEvents: 'box-none' }}>
-          {state ? (
+        {/* a tap outside the card closes it. Not a button: kept out of the web's focus order and
+            hidden from screen readers, which get the card's Close, Escape and the escape scrub */}
+        <View
+          aria-hidden
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={onClose}
+          style={[StyleSheet.absoluteFill, { backgroundColor: scrim, opacity: 0.5 }]}
+        />
+        <View
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
+          style={{ flex: 1, justifyContent: wide ? 'center' : 'flex-end', alignItems: wide ? 'center' : 'stretch', pointerEvents: 'box-none' }}>
+          {shown ? (
             <View
               style={{
                 backgroundColor: palette.bg, maxHeight: '80%', width: wide ? 520 : undefined,
@@ -71,10 +94,10 @@ export function MuscleSheet({ muscle, name, theme, state, timeZone, onClose }: P
                 borderWidth: 1, borderColor: palette.hair, paddingBottom: wide ? 0 : insets.bottom,
               }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingBottom: space.sm }}>
-                <View style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: theme === 'dark' ? state.fill_dark : state.fill, borderWidth: 1, borderColor: palette.hair }} />
+                <View style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: theme === 'dark' ? shown.state.fill_dark : shown.state.fill, borderWidth: 1, borderColor: palette.hair }} />
                 <View style={{ flex: 1 }}>
-                  <T variant="h2">{name}</T>
-                  <T variant="small" tone="ink2">{state.label}{recovery ? ` · ${recovery.advice}` : ''}</T>
+                  <T variant="h2" accessibilityRole="header">{shown.name}</T>
+                  <T variant="small" tone="ink2">{shown.state.label}{recovery ? ` · ${recovery.advice}` : ''}</T>
                 </View>
                 <Pressable
                   onPress={onClose}
@@ -113,6 +136,7 @@ export function MuscleSheet({ muscle, name, theme, state, timeZone, onClose }: P
                           return (
                             <View
                               key={`${x.workout_id}-${x.exercise_id}`}
+                              accessible
                               accessibilityLabel={`${x.exercise}, ${x.role}, ${workoutWhen(x.workout_date, timeZone)}, load ${x.load.toFixed(2)}${marker ? `, ${marker}` : ''}`}
                               style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderColor: palette.hair }}>
                               <Badge label={ROLE_BADGE[x.role]} tone={x.role === 'primary' ? 'accent' : 'mut'} />

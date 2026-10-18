@@ -65,7 +65,7 @@ export default function ExercisePicker() {
           <PickerRow
             exercise={item}
             first={index === 0}
-            roles={roles?.get(item.id) ?? []}
+            roles={roles ? roles.get(item.id) ?? [] : null}
             reference={reference ? reference(item) : null}
             expanded={expanded === item.id}
             onToggle={() => setExpanded((cur) => (cur === item.id ? null : item.id))}

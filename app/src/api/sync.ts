@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { catchUpActivities } from '@/api/workoutLoads';
 import { queryClient } from '@/lib/query';
 import { supabase } from '@/lib/supabase';
 
@@ -111,6 +112,11 @@ export const useSyncNow = create<SyncNow>()((set, get) => ({
             if (get().phase !== 'running') set({ phase: 'running' });
           } else if (run) {
             await queryClient.invalidateQueries();
+            // the run may have brought new activities: score them now (even a failed run can have
+            // imported some), so the recovery map has them without waiting for the next check
+            void supabase.auth.getSession().then(({ data }) => {
+              if (data.session) void catchUpActivities(data.session.user.id, true);
+            }, () => undefined);
             return stop(run.status === 'ok' ? 'done' : 'failed', run.status === 'ok'
               ? `Synced: ${run.activities_fetched} activities, ${run.wellness_days} wellness days.`
               : `The sync finished with ${run.status.replace('_', ' ')}: see Settings, intervals.icu.`);

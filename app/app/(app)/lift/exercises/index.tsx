@@ -45,12 +45,14 @@ export default function ExerciseLibrary() {
         }
         renderItem={({ item, index }) => {
           const r = best.get(item.id);
+          // an assisted lift's heaviest weight is its most assistance, the weakest set: not a best
+          const bestWeight = item.load_mode === 'assisted' ? null : r?.best_weight_kg;
           return (
             <ListRow
               first={index === 0}
               title={item.name}
               subtitle={[item.muscle_group ?? item.group, item.equipment, item.owner_id ? 'yours' : null].filter(Boolean).join(' · ')}
-              value={r?.best_weight_kg != null ? formatWeight(r.best_weight_kg, units, 0) : undefined}
+              value={bestWeight != null ? formatWeight(bestWeight, units, 0) : undefined}
               valueSub={r ? `${r.completed_sets ?? 0} sets` : undefined}
               onPress={() => router.push(`/lift/exercises/${item.id}`)}
             />

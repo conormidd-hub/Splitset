@@ -39,14 +39,19 @@ function deepFreeze<T>(v: T): T {
 
 describe('fmtHours', () => {
   test('matches the reference, including Python rounding exact halves to even', () => {
-    // from scripts/load_model.py fmt_hours
+    // from scripts/load_model.py fmt_hours, except that up to half an hour reads "< 1 h" (below)
     const cases: [number | null, string][] = [
-      [null, '—'], [-3, 'now'], [0, 'now'], [0.2, '0 h'], [0.5, '0 h'], [1.5, '2 h'], [2.5, '2 h'], [6, '6 h'],
+      [null, '—'], [-3, 'now'], [0, 'now'], [0.75, '1 h'], [1.5, '2 h'], [2.5, '2 h'], [6, '6 h'],
       [12.5, '12 h'], [13.5, '14 h'], [23.4, '23 h'], [23.5, '24 h'], [23.6, '24 h'], [24, '1.0 days'],
       [30, '1.2 days'], [36, '1.5 days'], [53.7, '2.2 days'], [54, '2.2 days'], [60, '2.5 days'], [66, '2.8 days'],
       [102, '4.2 days'], [1000, '41.7 days'],
     ];
     for (const [h, want] of cases) assert.equal(fmtHours(h), want, `fmtHours(${h})`);
+  });
+
+  test('a time above zero never reads "0 h": up to half an hour is "< 1 h"', () => {
+    for (const h of [0.01, 0.25, 0.3, 0.5]) assert.equal(fmtHours(h), '< 1 h', `fmtHours(${h})`);
+    assert.equal(fmtHours(0.51), '1 h');
   });
 });
 
@@ -120,6 +125,19 @@ describe('§14 edge cases', () => {
     const bench = scoreExercise(m, 'bench_press_bb', [{ w: 0, r: 8 }, { w: 60 }, { w: 60, r: 8 }], 0, [], 80);
     assert.equal(bench.sets.length, 1);
     assert.equal(bench.records.length, 1);
+  });
+
+  test('a set with negative or non-finite reps is skipped, so it cannot cancel a real set or set a PB', () => {
+    const pb: PbRecord[] = [{ slug: 'bench_press_bb', at: -1, e1rm: 120, source: 'logged' }];
+    const alone = scoreExercise(m, 'bench_press_bb', [{ w: 90, r: 8 }], 0, pb, 80);
+    const typo = scoreExercise(m, 'bench_press_bb', [{ w: 90, r: 8 }, { w: 90, r: -8 }, { w: 140, r: -5 }, { w: 90, r: Number.NaN }], 0, pb, 80);
+    near(alone.L_e, 0.32);
+    assert.equal(typo.L_e, alone.L_e);
+    assert.equal(typo.sets.length, 1);
+    assert.deepEqual(typo.records.map((r) => r.e1rm), alone.records.map((r) => r.e1rm));
+    assert.equal(typo.best, alone.best);
+    // zero reps (a missed attempt) still counts, as notes 17.7 settle
+    assert.equal(scoreExercise(m, 'bench_press_bb', [{ w: 90, r: 0 }], 0, pb, 80).records.length, 1);
   });
 
   test('an exercise missing from the library contributes nothing and does not throw', () => {

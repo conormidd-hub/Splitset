@@ -19,7 +19,7 @@ import { relativeDay } from '@/lib/dates';
 import { isDemoUser } from '@/lib/demo';
 import { formatLoad } from '@/lib/pbs';
 import { useSession } from '@/lib/session';
-import { displayToKg, kgToDisplay } from '@/lib/units';
+import { displayToKg, kgToDisplay, sameWeightShown, weightRangeShown } from '@/lib/units';
 import { useTheme, type ThemeChoice } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -47,17 +47,23 @@ export default function Settings() {
   const [tzEdit, setTzEdit] = useState<string | null>(null);
   const [yearEdit, setYearEdit] = useState<number | null | undefined>(undefined);
   const [sexEdit, setSexEdit] = useState<Sex | undefined>(undefined);
-  const [bwEdit, setBwEdit] = useState<number | null | undefined>(undefined);   // display units
+  const [bwEdit, setBwEdit] = useState<number | null | undefined>(undefined);   // kg, so switching units cannot re-read it
   const name = nameEdit ?? profile.data?.display_name ?? '';
   const tz = tzEdit ?? profile.data?.timezone ?? '';
   const year = yearEdit === undefined ? profile.data?.birth_year ?? null : yearEdit;
   const sex = sexEdit ?? sexOf(profile.data?.sex);
   const yearBad = year != null && (year < 1900 || year > THIS_YEAR);
   const savedBw = profile.data?.bodyweight_kg ?? null;
-  const bwShown = bwEdit === undefined ? (savedBw == null ? null : kgToDisplay(savedBw, units)) : bwEdit;
-  const bwKg = bwShown == null ? null : displayToKg(bwShown, units);
+  const bwKg = bwEdit === undefined ? savedBw : bwEdit;
+  const bwShown = bwKg == null ? null : kgToDisplay(bwKg, units);
+  const bwUnit = units === 'imperial' ? 'lb' : 'kg';
   const bwBad = bwKg != null && (bwKg < BODYWEIGHT_KG.min || bwKg > BODYWEIGHT_KG.max);
-  const bwChanged = bwEdit !== undefined && (bwKg == null ? savedBw != null : savedBw == null || Math.abs(bwKg - savedBw) >= 0.05);
+  const bwRange = weightRangeShown(BODYWEIGHT_KG.min, BODYWEIGHT_KG.max, units);
+  const bwError = `Between ${bwRange.min} ${bwRange.unit} and ${bwRange.max} ${bwRange.unit}, please.`;
+  // Compared as the field shows it, so a 0.1 lb step counts. While a newer weigh-in is used, typing
+  // any value (the saved one too) counts, so saving it stamps it newer and it wins again.
+  const bwChanged = bwEdit !== undefined
+    && (!sameWeightShown(bwEdit, savedBw, units) || (bwEdit != null && bodyweight.source === 'weigh-in'));
   const dirty = !!profile.data && (
     name.trim() !== profile.data.display_name
     || tz.trim() !== profile.data.timezone
@@ -114,24 +120,37 @@ export default function Settings() {
               <T variant="label" tone="mut">Birth year</T>
               <T variant="small" tone={yearBad ? 'neg' : 'mut'}>{yearBad ? 'A four-digit year, please.' : 'For the fitness level on the VO2 max page.'}</T>
             </View>
-            <NumberInput value={year} onChange={setYearEdit} integer width={96} placeholder="1990" />
+            <NumberInput
+              value={year} onChange={setYearEdit} integer width={96} placeholder="1990"
+              accessibilityLabel="Birth year" accessibilityHint={yearBad ? 'A four-digit year, please.' : undefined}
+            />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
             <View style={{ flex: 1 }}>
-              <T variant="label" tone="mut">Bodyweight</T>
+              <T variant="label" tone="mut">Bodyweight ({bwUnit})</T>
               <T variant="small" tone={bwBad ? 'neg' : 'mut'}>
                 {bwBad
-                  ? `Between ${formatLoad(BODYWEIGHT_KG.min, units)} and ${formatLoad(BODYWEIGHT_KG.max, units)}, please.`
+                  ? bwError
                   : bodyweight.source === 'weigh-in'
                     ? savedBw == null
                       ? `For bodyweight exercises. Using your latest weigh-in: ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}).`
-                      : `For bodyweight exercises. Your weigh-in of ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}) is newer, so it's used.`
+                      : `For bodyweight exercises. Your weigh-in of ${formatLoad(bodyweight.kg, units)} (${relativeDay(bodyweight.date)}) is newer, so it's used. To use yours, type it and save.`
                     : bodyweight.source === 'default'
                       ? `For bodyweight exercises, which use ${formatLoad(bodyweight.kg, units)} until you enter yours.`
                       : 'For bodyweight exercises. A newer Garmin weigh-in takes over.'}
               </T>
             </View>
-            <NumberInput value={bwShown} onChange={setBwEdit} width={96} placeholder={units === 'imperial' ? 'lb' : 'kg'} />
+            {/* Keyed on units: a units tap need not blur the field (taps persist), so remount it to
+                drop the text typed in the old unit and show the pending value converted. */}
+            <NumberInput
+              key={units}
+              value={bwShown}
+              onChange={(v) => setBwEdit(v == null ? null : displayToKg(v, units))}
+              width={96}
+              placeholder={bwUnit}
+              accessibilityLabel={`Bodyweight in ${units === 'imperial' ? 'pounds' : 'kilograms'}`}
+              accessibilityHint={bwBad ? bwError : undefined}
+            />
           </View>
           <View>
             <T variant="label" tone="mut" style={{ marginBottom: space.xs }}>Sex</T>
@@ -164,7 +183,7 @@ export default function Settings() {
         />
       </Card>
 
-      <Card title="Recovery map" subtitle="Recovery times, load shares, colour boundaries and PB rules" onPress={() => router.push('/settings/recovery')}>
+      <Card title="Recovery map" subtitle="Recovery times, load shares, colour boundaries, PB rules and cardio" onPress={() => router.push('/settings/recovery')}>
         <Button title="Tune the recovery map" variant="secondary" small onPress={() => router.push('/settings/recovery')} />
       </Card>
 

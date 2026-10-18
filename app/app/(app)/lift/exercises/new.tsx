@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -5,10 +6,11 @@ import { Pressable, View } from 'react-native';
 import { useExercises, type Exercise } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import {
-  useCreateCustomExercise, useCurrentBodyweight, useExerciseRoles, useMuscleNames, useThresholds, useUpdateCustomExercise,
+  fetchPbHistoryRows, recoveryKeys, useCreateCustomExercise, useCurrentBodyweight, useExerciseRoles, useLibraryRows, useMuscleNames,
+  useThresholds, useUpdateCustomExercise,
 } from '@/api/recovery';
 import { BodyMap } from '@/components/recovery/BodyMap';
-import { LoadSplitBar, useRoleTints } from '@/components/recovery/ExerciseMuscles';
+import { LoadSplitBar, NotOnMap, useRoleTints } from '@/components/recovery/ExerciseMuscles';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow, Segmented } from '@/components/ui/Chip';
@@ -18,13 +20,15 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { todayIso } from '@/lib/dates';
+import { formatLoad } from '@/lib/pbs';
 import {
-  BW_FACTOR, BW_PRESETS, customSlug, cycleRole, draftOf, emptyDraft, EQUIPMENT, fromSimilar, HARDNESS, matchExercises, RATIOS,
-  roleCounts, rolesList, setRole, similarSuggestions, stepFactor, toPayload, validateDraft, withEquipment,
-  type Draft, type EquipmentChoice, type RatioChoice, type SourceRow,
+  BW_FACTOR, BW_PRESETS, customSlug, cycleRole, draftOf, editChoices, emptyDraft, EQUIPMENT, fromSimilar, HARDNESS, legacyBodyweight,
+  matchExercises, RATIOS, readableTone, roleCounts, rolesList, scoringLine, setRole, similarSuggestions, stepFactor, toPayload,
+  validateDraft, withEquipment, type Draft, type EquipmentChoice, type RatioChoice, type SourceRow,
 } from '@/lib/recovery/customExercise';
 import { roleFigure } from '@/lib/recovery/screens';
 import { MUSCLE_IDS, ROLES, type MuscleId, type Role } from '@/lib/recovery/library';
+import { useUserId } from '@/lib/session';
 import { displayToKg, kgToDisplay } from '@/lib/units';
 import { uuid, useActiveWorkout } from '@/stores/activeWorkout';
 import { useRoutineDraft } from '@/stores/routineDraft';
@@ -32,41 +36,74 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
 const ROLE_SHORT: Record<Role, string> = { primary: 'P', secondary: 'S', tertiary: 'T' };
-const MEASURE_OF: Record<EquipmentChoice, string> = Object.fromEntries(
-  (Object.keys(EQUIPMENT) as EquipmentChoice[]).map((k) => [k, EQUIPMENT[k].logAs === 'seconds' ? 'duration' : EQUIPMENT[k].loadMode === 'fixed' ? 'reps' : 'weight_reps']),
-) as Record<EquipmentChoice, string>;
+const ALL_CHOICES = Object.keys(EQUIPMENT) as EquipmentChoice[];
 const FIGURE_WIDTH = 120;
 
 /**
  * Create a custom exercise (build phase 8), one screen top to bottom: name with "did you mean",
  * a similar exercise to start from, equipment, muscles by tapping the body, how hard it is, and
  * an optional known best. With `edit`, the same screen edits one of your exercises; how its sets
- * are logged can't change, so its sets keep their meaning.
+ * are logged and weighed can't change, so its sets keep their meaning.
  */
 export default function NewExercise() {
   const params = useLocalSearchParams<{ name?: string; target?: 'workout' | 'routine'; edit?: string }>();
   const exercises = useExercises();
   const roles = useExerciseRoles();
+  const libraryRows = useLibraryRows();
   const editing = params.edit ? exercises.data?.find((e) => e.id === params.edit) : undefined;
+  // an old bodyweight exercise turns bodyweight only if it stored no e1RM (draftOf)
+  const history = useHasPbHistory(editing && legacyBodyweight(editing) ? editing.id : undefined);
+  const historyMissing = !!editing && legacyBodyweight(editing) && history.data === undefined;
 
-  if (params.edit && (!exercises.data || !roles)) return <Screen><Loading /></Screen>;
+  if (params.edit && (!exercises.data || !roles || historyMissing)) {
+    const failed = (!exercises.data && exercises.error) || (!roles && libraryRows.error) || (historyMissing && history.error) || null;
+    return (
+      <Screen>
+        {failed ? (
+          <View style={{ gap: space.sm }}>
+            <ErrorBanner message={`Couldn't load this exercise: ${errorMessage(failed)}`} />
+            <Button title="Try again" small variant="secondary" loading={exercises.isFetching || libraryRows.isFetching || history.isFetching}
+              onPress={() => { if (!exercises.data) exercises.refetch(); if (!roles) libraryRows.refetch(); if (historyMissing) history.refetch(); }}
+              style={{ alignSelf: 'flex-start' }} />
+          </View>
+        ) : <Loading />}
+      </Screen>
+    );
+  }
   if (params.edit && !editing) return <Screen><ErrorBanner message="That exercise isn't one of yours." /></Screen>;
+  const scored = history.data ?? true;
   return (
     <ExerciseEditor
       key={params.edit ?? 'new'}
-      initial={editing ? draftOf(editing as SourceRow, roles?.get(editing.id) ?? []) : emptyDraft(params.name ?? '')}
+      initial={editing ? draftOf(editing, roles?.get(editing.id) ?? [], scored) : emptyDraft(params.name ?? '')}
       editing={editing ?? null}
+      scored={scored}
       target={params.target ?? null}
     />
   );
 }
 
-function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing: Exercise | null; target: 'workout' | 'routine' | null }) {
+/** Whether an exercise's PB history holds anything (a logged set's or a known best's e1RM). Read
+ *  afresh each time Edit opens (gcTime 0), since what draftOf makes of it is saved for good. */
+function useHasPbHistory(exerciseId: string | undefined) {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: [...recoveryKeys.pbHistory(uid, exerciseId ? [exerciseId] : []), 'any'],
+    enabled: !!uid && !!exerciseId,
+    gcTime: 0,
+    queryFn: async () => (await fetchPbHistoryRows(uid, [exerciseId!])).length > 0,
+  });
+}
+
+function ExerciseEditor({ initial, editing, scored, target }: {
+  initial: Draft; editing: Exercise | null; scored: boolean; target: 'workout' | 'routine' | null;
+}) {
   const c = useThresholds();
   const units = useUnits();
   const { palette, name: themeName } = useTheme();
   const exercises = useExercises();
   const roles = useExerciseRoles();
+  const libraryRows = useLibraryRows();
   const names = useMuscleNames();
   const bodyweight = useCurrentBodyweight();
   const { tints, ready } = useRoleTints();
@@ -83,9 +120,21 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
   const suggestions = similarSuggestions(d.name, library);
   const searched = similarQuery.trim() ? matchExercises(similarQuery, library, 5, 0.5) : [];
   const similar = d.similar ? library.find((e) => e.slug === d.similar) : undefined;
-  const problems = validateDraft(c, d);
+  // the user's other exercises' names: the database refuses a second one with the same name
+  const problems = validateDraft(c, d, all.filter((e) => e.owner_id && e.id !== editing?.id).map((e) => e.name));
   const counts = roleCounts(d.roles);
-  const choices = (Object.keys(EQUIPMENT) as EquipmentChoice[]).filter((k) => !editing || MEASURE_OF[k] === editing.measure);
+  // fixed when Edit opens, as the draft's load mode is
+  const [choices] = useState(() => (editing ? editChoices(editing, scored) : ALL_CHOICES));
+  // an old bodyweight exercise whose sets were scored in weight mode stays that way (draftOf)
+  const keptWeight = !!editing && legacyBodyweight(editing) && d.loadMode === 'weight';
+  // like the load mode, a saved bodyweight factor stays: stored e1RMs were worked out with it
+  const factorLocked = !!editing && editing.bw_factor != null;
+  const bodyweightMode = d.loadMode === 'bodyweight' || d.loadMode === 'assisted';
+  // a bodyweight or assisted best's e1RM counts today's bodyweight in, so wait for it
+  const waitingForBodyweight = !!d.best && bodyweightMode && !bodyweight.ready;
+  // without the exercise list "did you mean" can't match, and without the library's muscles a
+  // similar exercise can't be copied: say so rather than leave them silently missing
+  const listsFailed = (!exercises.data && exercises.error) || (!roles && libraryRows.error) || null;
   const busy = create.isPending || update.isPending;
 
   const use = (e: Exercise) => {
@@ -96,14 +145,15 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
     else router.replace(`/lift/exercises/${e.id}`);
   };
   const pickSimilar = (e: Exercise) => {
-    setD((cur) => fromSimilar({ ...cur, ratio: 'same' }, e as SourceRow, roles?.get(e.id) ?? []));
+    // editing: the similar exercise lends its muscles and fatigue, not how the sets are logged
+    setD((cur) => fromSimilar({ ...cur, ratio: 'same' }, e as SourceRow, roles?.get(e.id) ?? [], !!editing));
     setSimilarQuery('');
   };
   const save = () => {
     setTried(true);
-    if (problems.length) return;
+    if (problems.length || waitingForBodyweight) return;
     const payload = toPayload(c, d, {
-      slug: editing?.slug ?? customSlug(uuid()), today: todayIso(), bodyweightKg: bodyweight.ready ? bodyweight.kg : null,
+      slug: editing?.slug ?? customSlug(uuid()), today: todayIso(), bodyweightKg: bodyweight.kg,
     });
     if (editing) update.mutate({ id: editing.id, payload }, { onSuccess: () => router.back() });
     else create.mutate(payload, { onSuccess: use });
@@ -124,17 +174,29 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
                   <Pressable key={e.id} onPress={() => use(e)} accessibilityRole="button"
                     style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.sm, borderRadius: radius.md,
                       backgroundColor: palette.surface2, opacity: pressed ? 0.7 : 1 })}>
-                    <T variant="small" weight="600" style={{ flex: 1 }}>{e.name}</T>
+                    <View style={{ flex: 1 }}>
+                      <T variant="small" weight="600">{e.name}</T>
+                      {roles && !roles.get(e.id)?.length ? <NotOnMap /> : null}
+                    </View>
                     <T variant="small" tone="accent" weight="700">{target ? 'Use this' : 'Open'}</T>
                   </Pressable>
                 ))}
+              </View>
+            ) : null}
+            {listsFailed ? (
+              <View style={{ gap: space.sm }}>
+                <ErrorBanner message={`Couldn't load the exercise list, so matches and similar exercises are missing: ${errorMessage(listsFailed)}`} />
+                <Button title="Try again" small variant="secondary" loading={exercises.isFetching || libraryRows.isFetching}
+                  onPress={() => { if (!exercises.data) exercises.refetch(); if (!roles) libraryRows.refetch(); }} style={{ alignSelf: 'flex-start' }} />
               </View>
             ) : null}
           </View>
         </Card>
 
         {/* 2. similar exercise */}
-        <Card title="Start from a similar exercise" subtitle="Recommended: copies its equipment, muscles and how hard it is, and estimates your best from yours on it">
+        <Card title="Start from a similar exercise" subtitle={editing
+          ? 'Copies its muscles and how hard it is, not how sets are logged, and estimates your best from yours on it'
+          : 'Recommended: copies its equipment, muscles and how hard it is, and estimates your best from yours on it'}>
           <View style={{ gap: space.sm }}>
             {similar ? (
               <View style={{ gap: space.sm }}>
@@ -151,29 +213,45 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
               </View>
             ) : (
               <>
-                {suggestions.length ? (
+                {/* until the library's muscles load, a pick would copy none */}
+                {suggestions.length && roles ? (
                   <ChipRow>{suggestions.map((e) => <Chip key={e.id} label={e.name} onPress={() => pickSimilar(e)} />)}</ChipRow>
                 ) : null}
                 <TextField value={similarQuery} onChangeText={setSimilarQuery} placeholder="Search the library" autoCapitalize="none" />
-                {searched.length ? <ChipRow>{searched.map((e) => <Chip key={e.id} label={e.name} onPress={() => pickSimilar(e)} />)}</ChipRow> : null}
+                {searched.length && roles ? <ChipRow>{searched.map((e) => <Chip key={e.id} label={e.name} onPress={() => pickSimilar(e)} />)}</ChipRow> : null}
               </>
             )}
           </View>
         </Card>
 
         {/* 3. equipment */}
-        <Card title="Equipment" subtitle={editing ? "How its sets are logged can't change once it has been created" : undefined}>
+        <Card title="Equipment" subtitle={editing ? "Only equipment that logs and weighs sets the same way, so the sets you've logged keep their meaning" : undefined}>
           <View style={{ gap: space.md }}>
-            <ChipRow>
-              {choices.map((k) => <Chip key={k} label={EQUIPMENT[k].label} selected={d.choice === k} onPress={() => setD(withEquipment(d, k))} />)}
-            </ChipRow>
-            {d.loadMode === 'bodyweight' || d.loadMode === 'assisted' ? (
+            {choices.length ? (
+              <ChipRow>
+                {choices.map((k) => <Chip key={k} label={EQUIPMENT[k].label} selected={d.choice === k} onPress={() => setD(withEquipment(d, k))} />)}
+              </ChipRow>
+            ) : (
+              <T variant="small" tone="ink2">No equipment choice logs sets the way this exercise does, so its equipment stays as it is.</T>
+            )}
+            <T variant="small" tone="mut">{scoringLine(d)}</T>
+            {keptWeight ? (
+              <T variant="small" tone="ink2">Its sets and bests so far were scored from the weight you logged, so it stays that way: a set with no added weight adds no load.</T>
+            ) : null}
+            {bodyweightMode ? (
               <View style={{ gap: space.sm }}>
                 <T variant="small" tone="ink2">How much of your bodyweight it moves{d.loadMode === 'assisted' ? ', before the assistance' : ''}</T>
+                {factorLocked ? (
+                  // the stored e1RMs of its sets and known bests were worked out with this factor
+                  <T variant="small" tone="mut">
+                    {d.bwFactor?.toFixed(2)}, kept as it is: your logged sets and bests were worked out with it.
+                  </T>
+                ) : (
+                <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
                   <Button title="−" small variant="secondary" onPress={() => setD({ ...d, bwFactor: stepFactor(d.bwFactor, -1) })} />
-                  <T variant="h2" style={{ minWidth: 56, textAlign: 'center', fontVariant: ['tabular-nums'] }} accessibilityLabel={`Bodyweight factor ${d.bwFactor}`}>
-                    {(d.bwFactor ?? 0).toFixed(2)}
+                  <T variant="h2" style={{ minWidth: 56, textAlign: 'center', fontVariant: ['tabular-nums'] }} accessibilityLabel={`Bodyweight factor ${d.bwFactor ?? 'not set'}`}>
+                    {d.bwFactor == null ? '–' : d.bwFactor.toFixed(2)}
                   </T>
                   <Button title="+" small variant="secondary" onPress={() => setD({ ...d, bwFactor: stepFactor(d.bwFactor, 1) })} />
                   <T variant="tiny" tone="mut">{BW_FACTOR.min}–{BW_FACTOR.max}</T>
@@ -181,6 +259,8 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
                 <ChipRow>
                   {BW_PRESETS.map((p) => <Chip key={p.label} label={`${p.label} ${p.value}`} selected={d.bwFactor === p.value} onPress={() => setD({ ...d, bwFactor: p.value })} />)}
                 </ChipRow>
+                </>
+                )}
               </View>
             ) : null}
             <ChipRow>
@@ -203,6 +283,8 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
                   thresholds={c}
                   width={FIGURE_WIDTH}
                   nameOf={names}
+                  context="muscles chosen"
+                  emptyText={rolesList(d.roles).length ? 'none on this side' : 'no muscles chosen yet'}
                   onSelect={(m) => setD({ ...d, roles: cycleRole(c, d.roles, m) })}
                 />
               ))}
@@ -210,7 +292,7 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
             <T variant="small" tone="mut">
               {ROLES.map((r) => `${r} ${counts[r]}/${c.role_caps[r]}`).join(' · ')}
             </T>
-            {rolesList(d.roles).length ? <LoadSplitBar split={null} roles={rolesList(d.roles)} nameOf={names} /> : null}
+            {rolesList(d.roles).length ? <LoadSplitBar roles={rolesList(d.roles)} nameOf={names} /> : null}
             <View accessibilityLabel="Muscles as a list">
               {MUSCLE_IDS.map((id, i) => (
                 <MuscleRoleRow
@@ -239,29 +321,44 @@ function ExerciseEditor({ initial, editing, target }: { initial: Draft; editing:
         {/* 6. your best */}
         {!editing && d.loadMode !== 'fixed' ? (
           <Card title="Your best (optional)" subtitle={d.similar ? 'Skip it and your best is estimated from the similar exercise' : 'Skip it and your first session sets it'}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-              <NumberInput
-                value={d.best ? kgToDisplay(d.best.weightKg, units) : null}
-                onChange={(v) => setD({ ...d, best: v == null && !d.best?.reps ? null : { weightKg: v == null ? 0 : displayToKg(v, units), reps: d.best?.reps ?? 0 } })}
-                placeholder={d.loadMode === 'assisted' ? 'assist' : unit}
-                width={96}
-              />
-              <T tone="mut">×</T>
-              <NumberInput
-                value={d.best?.reps || null}
-                onChange={(v) => setD({ ...d, best: v == null && !d.best?.weightKg ? null : { weightKg: d.best?.weightKg ?? 0, reps: v ?? 0 } })}
-                placeholder="reps"
-                integer
-                width={80}
-              />
-              {d.best ? <Button title="Clear" small variant="ghost" onPress={() => setD({ ...d, best: null })} /> : null}
+            <View style={{ gap: space.sm }}>
+              {bodyweightMode ? (
+                <T variant="small" tone="mut">
+                  {d.loadMode === 'assisted' ? 'Weight is the assistance' : 'Weight is the added load'}; your bodyweight ({bodyweight.ready ? formatLoad(bodyweight.kg, units) : 'loading…'}) is counted in.
+                </T>
+              ) : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                <NumberInput
+                  value={d.best ? kgToDisplay(d.best.weightKg, units) : null}
+                  onChange={(v) => setD({ ...d, best: v == null && !d.best?.reps ? null : { weightKg: v == null ? 0 : displayToKg(v, units), reps: d.best?.reps ?? 0 } })}
+                  placeholder={d.loadMode === 'assisted' ? 'assist' : d.loadMode === 'bodyweight' ? `+${unit}` : unit}
+                  width={96}
+                />
+                <T tone="mut">×</T>
+                <NumberInput
+                  value={d.best?.reps || null}
+                  onChange={(v) => setD({ ...d, best: v == null && !d.best?.weightKg ? null : { weightKg: d.best?.weightKg ?? 0, reps: v ?? 0 } })}
+                  placeholder="reps"
+                  integer
+                  width={80}
+                />
+                {d.best ? <Button title="Clear" small variant="ghost" onPress={() => setD({ ...d, best: null })} /> : null}
+              </View>
             </View>
           </Card>
         ) : null}
 
         {tried && problems.length ? <ErrorBanner message={problems.join(' ')} /> : null}
         <ErrorBanner message={create.error ? errorMessage(create.error) : update.error ? errorMessage(update.error) : null} />
-        <Button title={editing ? 'Save changes' : target === 'workout' ? 'Save and add to workout' : 'Save exercise'} loading={busy} onPress={save} />
+        {waitingForBodyweight ? (
+          <T variant="small" tone="mut">Waiting for your bodyweight before saving your best, or clear the best to save now.</T>
+        ) : null}
+        <Button
+          title={editing ? 'Save changes' : target === 'workout' ? 'Save and add to workout' : target === 'routine' ? 'Save and add to routine' : 'Save exercise'}
+          loading={busy}
+          disabled={waitingForBodyweight}
+          onPress={save}
+        />
       </Screen>
     </>
   );
@@ -284,9 +381,11 @@ function MuscleRoleRow({ name, first, role, tint, onChange, full }: {
           accessibilityRole="button"
           accessibilityState={{ selected: role === r, disabled: full(r) }}
           accessibilityLabel={`${name} ${r}`}
+          // fills the row's padding and half of each gap, so a tap can't reach a neighbour's chip
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={{ width: 30, height: 26, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center',
             backgroundColor: role === r ? tint(r) : palette.surface2, opacity: full(r) ? 0.35 : 1 }}>
-          <T variant="tiny" weight="700" tone={role === r ? 'ink' : 'ink2'}>{ROLE_SHORT[r]}</T>
+          <T variant="tiny" weight="700" tone={role === r ? readableTone(tint(r), palette) : 'ink2'}>{ROLE_SHORT[r]}</T>
         </Pressable>
       ))}
     </View>

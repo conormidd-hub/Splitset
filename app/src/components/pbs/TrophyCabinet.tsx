@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Chip';
 import { T } from '@/components/ui/T';
-import { formatLiftPb, formatRunPb, isNewThisMonth, LIFT_METRICS, PERIODS, RUN_PBS } from '@/lib/pbs';
+import { formatLiftPb, formatRunPb, isNewThisMonth, liftMetricOrder, liftMetricShort, PERIODS, RUN_PBS } from '@/lib/pbs';
 import type { Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
@@ -25,10 +25,11 @@ export function TrophyCabinet({ units }: { units: Units }) {
   const records = useRecords();
 
   const liftList = useMemo(() => {
-    const names = new Map((exercises.data ?? []).map((e) => [e.id, e.name]));
+    const byId = new Map((exercises.data ?? []).map((e) => [e.id, e]));
     const lastDone = new Map((records.data ?? []).map((r) => [r.exercise_id, r.last_completed_at ?? '']));
     return [...(lifts.data?.entries() ?? [])]
-      .map(([id, byMetric]) => ({ id, name: names.get(id) ?? 'Exercise', byMetric, last: lastDone.get(id) ?? '' }))
+      // the load mode says what the weight means: an assisted lift has no 3RM, a bodyweight one's 1RM includes bodyweight
+      .map(([id, byMetric]) => ({ id, name: byId.get(id)?.name ?? 'Exercise', loadMode: byId.get(id)?.load_mode ?? null, byMetric, last: lastDone.get(id) ?? '' }))
       .sort((a, b) => b.last.localeCompare(a.last))
       .slice(0, TOP_LIFTS);
   }, [lifts.data, exercises.data, records.data]);
@@ -87,8 +88,8 @@ export function TrophyCabinet({ units }: { units: Units }) {
             <View>
               <T variant="label" tone="mut" style={{ marginBottom: 2 }}>Lifting</T>
               {liftList.map((l, i) => {
-                const metrics = LIFT_METRICS.filter((m) => l.byMetric.has(m.key)).slice(0, 2);
-                const isNew = metrics.some((m) => isNewThisMonth(l.byMetric.get(m.key)?.all?.achieved_at));
+                const metrics = liftMetricOrder(l.loadMode).filter((k) => l.byMetric.has(k)).slice(0, 2);
+                const isNew = metrics.some((k) => isNewThisMonth(l.byMetric.get(k)?.all?.achieved_at));
                 return (
                   <Pressable
                     key={l.id}
@@ -98,10 +99,10 @@ export function TrophyCabinet({ units }: { units: Units }) {
                       <T weight="600" numberOfLines={1}>{l.name}</T>
                       {isNew ? <T variant="tiny" weight="700" style={{ color: palette.amber }}>NEW PB this month</T> : null}
                     </View>
-                    {metrics.map((m) => (
-                      <View key={m.key} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
-                        <T variant="tiny" tone="mut">{m.short}</T>
-                        <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(m.key, l.byMetric.get(m.key)?.[period]?.value, units)}</T>
+                    {metrics.map((k) => (
+                      <View key={k} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
+                        <T variant="tiny" tone="mut">{liftMetricShort(k, l.loadMode)}</T>
+                        <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(k, l.byMetric.get(k)?.[period]?.value, units)}</T>
                       </View>
                     ))}
                   </Pressable>

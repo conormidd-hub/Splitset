@@ -255,6 +255,23 @@ export function listRows(map: Readonly<Record<MuscleId, ListState>>, mode: MapMo
   }).sort((a, b) => b.level - a.level || b.value - a.value || MUSCLE_IDS.indexOf(a.muscle) - MUSCLE_IDS.indexOf(b.muscle));
 }
 
+/** A list row's numbers as one phrase, "F 2.56 · trainable in 1.0 days · ready in 2.2 days" (after,
+ *  on the session view); a time that has come reads "trainable now", with no "in". */
+export function listLine(r: ListRow, mode: MapMode, sep = ' · '): string {
+  const session = mode === 'session';
+  const when = (word: string, t: string) => (t === 'now' || t === '—' ? `${word} ${t}` : `${word} ${session ? 'after' : 'in'} ${t}`);
+  return [`${session ? 'L' : 'F'} ${r.value.toFixed(2)}`, when('trainable', r.trainable), when('ready', r.ready)].join(sep);
+}
+
+/** The list's four number columns take 302 pt; below this width there would be no room left for
+ *  a name like "Traps & upper back", so each row puts its numbers on a second line instead. */
+export const LIST_COMPACT_BELOW = 460;
+
+/** Whether the list view, `width` pt wide, uses its two-line rows (every phone). */
+export function listCompact(width: number): boolean {
+  return width < LIST_COMPACT_BELOW;
+}
+
 /** The role badge of the tap detail. */
 export const ROLE_BADGE: Record<Role, string> = { primary: 'P', secondary: 'S', tertiary: 'T' };
 

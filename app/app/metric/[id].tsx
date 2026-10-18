@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
 
 import { useRecentActivities } from '@/api/activities';
 import { useWorkouts } from '@/api/lifting';
-import { useRunPbs } from '@/api/pbs';
+import { useLiftPbs, useRunPbs } from '@/api/pbs';
 import { useProfile, useUnits } from '@/api/profile';
 import { useWellness } from '@/api/wellness';
 import { HrvStatusDetail } from '@/components/metrics/HrvStatusDetail';
@@ -35,6 +35,7 @@ export default function MetricPage() {
   const activities = useRecentActivities(400);
   const workouts = useWorkouts(200);
   const runPbs = useRunPbs();
+  const liftPbs = useLiftPbs();
   const profile = useProfile();
   const units = useUnits();
   const today = todayIso();
@@ -44,11 +45,12 @@ export default function MetricPage() {
       activities: activities.data ?? [],
       workouts: workouts.data ?? [],
       runPbs: runPbs.data,
+      liftPbs: liftPbs.data,
       profile: profile.data ?? null,
       units,
       today,
     }),
-    [wellness.data, activities.data, workouts.data, runPbs.data, profile.data, units, today],
+    [wellness.data, activities.data, workouts.data, runPbs.data, liftPbs.data, profile.data, units, today],
   );
   const loading = wellness.isLoading || activities.isLoading;
 
@@ -68,6 +70,7 @@ export default function MetricPage() {
     activities.refetch();
     workouts.refetch();
     runPbs.refetch();
+    liftPbs.refetch();
   };
 
   let body: ReactNode;

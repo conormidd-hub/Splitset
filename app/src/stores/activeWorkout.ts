@@ -5,7 +5,9 @@
  * store (persisted to AsyncStorage synchronously, so a killed app resumes exactly where it
  * was) and queued for the database. The queue flushes in order after every change and again
  * on demand; a failed flush keeps its operations for the next attempt. Rows carry updated_at
- * so the server's last-write-wins guard settles any overlap between devices.
+ * so the server's last-write-wins guard settles any overlap between devices. Once Finish has
+ * queued the workout's finish, the sheet takes no more edits, and it closes when that finish
+ * syncs, whichever flush runs it.
  */
 
 import { create } from 'zustand';
@@ -61,7 +63,8 @@ export type ActiveWorkout = {
 };
 
 type Op =
-  | { kind: 'upsert'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; row: Record<string, unknown> }
+  /** One row, or several of one table in a single request (the sets saved again at Finish). */
+  | { kind: 'upsert'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; row: Record<string, unknown> | Record<string, unknown>[] }
   | { kind: 'delete'; table: 'workouts' | 'workout_exercises' | 'workout_sets'; id: string }
   /** Score the workout and set finished_at with its cache, in one transaction (build phase 4).
    *  Queued after every save of the workout, so it scores exactly what was logged. */
@@ -79,6 +82,9 @@ type State = {
   /** The signed-in user's thresholds, for the e1RM each saved set stores. Not persisted: the
    *  workout screen sets it from useThresholds(). */
   thresholds: Thresholds;
+  /** A workout whose finish synced with no finish() call waiting on it (Retry now, or a queue
+   *  left from before a restart): the Lift tab links it to the plan, refreshes and opens it. */
+  finishedId: string | null;
 
   start: (userId: string, routine?: RoutineWithStructure | null, name?: string, bodyweightKg?: number | null) => ActiveWorkout;
   rename: (name: string) => void;
@@ -88,15 +94,23 @@ type State = {
   /** Snapshot bodyweight on the workout (D5); sets whose e1RM depends on it are saved again. */
   setBodyweight: (kg: number) => void;
   setThresholds: (thresholds: Thresholds) => void;
+  /** Copy the library's current facts onto blocks whose copies differ (an exercise edited
+   *  mid-workout, a block saved before Phase 3), and save their sets again with the e1RM they give. */
+  refreshFacts: (rows: ExerciseForWorkout[]) => void;
   removeExercise: (blockId: string) => void;
   setExerciseRest: (blockId: string, seconds: number | null) => void;
   addSet: (blockId: string) => SetRow | null;
   updateSet: (setId: string, patch: Partial<Pick<SetRow, 'weightKg' | 'reps' | 'rpe' | 'seconds' | 'side' | 'setType' | 'notes'>>) => void;
   toggleSet: (setId: string, completed?: boolean) => SetRow | null;
   removeSet: (setId: string) => void;
+  /** Queue the finish and wait for it: the workout's id once it has synced, else null (the sheet
+   *  stays open, with the finish still queued). */
   finish: () => Promise<string | null>;
   discard: () => Promise<void>;
+  /** Drain the queue. A call while a drain is running waits for that one, which runs whatever
+   *  was queued in the meantime too. */
   flush: () => Promise<void>;
+  clearFinished: () => void;
   setTimer: (timer: RestTimer | null) => void;
 };
 
@@ -126,6 +140,15 @@ const rowOf = {
     setRowPayload(c, w, w.exercises.find((b) => b.id === s.workoutExerciseId), s, now()),
 };
 
+/** True once Finish has queued the workout's finish: what it scores is settled from then on. */
+const finishQueued = (outbox: Op[], workoutId: string) => outbox.some((o) => o.kind === 'finish' && o.workoutId === workoutId);
+
+/** The drain in progress, shared by every flush() call made while it runs. */
+let draining: Promise<void> | null = null;
+/** The workout a finish() call is waiting on, and whether its finish has synced: that call opens
+ *  the summary itself, so the store doesn't hand the id to the Lift tab as well. */
+let awaited: { workoutId: string; synced: boolean } | null = null;
+
 export const useActiveWorkout = create<State>()(
   persist(
     (set, get) => {
@@ -135,7 +158,8 @@ export const useActiveWorkout = create<State>()(
       };
       const mutate = (fn: (w: ActiveWorkout) => void): ActiveWorkout | null => {
         const w = get().workout;
-        if (!w) return null;
+        // after Finish, an edit would reach a finished workout unscored (or un-finish it)
+        if (!w || finishQueued(get().outbox, w.id)) return null;
         const next: ActiveWorkout = { ...w, exercises: w.exercises.map((b) => ({ ...b, sets: b.sets.map((s) => ({ ...s })) })) };
         fn(next);
         next.updatedAt = now();
@@ -151,6 +175,7 @@ export const useActiveWorkout = create<State>()(
         timer: null,
         defaultRestSeconds: 90,
         thresholds: DEFAULT_THRESHOLDS,
+        finishedId: null,
 
         start: (userId, routine, name, bodyweightKg) => {
           const startedAt = now();
@@ -250,6 +275,26 @@ export const useActiveWorkout = create<State>()(
 
         setThresholds: (thresholds) => set({ thresholds }),
 
+        refreshFacts: (rows) => {
+          const byId = new Map(rows.map((r) => [r.id, r]));
+          const stale = new Set(
+            (get().workout?.exercises ?? []).filter((b) => {
+              const row = byId.get(b.exerciseId);
+              if (!row) return false;
+              const f = factsOf(row);
+              return b.slug !== f.slug || b.loadMode !== f.loadMode || b.bwFactor !== f.bwFactor
+                || b.unilateral !== f.unilateral || b.isBodyweight !== f.isBodyweight;
+            }).map((b) => b.id),
+          );
+          if (!stale.size) return;
+          const w = mutate((x) => {
+            for (const b of x.exercises) if (stale.has(b.id)) Object.assign(b, factsOf(byId.get(b.exerciseId)!));
+          });
+          if (!w) return;
+          const c = get().thresholds;
+          queue(...w.exercises.filter((b) => stale.has(b.id)).flatMap((b) => b.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(c, w, s) }))));
+        },
+
         removeExercise: (blockId) => {
           const w = mutate((x) => {
             x.exercises = x.exercises.filter((b) => b.id !== blockId).map((b, i) => ({ ...b, position: i }));
@@ -342,24 +387,37 @@ export const useActiveWorkout = create<State>()(
         finish: async () => {
           const w = get().workout;
           if (!w) return null;
-          // drop untouched empty sets so history stays honest
-          const cleaned = mutate((x) => {
-            for (const b of x.exercises) b.sets = b.sets.filter((s) => s.completed || s.weightKg != null || s.reps != null || s.seconds != null);
-          });
-          const removed = w.exercises.flatMap((b) => b.sets).filter((s) => !cleaned?.exercises.some((b) => b.sets.some((y) => y.id === s.id)));
-          const finishedAt = now();
-          set((s) => ({
-            outbox: [
-              ...s.outbox,
-              ...removed.map((r): Op => ({ kind: 'delete', table: 'workout_sets', id: r.id })),
-              { kind: 'upsert', table: 'workouts', row: rowOf.workout(cleaned ?? w) },
-              { kind: 'finish', userId: w.userId, workoutId: w.id, finishedAt },
-            ],
-          }));
-          await get().flush();
-          if (get().outbox.length) return null;   // still unsynced: keep the sheet open
-          set({ workout: null, timer: null });
-          return w.id;
+          // a second Finish while the first is still queued only waits for it, keeping its finishedAt
+          if (!finishQueued(get().outbox, w.id)) {
+            // drop untouched empty sets so history stays honest
+            const cleaned = mutate((x) => {
+              for (const b of x.exercises) b.sets = b.sets.filter((s) => s.completed || s.weightKg != null || s.reps != null || s.seconds != null);
+            }) ?? w;
+            const removed = w.exercises.flatMap((b) => b.sets).filter((s) => !cleaned.exercises.some((b) => b.sets.some((y) => y.id === s.id)));
+            // every set again, with the e1RM this build gives it: sets saved by an older build have none
+            const c = get().thresholds;
+            const kept = cleaned.exercises.flatMap((b) => b.sets.map((s) => rowOf.set(c, cleaned, s)));
+            const resave: Op[] = kept.length ? [{ kind: 'upsert', table: 'workout_sets', row: kept }] : [];
+            const finishedAt = now();
+            set((s) => ({
+              outbox: [
+                ...s.outbox,
+                ...removed.map((r): Op => ({ kind: 'delete', table: 'workout_sets', id: r.id })),
+                ...resave,
+                { kind: 'upsert', table: 'workouts', row: rowOf.workout(cleaned) },
+                { kind: 'finish', userId: w.userId, workoutId: w.id, finishedAt },
+              ],
+            }));
+          }
+          const claim = { workoutId: w.id, synced: false };
+          awaited = claim;
+          try {
+            await get().flush();
+          } finally {
+            if (awaited === claim) awaited = null;
+          }
+          // still unsynced: the sheet stays open, and Retry (or the next Finish) sends it
+          return claim.synced ? w.id : null;
         },
 
         discard: async () => {
@@ -374,28 +432,52 @@ export const useActiveWorkout = create<State>()(
           }
         },
 
-        flush: async () => {
-          if (get().flushing) return;
-          set({ flushing: true });
-          try {
-            while (get().outbox.length) {
-              const op = get().outbox[0];
-              if (op.kind === 'finish') {
-                await finishWorkoutRemote(op.userId, op.workoutId, op.finishedAt);
-              } else {
-                const res = op.kind === 'upsert'
-                  ? await supabase.from(op.table).upsert(op.row as never, { onConflict: 'id' })
-                  : await supabase.from(op.table).delete().eq('id', op.id);
-                if (res.error) throw res.error;
+        flush: () => {
+          if (draining) return draining;
+          let settled = false;
+          const drain = (async () => {
+            set({ flushing: true });
+            try {
+              while (get().outbox.length) {
+                const op = get().outbox[0];
+                if (op.kind === 'finish') {
+                  await finishWorkoutRemote(op.userId, op.workoutId, op.finishedAt);
+                } else {
+                  const res = op.kind === 'upsert'
+                    ? await supabase.from(op.table).upsert(op.row as never, { onConflict: 'id' })
+                    : await supabase.from(op.table).delete().eq('id', op.id);
+                  if (res.error) throw res.error;
+                }
+                // a synced finish closes the sheet whichever flush ran it; with no finish() waiting
+                // on it, the Lift tab takes it from finishedId (and stops the rest timer)
+                let mine = false;
+                if (op.kind === 'finish' && awaited?.workoutId === op.workoutId) {
+                  awaited.synced = true;
+                  mine = true;
+                }
+                set((s) => ({
+                  // a discard while the op was in flight has already emptied the queue
+                  outbox: s.outbox[0] === op ? s.outbox.slice(1) : s.outbox,
+                  lastError: null,
+                  ...(op.kind === 'finish' && s.workout?.id === op.workoutId
+                    ? { workout: null, ...(mine ? { timer: null } : { finishedId: op.workoutId }) }
+                    : {}),
+                }));
               }
-              set((s) => ({ outbox: s.outbox.slice(1), lastError: null }));
+            } catch (e) {
+              set({ lastError: e instanceof Error ? e.message : 'Could not save' });
+            } finally {
+              settled = true;
+              draining = null;
+              set({ flushing: false });
             }
-          } catch (e) {
-            set({ lastError: e instanceof Error ? e.message : 'Could not save' });
-          } finally {
-            set({ flushing: false });
-          }
+          })();
+          // an empty queue settles before the drain is even returned: nothing to share then
+          if (!settled) draining = drain;
+          return drain;
         },
+
+        clearFinished: () => set({ finishedId: null }),
 
         setTimer: (timer) => set({ timer }),
       };
@@ -403,7 +485,7 @@ export const useActiveWorkout = create<State>()(
     {
       name: 'splitset-active-workout',
       storage: createJSONStorage(() => storage),
-      partialize: (s) => ({ workout: s.workout, outbox: s.outbox, timer: s.timer, defaultRestSeconds: s.defaultRestSeconds }),
+      partialize: (s) => ({ workout: s.workout, outbox: s.outbox, timer: s.timer, defaultRestSeconds: s.defaultRestSeconds, finishedId: s.finishedId }),
     },
   ),
 );

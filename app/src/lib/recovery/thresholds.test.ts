@@ -123,6 +123,56 @@ describe('isValidOverride', () => {
     assert.equal(isValidOverride(base, '__proto__.polluted', 1), false);
     assert.equal(isValidOverride(base, 'role_weights.constructor', 1), false);
   });
+
+  test('takes only canonical level indices', () => {
+    assert.ok(isValidOverride(base, 'levels.1.min', 0.3));
+    assert.equal(isValidOverride(base, 'levels.01.min', 0.3), false);
+    assert.equal(isValidOverride(base, 'levels.1e0.min', 0.3), false);
+    assert.equal(isValidOverride(base, 'levels.-1.min', 0.3), false);
+  });
+
+  test('keeps the level pointers inside levels, and a band\'s own number and key fixed', () => {
+    assert.ok(isValidOverride(base, 'trainable_max_level', 4));
+    assert.equal(isValidOverride(base, 'trainable_max_level', 5), false);   // sessionMap reads levels[6]
+    assert.equal(isValidOverride(base, 'trainable_max_level', 1.5), false);
+    assert.equal(isValidOverride(base, 'trainable_max_level', -1), false);
+    assert.ok(isValidOverride(base, 'fatigue.weekly_cap_min_level', 5));
+    assert.ok(isValidOverride(base, 'fatigue.weekly_cap_min_level', 0));
+    assert.equal(isValidOverride(base, 'fatigue.weekly_cap_min_level', 6), false);
+    assert.equal(isValidOverride(base, 'fatigue.weekly_cap_min_level', 2.5), false);
+    assert.equal(isValidOverride(base, 'levels.2.level', 3), false);
+    assert.equal(isValidOverride(base, 'levels.2.level', 2), false);
+    assert.equal(isValidOverride(base, 'levels.1.key', 'x'), false);
+  });
+
+  test('keeps windows and divisors above zero and the intensity cap below 1', () => {
+    assert.equal(isValidOverride(base, 'e1rm.epley_divisor', 0), false);
+    assert.equal(isValidOverride(base, 'recovery.max_multiplier', -1), false);
+    assert.equal(isValidOverride(base, 'recovery.min_multiplier', 0), false);
+    assert.equal(isValidOverride(base, 'fatigue.weekly_window_hours', 0), false);
+    assert.equal(isValidOverride(base, 'base_recovery_hours.default', 0), false);
+    assert.equal(isValidOverride(base, 'base_recovery_hours.chest', -12), false);
+    assert.equal(isValidOverride(base, 'intensity_cap', 1), false);
+    assert.equal(isValidOverride(base, 'intensity_cap', 0), false);
+    assert.ok(isValidOverride(base, 'intensity_cap', 0.9));
+    assert.ok(isValidOverride(base, 'fatigue.weekly_window_hours', 120));
+  });
+
+  test('takes only muscles in the activity muscle lists', () => {
+    assert.ok(isValidOverride(base, 'cardio.activity_muscles.run.primary.0', 'glutes'));
+    assert.equal(isValidOverride(base, 'cardio.activity_muscles.run.primary.0', 'neck'), false);
+  });
+
+  test('thresholdsFor skips the rows the engine could not run on, without throwing', () => {
+    const t = thresholdsFor(base, A, [
+      { user_id: A, key: 'levels.01.min', value: 0.3 },
+      { user_id: A, key: 'trainable_max_level', value: 5 },
+      { user_id: A, key: 'fatigue.weekly_cap_min_level', value: 6 },
+      { user_id: A, key: 'levels.1.level', value: 9 },
+      { user_id: A, key: 'e1rm.epley_divisor', value: 0 },
+    ]);
+    assert.equal(t, base);
+  });
 });
 
 describe('withOverride', () => {

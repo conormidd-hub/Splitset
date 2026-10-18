@@ -29,6 +29,7 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 USER_P = UUID("00000000-0000-4000-a000-0000000000c1")   # logs F02, then estimates from it
 USER_Q = UUID("00000000-0000-4000-a000-0000000000c2")   # manual PB only, in Melbourne
 USER_R = UUID("00000000-0000-4000-a000-0000000000c3")   # sets saved before phase 3, for the backfill
+USER_S = UUID("00000000-0000-4000-a000-0000000000c4")   # the same, in a workout still open
 NOW = datetime.now(timezone.utc)
 
 
@@ -80,7 +81,7 @@ def conn():
     assert urlparse(url).hostname in LOCAL_HOSTS, "SPLITSET_TEST_DB_URL must point at a local database"
     with psycopg.connect(url, row_factory=dict_row) as c:
         sl.seed(c, sl.load_json(sl.LIBRARY_PATH), sl.load_json(sl.CONSTANTS_PATH))
-        for uid in (USER_P, USER_Q, USER_R):
+        for uid in (USER_P, USER_Q, USER_R, USER_S):
             c.execute("insert into auth.users (instance_id, id, aud, role, email) "
                       "values ('00000000-0000-0000-0000-000000000000', %s, 'authenticated', 'authenticated', %s) "
                       "on conflict (id) do nothing", (uid, f"phase3-{str(uid)[-2:]}@splitset.test"))
@@ -199,6 +200,42 @@ def test_db_backfill_fills_old_sets_once(conn):
     w = conn.execute("select bodyweight_kg, updated_at from public.workouts where id = %s", (wid,)).fetchone()
     assert (w["bodyweight_kg"], w["updated_at"]) == (80, stamp)
     assert bf.plan(conn, USER_R).users == {}   # a second run finds nothing
+
+
+def test_db_backfill_waits_for_an_open_workout_to_finish(conn):
+    """An app from before phase 3 saves only the columns it knows, so an e1RM filled while its
+    workout is open would go stale at the next edit. The backfill leaves it for a later run."""
+    bench, pull_up = exercise(conn, "bench_press_bb"), exercise(conn, "pull_up")
+    wid = uuid4()
+    stamp = NOW - timedelta(hours=1)
+    conn.execute("update public.profiles set bodyweight_kg = 80, bodyweight_updated_at = %s where id = %s", (NOW, USER_S))
+    insert(conn, "workouts", {"id": wid, "user_id": USER_S, "name": "Open", "started_at": stamp, "updated_at": stamp})
+    for i, (ex, w, r) in enumerate([(bench, 100, 5), (pull_up, 10, 5)]):
+        weid = uuid4()
+        insert(conn, "workout_exercises", {"id": weid, "workout_id": wid, "user_id": USER_S, "exercise_id": ex["id"], "position": i})
+        insert(conn, "workout_sets", {"id": uuid4(), "workout_exercise_id": weid, "workout_id": wid, "exercise_id": ex["id"],
+                                      "user_id": USER_S, "position": 0, "weight_kg": w, "reps": r,
+                                      "completed": True, "completed_at": stamp, "updated_at": stamp})
+    conn.commit()
+
+    assert bf.plan(conn, USER_S).users == {}
+    bf.backfill(conn, USER_S)
+    conn.commit()
+    e1rms = lambda: {r["exercise_id"]: r["e1rm"] for r in conn.execute(  # noqa: E731
+        "select exercise_id, e1rm from public.workout_sets where workout_id = %s", (wid,)).fetchall()}
+    assert set(e1rms().values()) == {None}
+    assert conn.execute("select bodyweight_kg from public.workouts where id = %s", (wid,)).fetchone()["bodyweight_kg"] is None
+
+    # finished (by an old app: a plain update), the next run fills it and caches it
+    conn.execute("update public.workouts set finished_at = %s, updated_at = now() where id = %s", (NOW, wid))
+    conn.commit()
+    p = bf.backfill(conn, USER_S)
+    conn.commit()
+    assert (p.workouts, p.sets, p.rescored) == (1, 2, 1)
+    got = e1rms()
+    assert got[bench["id"]] == pytest.approx(100 * (1 + 5 / 30))
+    assert got[pull_up["id"]] == pytest.approx(90 * (1 + 5 / 30))   # 80 kg body + 10 kg added
+    assert conn.execute("select count(*) as n from public.workout_muscle_loads where workout_id = %s", (wid,)).fetchone()["n"] > 0
 
 
 def test_db_access_rules(conn, logged_f02):

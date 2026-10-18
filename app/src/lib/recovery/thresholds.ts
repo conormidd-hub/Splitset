@@ -75,6 +75,17 @@ const STRING_CHOICES: Record<string, readonly string[]> = {
   'pb.manual_policy': ['max', 'replace_on_log'] satisfies ManualPolicy[],
 };
 
+/** Whole numbers the engine uses as indices into `levels`, with the largest each may be for a
+ *  given number of levels (sessionMap reads levels[trainable_max_level + 1]). */
+const LEVEL_INDICES: Record<string, (levels: number) => number> = {
+  trainable_max_level: (n) => n - 2,
+  'fatigue.weekly_cap_min_level': (n) => n - 1,
+};
+
+/** Numbers the engine divides by or scans over, which must stay above zero (as must every
+ *  base_recovery_hours window). */
+const POSITIVE = new Set(['e1rm.epley_divisor', 'recovery.min_multiplier', 'recovery.max_multiplier', 'fatigue.weekly_window_hours']);
+
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
 function stripDocs(v: unknown): unknown {
@@ -108,7 +119,8 @@ function lookup(t: Thresholds, path: string[]): { found: true; value: unknown } 
   for (const seg of path) {
     if (FORBIDDEN_SEGMENTS.has(seg) || seg === '') return { found: false };
     if (Array.isArray(cur)) {
-      if (!/^\d+$/.test(seg) || Number(seg) >= cur.length) return { found: false };
+      // canonical indices only: setAt indexes by the segment itself, and cur['01'] is no element
+      if (!/^(0|[1-9]\d*)$/.test(seg) || Number(seg) >= cur.length) return { found: false };
       cur = cur[Number(seg)];
     } else if (cur && typeof cur === 'object' && Object.prototype.hasOwnProperty.call(cur, seg)) {
       cur = (cur as Record<string, unknown>)[seg];
@@ -123,7 +135,9 @@ function lookup(t: Thresholds, path: string[]): { found: true; value: unknown } 
  * Whether a user_thresholds row may apply. An override replaces one existing leaf with a value
  * of the same type (a finite number for a number; one of the listed choices where a string
  * has them), or adds a per-muscle `base_recovery_hours.<muscle>`. Anything else, including a
- * whole section or a key the constants file no longer has, is invalid.
+ * whole section or a key the constants file no longer has, is invalid. So is a value the engine
+ * can't run on: a level index outside `levels`, a band's own number or key, a window or divisor
+ * of zero or less, an intensity cap of 1 or more, or an activity muscle that isn't a muscle.
  */
 export function isValidOverride(t: Thresholds, key: string, value: unknown): boolean {
   const path = key.split('.');
@@ -140,6 +154,12 @@ export function isValidOverride(t: Thresholds, key: string, value: unknown): boo
   if (expected === null) return value === null || typeof value === 'string';
   if (typeof value !== typeof expected) return false;
   if (typeof value === 'number' && !Number.isFinite(value)) return false;
+  if (path[0] === 'levels' && (path[2] === 'level' || path[2] === 'key')) return false;   // a band's identity
+  const maxIndex = LEVEL_INDICES[key];
+  if (maxIndex) return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= maxIndex(t.levels.length);
+  if (POSITIVE.has(key) || path[0] === 'base_recovery_hours') return (value as number) > 0;
+  if (key === 'intensity_cap') return (value as number) > 0 && (value as number) < 1;   // INOL (§4) divides by 1 − I
+  if (path[0] === 'cardio' && path[1] === 'activity_muscles') return isMuscleId(value as string);
   const choices = STRING_CHOICES[key];
   return !choices || choices.includes(value as string);
 }

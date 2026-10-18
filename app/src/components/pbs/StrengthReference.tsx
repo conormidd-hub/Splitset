@@ -114,7 +114,12 @@ function KnownBestForm({ exercise }: { exercise: Exercise }) {
   const datedAt = date.trim() || today;
   const dateBad = !DATE.test(datedAt) || Number.isNaN(Date.parse(datedAt)) || datedAt > today;
   const bodyweightMode = exercise.load_mode === 'bodyweight' || exercise.load_mode === 'assisted';
-  const ready = weight != null && weight >= 0 && reps != null && reps >= 1 && !dateBad;
+  // a bodyweight or assisted best is stored with the bodyweight counted in, so it waits for the
+  // real one rather than saving against the default (`ready` stays false while a read is loading
+  // or has failed)
+  const bodyweightPending = bodyweightMode && !bodyweight.ready;
+  const ready = weight != null && weight >= 0 && reps != null && reps >= 1 && !dateBad && !bodyweightPending;
+  const replacedBy = c.pb.manual_policy === 'replace_on_log' ? 'your next logged set replaces it' : 'a heavier logged set replaces it';
 
   const submit = () => {
     if (!ready) return;
@@ -125,21 +130,28 @@ function KnownBestForm({ exercise }: { exercise: Exercise }) {
   };
 
   return (
-    <Card title="Add a known best" subtitle={`Counts like a logged set for ${c.pb.window_days} days; a heavier logged set replaces it`}>
+    <Card title="Add a known best" subtitle={`Counts like a logged set for ${c.pb.window_days} days; ${replacedBy}`}>
       <View style={{ gap: space.sm }}>
         {bodyweightMode ? (
           <T variant="small" tone="mut">
-            {exercise.load_mode === 'assisted' ? 'Weight is the assistance' : 'Weight is the added load'}; your bodyweight ({formatLoad(bodyweight.kg, units)}) is counted in.
+            {exercise.load_mode === 'assisted' ? 'Weight is the assistance' : 'Weight is the added load'}; your bodyweight ({bodyweight.ready ? formatLoad(bodyweight.kg, units) : 'loading…'}) is counted in.
           </T>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
           <NumberInput value={weight} onChange={setWeight} placeholder={units === 'imperial' ? 'lb' : 'kg'} width={84} />
           <T tone="mut">×</T>
           <NumberInput value={reps} onChange={setReps} integer placeholder="reps" width={72} />
-          <View style={{ flex: 1 }}>
-            <TextField value={date} onChangeText={setDate} placeholder={`today (${today})`} autoCapitalize="none" error={date && dateBad ? 'A past date as YYYY-MM-DD' : undefined} />
-          </View>
         </View>
+        {/* its own line, so the placeholder fits a phone and an error never moves the numbers;
+            the error waits for a whole date, the hint gives the format until then */}
+        <TextField
+          value={date}
+          onChangeText={setDate}
+          placeholder={`today (${today})`}
+          autoCapitalize="none"
+          hint="Leave blank for today, or a past date as YYYY-MM-DD"
+          error={date.trim().length >= 10 && dateBad ? 'A past date as YYYY-MM-DD' : undefined}
+        />
         {add.error ? <ErrorBanner message={errorMessage(add.error)} /> : null}
         <Button title="Add known best" small disabled={!ready} loading={add.isPending} onPress={submit} style={{ alignSelf: 'flex-start' }} />
       </View>

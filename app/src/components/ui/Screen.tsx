@@ -57,6 +57,10 @@ export function Screen({
           ref={scrollRef}
           contentContainerStyle={{ paddingBottom: space.xxl }}
           keyboardShouldPersistTaps="handled"
+          // iOS: the page makes room for the keyboard and scrolls the focused field above it, and
+          // a swipe down puts away the number pads, which have no Return key
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode="interactive"
           scrollEnabled={scrollEnabled}
           onScroll={onScroll}
           scrollEventThrottle={onScroll ? 16 : undefined}

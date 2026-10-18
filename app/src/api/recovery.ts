@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { focusManager, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import { useExercises, type Exercise } from '@/api/lifting';
 import { useProfile } from '@/api/profile';
@@ -13,8 +14,8 @@ import { muscleFallbackName } from '@/lib/recovery/figure';
 import { trainNext, type TrainExercise } from '@/lib/recovery/screens';
 import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory } from '@/lib/recovery/pbHistory';
 import {
-  historyWindow, isoOfHours, readSpanHours, readWindow, recoveryHistory, recoveryMapAt, sessionMapFromLoads, sessionView,
-  type LoadWindow, type RecoveryMap, type RecoverySample, type SessionMap,
+  historyWindow, isoOfHours, localDayTimes, nowWindow, readSpanHours, readWindow, recoveryHistory, recoveryHistoryAt, recoveryMapAt,
+  sampleTimes, sessionMapFromLoads, sessionView, withLiveWorkout, type LoadWindow, type RecoveryMap, type RecoverySample, type SessionMap,
 } from '@/lib/recovery/read';
 import { currentBodyweight, engineKey, exerciseDef, setE1rm } from '@/lib/recovery/sets';
 import { diffOverrides, type Edits } from '@/lib/recovery/settings';
@@ -34,7 +35,8 @@ export const recoveryKeys = {
   pbHistory: (uid: string, exerciseIds: readonly string[]) => ['pbHistory', uid, ...exerciseIds] as const,
   manualPbs: (uid: string) => ['pbHistory', uid, 'manual'] as const,
   allHistory: (uid: string) => ['pbHistory', uid, 'all'] as const,
-  libraryRows: () => ['libraryRows'] as const,
+  // by user, since RLS adds each user's own exercises; with no uid, every user's (to invalidate)
+  libraryRows: (uid?: string) => ['libraryRows', ...(uid == null ? [] : [uid])] as const,
   // under loadKeys.all, so finishing a workout, the recompute rule and deletes refresh them
   loads: (uid: string, from: string, to: string | null) => [...loadKeys.all(uid), 'window', from, to] as const,
   session: (uid: string, workoutId: string) => [...loadKeys.all(uid), 'session', workoutId] as const,
@@ -57,13 +59,32 @@ export function useThresholds(): Thresholds {
   return q.data ?? DEFAULT_THRESHOLDS;
 }
 
+/** While a bodyweight source has failed to load, it is asked again this often. */
+const BODYWEIGHT_RETRY_MS = 15_000;
+
 /** The bodyweight a workout snapshots now (D5): profile or latest weigh-in, whichever is newer,
- *  else the constants' default. `ready` is false until both sources have loaded. */
+ *  else the constants' default. `ready` is false until both sources have read successfully: a
+ *  failed read (offline) is not "no bodyweight", and snapshotting the default then would be
+ *  permanent. A failed source is retried every 15 s until it loads. */
 export function useCurrentBodyweight() {
   const c = useThresholds();
   const profile = useProfile();
   const weighIn = useLatestWeighIn();
-  const ready = profile.isFetched && weighIn.isFetched;
+  // data, not isFetched (true after an error too); no weigh-in at all reads as null, which counts
+  const ready = profile.data !== undefined && weighIn.data !== undefined;
+  const profileFailed = profile.data === undefined && profile.isError;
+  const weighInFailed = weighIn.data === undefined && weighIn.isError;
+  const { refetch: refetchProfile } = profile;
+  const { refetch: refetchWeighIn } = weighIn;
+  useEffect(() => {
+    // the app counts itself online on native, so a reconnect alone never refetches
+    if (!profileFailed && !weighInFailed) return;
+    const timer = setInterval(() => {
+      if (profileFailed) void refetchProfile({ cancelRefetch: false });
+      if (weighInFailed) void refetchWeighIn({ cancelRefetch: false });
+    }, BODYWEIGHT_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [profileFailed, weighInFailed, refetchProfile, refetchWeighIn]);
   return { ...currentBodyweight(c, profile.data, weighIn.data), ready };
 }
 
@@ -204,11 +225,16 @@ export function useLiveSession() {
   const history = useQuery({
     queryKey: recoveryKeys.allHistory(uid), queryFn: () => fetchPbHistoryRows(uid, null), enabled: !!uid && !!workout,
   });
-  if (!workout || !library.data || !history.data) return null;
-  const { lib, keyOf } = libraryFromRows(library.data.exercises, library.data.muscles);
-  const m: Model = { c, lib };
-  const scored = scoreLiveWorkout(m, workout, toPbHistory(history.data, (id) => keyOf.get(id)), hoursOf(nowMs));
-  return { scored, session: sessionView(sessionMap(m, scored)) };
+  // the library and the PB history are rebuilt only when their queries change, so a keystroke in
+  // a set rescores the workout without rescanning every logged set
+  const built = useMemo(() => (library.data ? libraryFromRows(library.data.exercises, library.data.muscles) : null), [library.data]);
+  const pbs = useMemo(() => (built && history.data ? toPbHistory(history.data, (id) => built.keyOf.get(id)) : null), [built, history.data]);
+  return useMemo(() => {
+    if (!workout || !built || !pbs) return null;
+    const m: Model = { c, lib: built.lib };
+    const scored = scoreLiveWorkout(m, workout, pbs, hoursOf(nowMs));
+    return { scored, session: sessionView(sessionMap(m, scored)) };
+  }, [workout, built, pbs, c, nowMs]);
 }
 
 // ---------------------------------------------------------------- the read side (build phase 5)
@@ -219,13 +245,33 @@ export function useLiveSession() {
 // engine works out the rest here (src/lib/recovery/read.ts). Times are ISO strings or epoch ms.
 
 const LIBRARY_STALE_MS = 10 * 60_000;
-const HOUR_MS = 3_600_000;
-const MINUTE_MS = 60_000;
 const NO_LIBRARY = buildLibrary([]);
 
 /** Every exercise the user can see with its muscles by role, cached for ten minutes. */
 export function useLibraryRows(enabled = true) {
-  return useQuery({ queryKey: recoveryKeys.libraryRows(), queryFn: fetchLibraryRows, staleTime: LIBRARY_STALE_MS, enabled });
+  const uid = useUserId();
+  return useQuery({ queryKey: recoveryKeys.libraryRows(uid), queryFn: fetchLibraryRows, staleTime: LIBRARY_STALE_MS, enabled: enabled && !!uid });
+}
+
+/** The library rows as the engine's library and its id maps, built once per fetch. */
+function useEngineLibrary() {
+  const library = useLibraryRows();
+  const built = useMemo(() => (library.data ? libraryFromRows(library.data.exercises, library.data.muscles) : null), [library.data]);
+  return { library, built };
+}
+
+/**
+ * The placeholder while a read window that moved with the clock refetches (on the hour): the
+ * previous rows, when they are the same user's and reach back at least as far, so the figure
+ * keeps drawing instead of dropping to a spinner. recoveryMapAt reads only its own window from
+ * them; the history's newest sample may miss the last hour's rows, and the Recovery screen draws
+ * that one from the live map.
+ */
+function previousCovering(uid: string, from: string, to: string | null) {
+  return (prev: LoadWindow | undefined, query?: { queryKey: readonly unknown[] }) => {
+    const [, user, , prevFrom, prevTo] = query?.queryKey ?? [];
+    return user === uid && typeof prevFrom === 'string' && prevFrom <= from && (to != null || prevTo == null) ? prev : undefined;
+  };
 }
 
 /** recovery_loads(): the caller's cached loads for workouts finished in (from, to]; to null = no upper bound. */
@@ -245,7 +291,7 @@ async function fetchSessionRows(workoutId: string) {
 async function readModel(uid: string) {
   const [c, library] = await Promise.all([
     fetchThresholds(uid),
-    queryClient.fetchQuery({ queryKey: recoveryKeys.libraryRows(), queryFn: fetchLibraryRows, staleTime: LIBRARY_STALE_MS }),
+    queryClient.fetchQuery({ queryKey: recoveryKeys.libraryRows(uid), queryFn: fetchLibraryRows, staleTime: LIBRARY_STALE_MS }),
   ]);
   const { lib, keyOf } = libraryFromRows(library.exercises, library.muscles);
   return { m: { c, lib } satisfies Model, keyOf };
@@ -275,24 +321,46 @@ export async function fetchRecoveryHistory(uid: string, from: string | number, t
 
 /**
  * recovery_map at `at`, or at now (to the minute) without one. A fixed instant reads exactly its
- * window. "Now" reads from an hour-aligned start with no end, so the clock moving on recomputes
- * the map without refetching; finishing a workout refetches it (loadKeys.all).
+ * window. "Now" reads from an hour-aligned start with no end (nowWindow), so the clock moving on
+ * recomputes the map without refetching; finishing a workout refetches it (loadKeys.all). "Now"
+ * also counts the signed-in user's open workout until its cache rows arrive: its ticked sets with
+ * t_w = now while it is in progress (spec §14), and at its finishedAt once a Finish is queued. The
+ * map is computed once per minute or data change, not on every render.
  */
 export function useRecoveryMap(at?: string | number) {
   const uid = useUserId();
   const c = useThresholds();
   const nowMs = useNowMinute();
-  const library = useLibraryRows();
-  // "now" is the end of the current minute, so a workout finished seconds ago already counts
-  const atH = hoursOf(at ?? nowMs + MINUTE_MS);
-  const span = readSpanHours({ c, lib: NO_LIBRARY });
-  const from = isoOfHours(at == null ? Math.floor(nowMs / HOUR_MS) - span - 1 : atH - span);
-  const to = at == null ? null : isoOfHours(atH);
-  const loads = useQuery({ queryKey: recoveryKeys.loads(uid, from, to), enabled: !!uid, queryFn: () => fetchRecoveryLoads(from, to) });
+  const { library, built } = useEngineLibrary();
+  const live = useLiveSession();
+  const workout = useActiveWorkout((s) => s.workout);
+  // a Finish waiting to sync (offline) already has its t_w (D6): the time it was queued, not now
+  const queuedFinish = useActiveWorkout((s) => {
+    for (const o of s.outbox) if (o.kind === 'finish' && o.workoutId === s.workout?.id) return o.finishedAt;
+    return null;
+  });
+  const isNow = at == null;
+  const model: Model = { c, lib: NO_LIBRARY };
+  const now = nowWindow(model, nowMs);
+  const atH = isNow ? now.at : hoursOf(at);
+  const from = isoOfHours(isNow ? now.from : atH - readSpanHours(model));
+  const to = isNow ? null : isoOfHours(atH);
+  const loads = useQuery({
+    queryKey: recoveryKeys.loads(uid, from, to), enabled: !!uid, queryFn: () => fetchRecoveryLoads(from, to),
+    placeholderData: isNow ? previousCovering(uid, from, to) : undefined,
+  });
+  const data = useMemo(() => {
+    if (!built || !loads.data) return null;
+    // the store outlives a sign-out, so a workout left open by another account is not this map's
+    const rows = isNow && live && workout && workout.userId === uid
+      ? withLiveWorkout(loads.data, workout.id, live.scored, built.idOf, (id) => workout.exercises.find((b) => b.exerciseId === id)?.name ?? 'Exercise',
+          queuedFinish ? Math.min(hoursOf(queuedFinish), atH) : atH)
+      : loads.data;
+    return recoveryMapAt({ c, lib: built.lib }, built.keyOf, rows, atH);
+  }, [c, built, loads.data, isNow, live, workout, uid, queuedFinish, atH]);
   const error = library.error ?? loads.error;
-  if (!library.data || !loads.data) return { isLoading: library.isLoading || loads.isLoading, error, at: isoOfHours(atH), data: null };
-  const { lib, keyOf } = libraryFromRows(library.data.exercises, library.data.muscles);
-  return { isLoading: false, error, at: isoOfHours(atH), data: recoveryMapAt({ c, lib }, keyOf, loads.data, atH) };
+  if (!data) return { isLoading: library.isLoading || loads.isLoading, error, at: isoOfHours(atH), data: null };
+  return { isLoading: false, error, at: isoOfHours(atH), data };
 }
 
 /** session_map of a finished workout. */
@@ -306,19 +374,35 @@ export function useSessionMap(workoutId: string | undefined) {
   return { isLoading: false, error: rows.error, data: sessionMapFromLoads({ c, lib: NO_LIBRARY }, rows.data) };
 }
 
-/** recovery_history from `from` to `to` (ISO or epoch ms), every `stepHours`. */
-export function useRecoveryHistory(from: string | number, to: string | number, stepHours = 24) {
+/**
+ * recovery_history from `from` to `to` (ISO or epoch ms), every `stepHours`. Given a `timeZone`
+ * (IANA, or null for the device's), day steps keep to `to`'s local time on each date
+ * (localDayTimes), so a DST change neither skips nor repeats a day. The samples are computed once
+ * per hour or data change, not on every render.
+ */
+export function useRecoveryHistory(from: string | number, to: string | number, stepHours = 24, timeZone?: string | null) {
   const uid = useUserId();
   const c = useThresholds();
-  const library = useLibraryRows();
+  const { library, built } = useEngineLibrary();
   const [f, t] = [hoursOf(from), hoursOf(to)];
-  const w = historyWindow({ c, lib: NO_LIBRARY }, f, t);
+  const times = useMemo(
+    () => (timeZone !== undefined && stepHours === 24 ? localDayTimes(f, t, timeZone) : sampleTimes(f, t, stepHours)),
+    [f, t, stepHours, timeZone],
+  );
+  // a sample a DST change moved earlier still has its whole window read
+  const w = historyWindow({ c, lib: NO_LIBRARY }, Math.min(f, times[0] ?? f), t);
   const [wFrom, wTo] = [isoOfHours(w.from), isoOfHours(w.to)];
-  const loads = useQuery({ queryKey: recoveryKeys.loads(uid, wFrom, wTo), enabled: !!uid, queryFn: () => fetchRecoveryLoads(wFrom, wTo) });
+  const loads = useQuery({
+    queryKey: recoveryKeys.loads(uid, wFrom, wTo), enabled: !!uid, queryFn: () => fetchRecoveryLoads(wFrom, wTo),
+    placeholderData: previousCovering(uid, wFrom, wTo),
+  });
+  const data = useMemo(
+    () => (built && loads.data ? recoveryHistoryAt({ c, lib: built.lib }, built.keyOf, loads.data, times) : null),
+    [c, built, loads.data, times],
+  );
   const error = library.error ?? loads.error;
-  if (!library.data || !loads.data) return { isLoading: library.isLoading || loads.isLoading, error, data: null };
-  const { lib, keyOf } = libraryFromRows(library.data.exercises, library.data.muscles);
-  return { isLoading: false, error, data: recoveryHistory({ c, lib }, keyOf, loads.data, f, t, stepHours) };
+  if (!data) return { isLoading: library.isLoading || loads.isLoading, error, data: null };
+  return { isLoading: false, error, data };
 }
 
 /** The 17 muscles' display names (muscles table), e.g. "Traps & upper back". They never change
@@ -369,7 +453,9 @@ export function useTrainNext(map: RecoveryMap | null) {
 /**
  * The picker's PB source line for any exercise: "PB 120 kg · logged", "~86 kg · estimated from
  * Bench press (barbell)", "calibrating", or null for exercises that need no reference. Reads the
- * whole PB history once; `formatKg` is the units-aware weight formatter.
+ * whole PB history once; `formatKg` is the units-aware weight formatter. The library, the history
+ * and each exercise's reference are worked out once per data change or hour, so a search
+ * keystroke only looks them up.
  */
 export function useReferenceLines(formatKg: (kg: number) => string): ((exercise: Exercise) => string | null) | null {
   const uid = useUserId();
@@ -377,16 +463,26 @@ export function useReferenceLines(formatKg: (kg: number) => string): ((exercise:
   const exercises = useExercises();
   const nowMs = useNowHour();
   const rows = useQuery({ queryKey: recoveryKeys.allHistory(uid), queryFn: () => fetchPbHistoryRows(uid, null), enabled: !!uid });
-  if (!exercises.data || !rows.data) return null;
-  const { lib, keyOf, nameOf } = libraryOf(exercises.data);
-  const m: Model = { c, lib };
-  const history = toPbHistory(rows.data, (id) => keyOf.get(id));
-  const now = hoursOf(nowMs);
+  const referenceOf = useMemo(() => {
+    if (!exercises.data || !rows.data) return null;
+    const { lib, keyOf, nameOf } = libraryOf(exercises.data);
+    const m: Model = { c, lib };
+    const history = toPbHistory(rows.data, (id) => keyOf.get(id));
+    const now = hoursOf(nowMs);
+    const cache = new Map<string, ReturnType<typeof strengthReference> | null>();
+    return (exercise: Exercise) => {
+      const key = engineKey(exercise);
+      if (!cache.has(key)) {
+        const def = lib.get(key);
+        cache.set(key, !def || def.load_mode === 'fixed' ? null : strengthReference(m, key, now, history, (k) => nameOf.get(k)));
+      }
+      return cache.get(key)!;
+    };
+  }, [exercises.data, rows.data, c, nowMs]);
+  if (!referenceOf) return null;
   return (exercise) => {
-    const key = engineKey(exercise);
-    const def = lib.get(key);
-    if (!def || def.load_mode === 'fixed') return null;
-    const ref = strengthReference(m, key, now, history, (k) => nameOf.get(k));
+    const ref = referenceOf(exercise);
+    if (!ref) return null;
     if (ref.pb == null) return 'calibrating: the first session sets the reference';
     switch (ref.tone) {
       case 'estimated': return `~${formatKg(ref.pb)} · ${ref.label.charAt(0).toLowerCase()}${ref.label.slice(1)}`;
@@ -418,7 +514,8 @@ export function useCreateCustomExercise() {
 
 /** Saves an edit to one of the user's exercises (update_custom_exercise), then runs the recompute
  *  rule (spec §14) from the first finished workout that used it, since its muscles or fatigue
- *  may have changed. */
+ *  may have changed. Once the edit is saved the mutation succeeds: if that workout can't be
+ *  looked up, every finished workout is rescored instead. */
 export function useUpdateCustomExercise() {
   const uid = useUserId();
   const qc = useQueryClient();
@@ -429,19 +526,21 @@ export function useUpdateCustomExercise() {
       const first = await supabase.from('workouts').select('started_at, workout_exercises!inner(exercise_id)')
         .eq('user_id', uid).eq('workout_exercises.exercise_id', id).not('finished_at', 'is', null)
         .order('started_at').limit(1);
-      if (first.error) throw first.error;
-      return first.data[0]?.started_at ?? null;
+      // the edit is saved; not knowing where its workouts start means rescoring them all, not none
+      if (first.error) return { used: true, from: null };
+      const from = first.data[0]?.started_at ?? null;
+      return { used: from != null, from };
     },
-    onSuccess: (from) => {
+    onSuccess: ({ used, from }) => {
       invalidateExercises(qc, uid);
-      if (from) recomputeInBackground(uid, from);
+      if (used) recomputeInBackground(uid, from);
     },
   });
 }
 
 function invalidateExercises(qc: ReturnType<typeof useQueryClient>, uid: string) {
   qc.invalidateQueries({ queryKey: ['exercises', uid] });
-  qc.invalidateQueries({ queryKey: recoveryKeys.libraryRows() });
+  qc.invalidateQueries({ queryKey: recoveryKeys.libraryRows(uid) });
   qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
 }
 
@@ -464,39 +563,54 @@ export function useThresholdRows() {
 /**
  * Saves the settings screen's edits as user_thresholds rows (upserts and deletes; the defaults in
  * data/recovery_constants.json never change), then rescores every finished workout with the new
- * thresholds (the recompute rule, spec §14) in the background, so the figure follows.
+ * thresholds (the recompute rule, spec §14) in the background, so the figure follows. If the
+ * upserts land and the deletes then fail, what was saved is still rescored before the error shows.
  */
 export function useSaveThresholds() {
   const uid = useUserId();
   const qc = useQueryClient();
+  const rescore = async () => {
+    await qc.invalidateQueries({ queryKey: recoveryKeys.thresholds(uid) });
+    recomputeInBackground(uid, null);
+  };
   return useMutation({
-    mutationFn: async (edits: Edits) => {
-      const { upsert, remove } = diffOverrides(DEFAULT_THRESHOLDS, edits);
+    mutationFn: async ({ edits, rows }: { edits: Edits; rows: readonly ThresholdOverride[] }) => {
+      const { upsert, remove } = diffOverrides(DEFAULT_THRESHOLDS, uid, rows, edits);
       const now = new Date().toISOString();
-      if (upsert.length) {
-        const { error } = await supabase.from('user_thresholds')
-          .upsert(upsert.map((r) => ({ user_id: uid, key: r.key, value: r.value, updated_at: now })), { onConflict: 'user_id,key' });
-        if (error) throw error;
-      }
-      if (remove.length) {
-        const { error } = await supabase.from('user_thresholds').delete().eq('user_id', uid).in('key', remove);
-        if (error) throw error;
+      let wrote = false;
+      try {
+        if (upsert.length) {
+          const { error } = await supabase.from('user_thresholds')
+            .upsert(upsert.map((r) => ({ user_id: uid, key: r.key, value: r.value, updated_at: now })), { onConflict: 'user_id,key' });
+          if (error) throw error;
+          wrote = true;
+        }
+        if (remove.length) {
+          const { error } = await supabase.from('user_thresholds').delete().eq('user_id', uid).in('key', remove);
+          if (error) throw error;
+        }
+      } catch (e) {
+        // the screen keeps the edits for a retry (both writes are idempotent)
+        if (wrote) await rescore();
+        throw e;
       }
     },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: recoveryKeys.thresholds(uid) });
-      recomputeInBackground(uid, null);
-    },
+    onSuccess: rescore,
   });
 }
 
 // ---------------------------------------------------------------- imported activities (build phase 10)
 
 /** Scores imported activities that have no loads yet, in the background, when a screen that
- *  shows the recovery map opens (at most every ten minutes). */
+ *  shows the recovery map comes into view, and again when the app comes back to the foreground
+ *  while it is (Today stays mounted for days): at most every ten minutes. Sync now forces one. */
 export function useActivityCatchUp() {
   const uid = useUserId();
-  useEffect(() => {
-    if (uid) void catchUpActivities(uid);
-  }, [uid]);
+  useFocusEffect(useCallback(() => {
+    if (!uid) return;
+    void catchUpActivities(uid);
+    return focusManager.subscribe((focused) => {
+      if (focused) void catchUpActivities(uid);
+    });
+  }, [uid]));
 }

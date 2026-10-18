@@ -27,6 +27,7 @@ sys.path.insert(0, str(SUPABASE))
 import rescore_workouts as rw  # noqa: E402
 import seed_f26  # noqa: E402
 import seed_library as sl  # noqa: E402
+from backfill_e1rm import engine  # noqa: E402
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 U_TUNED = UUID("00000000-0000-4000-a000-0000000000e9")
@@ -71,6 +72,15 @@ def chest_r(conn, wid: str) -> float:
                         (wid,)).fetchone()["recovery_hours"]
 
 
+def muscle_rows(conn, wid: str) -> dict[str, dict]:
+    return {r["muscle_id"]: r for r in conn.execute(
+        "select muscle_id, load, recovery_hours from public.workout_muscle_loads where workout_id = %s", (wid,)).fetchall()}
+
+
+def overrides(conn, uid: UUID) -> list[dict]:
+    return conn.execute("select user_id, key, value from public.user_thresholds where user_id = %s", (uid,)).fetchall()
+
+
 def rescore(conn, uid: UUID) -> None:
     rw.rescore(conn, uid)
     conn.commit()
@@ -107,6 +117,17 @@ def push_days(conn):
     return ids
 
 
+@pytest.fixture(autouse=True)
+def defaults(conn, push_days):
+    """Every test starts from the defaults, whatever an earlier one left: no overrides, and both
+    users' caches rescored."""
+    conn.rollback()   # a failed test may have left its transaction aborted
+    conn.execute("delete from public.user_thresholds where user_id = any(%s)", ([U_TUNED, U_PLAIN],))
+    conn.commit()
+    rescore(conn, U_TUNED)
+    rescore(conn, U_PLAIN)
+
+
 def test_db_an_override_changes_only_that_users_cache(conn, push_days):
     assert chest_r(conn, push_days[U_TUNED]) == pytest.approx(59.71, abs=0.01)
     set_override(conn, U_TUNED, "base_recovery_hours.default", 72)
@@ -125,12 +146,22 @@ def test_db_a_reset_restores_the_default(conn, push_days):
 
 
 def test_db_a_row_the_loader_cannot_use_is_ignored(conn, push_days):
-    set_override(conn, U_TUNED, "levels.9.min", 3)            # no such level
-    set_override(conn, U_TUNED, "role_weights.secondary", "lots")   # wrong type
+    set_override(conn, U_TUNED, "levels.9.min", 3)            # no such level (applied, the loader would throw)
+    set_override(conn, U_TUNED, "levels.3.min", "0.4")        # wrong type (applied, traps would read High)
+    set_override(conn, U_TUNED, "role_weights.secondary", "lots")   # wrong type (applied, triceps and front delts would move)
     rescore(conn, U_TUNED)
-    assert chest_r(conn, push_days[U_TUNED]) == pytest.approx(59.71, abs=0.01)
-    reset(conn, U_TUNED, "levels.9.min")
-    reset(conn, U_TUNED, "role_weights.secondary")
+    expect = seed_f26.fixture("F20")["expect"]
+    rows = muscle_rows(conn, push_days[U_TUNED])
+    assert set(rows) == set(expect["L_m"])
+    for m, want in expect["L_m"].items():
+        assert rows[m]["load"] == pytest.approx(want, abs=0.01), m
+    for m, want in expect["R"].items():
+        assert rows[m]["recovery_hours"] == pytest.approx(want, abs=0.01), m
+    # levels aren't cached: read the session view through the user's thresholds
+    view = engine({"command": "session-map", "user_id": str(U_TUNED), "thresholds_rows": overrides(conn, U_TUNED),
+                   "rows": list(rows.values())})
+    for m, want in expect["level"].items():
+        assert view[m]["level"] == want, m
 
 
 def test_db_settings_are_owner_only(conn, push_days):

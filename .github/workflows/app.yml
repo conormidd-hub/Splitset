@@ -1,11 +1,13 @@
 name: app
 
+# data/ and the body figures count as app files: the bundle imports data/recovery_constants.json,
+# and the tests check the fixtures, libraryOrder.ts and bodySvg.ts against data/ and assets/
 on:
   push:
     branches: [main]
-    paths: ["app/**", ".github/workflows/app.yml"]
+    paths: ["app/**", "data/**", "assets/body-*.svg", ".github/workflows/app.yml"]
   pull_request:
-    paths: ["app/**", ".github/workflows/app.yml"]
+    paths: ["app/**", "data/**", "assets/body-*.svg", ".github/workflows/app.yml"]
 
 jobs:
   typecheck-and-lint:

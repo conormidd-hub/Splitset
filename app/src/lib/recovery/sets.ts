@@ -75,14 +75,15 @@ export interface SetForE1rm {
  * The e1RM a set stores (spec §3.3): the engine's effective weight for the exercise's load mode,
  * with the workout's bodyweight snapshot (else `fallbackBodyweight`), and reps plus reps in
  * reserve from RPE, or rir_default without one. The same rule scoreExercise uses for the
- * records it creates. Null when the set has no effective weight above zero or no reps.
+ * records it creates. Null when the set has no effective weight above zero, or no reps (negative
+ * or non-finite reps count as none, as scoreExercise skips them). Zero reps keep the weight.
  */
 export function setE1rm(
   c: Thresholds, def: ExerciseDef | null, s: SetForE1rm, workoutBodyweight: number | null, fallbackBodyweight?: number | null,
 ): number | null {
   if (!def) return null;
   const w = effectiveWeight({ w: s.weightKg, r: s.reps, bodyweight: workoutBodyweight }, def, fallbackBodyweight || c.bodyweight_default_kg);
-  if (!w || w <= 0 || s.reps == null) return null;
+  if (!w || w <= 0 || !Number.isFinite(w) || s.reps == null || !Number.isFinite(s.reps) || s.reps < 0) return null;
   const model: Model = { c, lib: new Map() };
   return e1rm(model, w, s.reps, rirFromRpe(s.rpe) ?? c.e1rm.rir_default);
 }
@@ -91,18 +92,39 @@ export function setE1rm(
 export type BodyweightSource = 'profile' | 'weigh-in' | 'default';
 
 /**
+ * The calendar date (YYYY-MM-DD) of an instant in an IANA time zone, or its UTC date when the
+ * zone is missing or unknown (Settings takes the zone as free text). Null for an unreadable instant.
+ */
+function localDate(iso: string, timeZone: string | null | undefined): string | null {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  try {
+    // en-US numeric dates read month/day/year; format() rather than formatToParts, which not
+    // every Hermes build has
+    const shown = new Intl.DateTimeFormat('en-US', { timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date(ms));
+    const mdy = /(\d{1,2})\D+(\d{1,2})\D+(\d{4})/.exec(shown);
+    if (mdy) return `${mdy[3]}-${mdy[1].padStart(2, '0')}-${mdy[2].padStart(2, '0')}`;
+  } catch {
+    // an unknown zone: fall back to UTC below
+  }
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
  * The bodyweight to snapshot now: whichever is newer of the one the user typed in their profile
  * and their latest weigh-in (Garmin, through intervals.icu), else bodyweight_default_kg. A
- * profile entry made on the day of a weigh-in wins, since the user typed it.
+ * profile entry made on the day of a weigh-in wins, since the user typed it. The day is the
+ * user's local day (profiles.timezone, UTC without one), as a weigh-in's date is (wellness).
  */
 export function currentBodyweight(
   c: Thresholds,
-  profile: { bodyweight_kg: number | null; bodyweight_updated_at: string | null } | null | undefined,
+  profile: { bodyweight_kg: number | null; bodyweight_updated_at: string | null; timezone?: string | null } | null | undefined,
   weighIn: { weight_kg: number | null; date: string } | null | undefined,
 ): { kg: number; source: BodyweightSource; date: string | null } {
   const typed = profile?.bodyweight_kg != null ? { kg: profile.bodyweight_kg, at: profile.bodyweight_updated_at } : null;
   const weighed = weighIn?.weight_kg != null ? { kg: weighIn.weight_kg, date: weighIn.date } : null;
-  if (typed && (!weighed || !typed.at || Date.parse(typed.at) >= Date.parse(`${weighed.date}T00:00:00Z`))) {
+  if (typed && (!weighed || !typed.at || (localDate(typed.at, profile?.timezone) ?? '') >= weighed.date)) {
     return { kg: typed.kg, source: 'profile', date: typed.at };
   }
   if (weighed) return { kg: weighed.kg, source: 'weigh-in', date: weighed.date };

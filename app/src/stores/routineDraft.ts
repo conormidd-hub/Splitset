@@ -31,6 +31,13 @@ type State = {
 let counter = 0;
 const key = () => `d${Date.now().toString(36)}${(counter++).toString(36)}`;
 
+/** A routine set has no side, so it replays as one set for both sides (1.0 under spec §4.4, where a
+ *  per-side set counts 0.5): sets logged one side per set keep one target per left/right pair. */
+function pairedSets<S extends { side?: unknown }>(sets: S[]): S[] {
+  let sided = 0;
+  return sets.filter((s) => !s.side || sided++ % 2 === 0);
+}
+
 export const useRoutineDraft = create<State>()((set, get) => ({
   id: null,
   name: '',
@@ -73,7 +80,7 @@ export const useRoutineDraft = create<State>()((set, get) => ({
         restSeconds: b.restSeconds,
         supersetGroup: b.supersetGroup,
         notes: b.notes,
-        sets: b.sets.map((s) => ({
+        sets: pairedSets(b.sets).map((s) => ({
           setType: s.setType, targetReps: s.reps, targetWeightKg: s.weightKg, targetSeconds: s.seconds, targetRpe: s.rpe,
         })),
       })),

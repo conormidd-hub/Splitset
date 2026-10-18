@@ -14,7 +14,8 @@ import { muscleFallbackName } from './figure.ts';
 import { MUSCLE_IDS } from './library.ts';
 import { recoveryMapAt, readSpanHours } from './read.ts';
 import {
-  afterEdits, diffOverrides, isOverridden, settingDefs, stepValue, validateEdits, valueAt, type NumberSetting,
+  afterEdits, diffOverrides, followsDefault, isOverridden, resetValue, settingDefs, stepValue, validateEdits, valueAt, withEdit,
+  type NumberSetting,
 } from './settings.ts';
 import { C, EXERCISES, fixture, historyRows, MUSCLES, near, T0 } from './testRows.ts';
 import { thresholdsFor, type ThresholdOverride } from './thresholds.ts';
@@ -106,13 +107,63 @@ describe('the settings screen\'s logic', () => {
   test('saving: changed values upsert, resets and default values delete', () => {
     const rows = [row(ME, 'recovery.slope', 0.5), row(ME, 'base_recovery_hours.chest', 60)];
     const edits = { 'recovery.slope': null, 'fatigue.weekly_cap': 8, 'role_weights.secondary': 0.5, 'base_recovery_hours.chest': 50 };
-    const { upsert, remove } = diffOverrides(C, edits);
+    const { upsert, remove } = diffOverrides(C, ME, rows, edits);
     assert.deepEqual(upsert, [{ key: 'role_weights.secondary', value: 0.5 }, { key: 'base_recovery_hours.chest', value: 50 }]);
     assert.deepEqual(remove.sort(), ['fatigue.weekly_cap', 'recovery.slope']);
     const after = afterEdits(C, ME, rows, edits);
     assert.deepEqual([after.recovery.slope, after.role_weights.secondary, after.base_recovery_hours.chest], [0.3, 0.5, 50]);
     assert.ok(isOverridden(rows, {}, 'recovery.slope') && !isOverridden(rows, edits, 'recovery.slope'));
     assert.equal(C.role_weights.secondary, 0.4, 'the defaults never change');
+  });
+
+  test('a muscle without its own base hours is stored only when it differs from "Every other muscle"', () => {
+    const chest = 'base_recovery_hours.chest';
+    const dflt = 'base_recovery_hours.default';
+    // back at 48 after a + and a −: nothing is stored, so chest keeps following the default
+    assert.deepEqual(diffOverrides(C, ME, [], { [chest]: 48 }), { upsert: [], remove: [chest] });
+    // with every other muscle at 72, 48 is a real choice and 72 is the default again
+    const rows = [row(ME, dflt, 72)];
+    assert.deepEqual(diffOverrides(C, ME, rows, { [chest]: 48 }).upsert, [{ key: chest, value: 48 }]);
+    assert.deepEqual(diffOverrides(C, ME, rows, { [chest]: 72 }), { upsert: [], remove: [chest] });
+    // the same goes for an edit of every other muscle in the same save
+    assert.deepEqual(diffOverrides(C, ME, [], { [dflt]: 72, [chest]: 72 }), { upsert: [{ key: dflt, value: 72 }], remove: [chest] });
+    assert.deepEqual(diffOverrides(C, ME, [], { [dflt]: 72, [chest]: 48 }).upsert, [{ key: dflt, value: 72 }, { key: chest, value: 48 }]);
+    // a muscle with its own value keeps comparing with it, not with every other muscle's 72
+    const calves = 'base_recovery_hours.calves';
+    assert.deepEqual(diffOverrides(C, ME, rows, { [calves]: 72 }).upsert, [{ key: calves, value: 72 }]);
+    assert.deepEqual(diffOverrides(C, ME, rows, { [calves]: 24 }).remove, [calves]);
+  });
+
+  test('"Reset to default" names the value a reset gives', () => {
+    const rows = [row(ME, 'base_recovery_hours.default', 72), row(ME, 'base_recovery_hours.chest', 60), row(ME, 'pb.manual_policy', 'replace_on_log')];
+    assert.equal(resetValue(C, ME, rows, {}, 'base_recovery_hours.chest'), 72);
+    assert.equal(resetValue(C, ME, rows, { 'base_recovery_hours.default': 80 }, 'base_recovery_hours.chest'), 80);
+    assert.equal(resetValue(C, ME, rows, {}, 'base_recovery_hours.calves'), 24);
+    assert.equal(resetValue(C, ME, rows, {}, 'base_recovery_hours.default'), 48);
+    assert.equal(resetValue(C, ME, rows, {}, 'pb.manual_policy'), 'max');
+    assert.ok(followsDefault(C, 'base_recovery_hours.chest'));
+    assert.ok(!followsDefault(C, 'base_recovery_hours.lower_back'));
+    assert.ok(!followsDefault(C, 'base_recovery_hours.default'));
+    assert.ok(!followsDefault(C, 'recovery.slope'));
+  });
+
+  test('stepping away and back leaves nothing to save', () => {
+    const chest = 'base_recovery_hours.chest';
+    let e = withEdit(C, ME, [], {}, chest, 49);
+    assert.deepEqual(e, { [chest]: 49 });
+    e = withEdit(C, ME, [], e, chest, 48);
+    assert.deepEqual(e, {});
+    assert.ok(!isOverridden([], e, chest));
+    // with a saved row, coming back to the saved value is no edit, and the reset value deletes it
+    const rows = [row(ME, chest, 60)];
+    assert.deepEqual(withEdit(C, ME, rows, { [chest]: 59 }, chest, 60), {});
+    assert.deepEqual(withEdit(C, ME, rows, {}, chest, 48), { [chest]: null });
+    // a stored copy of the default still becomes a delete
+    assert.deepEqual(withEdit(C, ME, [row(ME, chest, 48)], {}, chest, 48), { [chest]: null });
+    // a reset of a key with no row is no edit
+    assert.deepEqual(withEdit(C, ME, [], { 'recovery.slope': 0.5, [chest]: 50 }, chest, null), { 'recovery.slope': 0.5 });
+    assert.deepEqual(withEdit(C, ME, [], {}, 'pb.manual_policy', 'max'), {});
+    assert.deepEqual(withEdit(C, ME, [], {}, 'pb.manual_policy', 'replace_on_log'), { 'pb.manual_policy': 'replace_on_log' });
   });
 
   test('the − / + steps stay in range and clean', () => {

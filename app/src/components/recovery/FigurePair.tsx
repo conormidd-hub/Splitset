@@ -22,6 +22,9 @@ type Props = {
   /** "Front" and "Back" under the figures. */
   labels?: boolean;
   timeZone?: string | null;
+  /** The screen-reader summary's wording (BodyMap's context and emptyText). */
+  context?: string;
+  emptyText?: string;
 };
 
 /**
@@ -29,7 +32,7 @@ type Props = {
  * the live workout, the workout summary and an exercise's muscles. The Recovery screen uses the
  * full RecoveryFigure instead.
  */
-export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, labels = false, timeZone }: Props) {
+export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, labels = false, timeZone, context, emptyText }: Props) {
   const { name } = useTheme();
   const c = useThresholds();
   const theme: FigureTheme = name === 'night' ? 'dark' : 'light';
@@ -40,7 +43,8 @@ export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, lab
     <View style={{ flexDirection: 'row', justifyContent: 'center', gap: space.md }}>
       {(['front', 'back'] as const).map((view) => (
         <View key={view} style={{ alignItems: 'center', gap: 2 }}>
-          <BodyMap map={map} view={view} mode={mode} theme={theme} thresholds={c} width={figureWidth} onSelect={onSelect} nameOf={nameOf} />
+          <BodyMap map={map} view={view} mode={mode} theme={theme} thresholds={c} width={figureWidth} onSelect={onSelect} nameOf={nameOf}
+            context={context} emptyText={emptyText} />
           {labels ? <T variant="tiny" tone="mut">{view === 'front' ? 'Front' : 'Back'}</T> : null}
         </View>
       ))}

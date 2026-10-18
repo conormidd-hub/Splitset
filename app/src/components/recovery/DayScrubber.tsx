@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { T } from '@/components/ui/T';
@@ -23,10 +23,15 @@ const fmt = (iso: string, timeZone: string | null | undefined, opts: Intl.DateTi
   }
 };
 
+/** A sample's day and time as the slider shows it, e.g. "Tue 13 Oct, 14:00". */
+export const historyLabel = (iso: string, timeZone?: string | null) =>
+  fmt(iso, timeZone, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
 /**
  * The Recovery screen's history slider (build phase 9): one tick per day over the last 28, each
- * marked with its weekday's initial (Mondays stand out), dragged or tapped along; ◀ and ▶ step a
- * day, for screen readers too. The last tick is now.
+ * marked with its weekday's initial (Mondays stand out), dragged sideways or tapped along; a
+ * vertical drag on it scrolls the page. ◀ and ▶ step a day, for screen readers too, and the strip
+ * is adjustable with the day as its value. The last tick is now.
  */
 export function DayScrubber({ times, index, onChange, timeZone }: Props) {
   const { palette } = useTheme();
@@ -34,27 +39,41 @@ export function DayScrubber({ times, index, onChange, timeZone }: Props) {
   const last = times.length - 1;
   const at = (x: number) => Math.max(0, Math.min(last, Math.floor((x / Math.max(1, width)) * times.length)));
   const move = (x: number) => { const i = at(x); if (i !== index) onChange(i); };
+  // nothing moves on touch-down: the pan starts on a sideways drag and fails on a vertical one, so
+  // the page's ScrollView keeps vertical scrolls; a tap is the Tap gesture's
   const gesture = Gesture.Race(
-    Gesture.Pan().runOnJS(true).minDistance(2).onBegin((e) => move(e.x)).onUpdate((e) => move(e.x)),
-    Gesture.Tap().runOnJS(true).onEnd((e) => move(e.x)),
+    Gesture.Pan().runOnJS(true).activeOffsetX([-6, 6]).failOffsetY([-10, 10])
+      .onStart((e) => move(e.x)).onUpdate((e) => move(e.x)),
+    Gesture.Tap().runOnJS(true).maxDistance(10).onEnd((e, ok) => { if (ok) move(e.x); }),
   );
-  const label = index === last ? 'Now' : fmt(times[index], timeZone, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const labelAt = (i: number) => (i === last ? 'Now' : historyLabel(times[i], timeZone));
+  const label = labelAt(index);
+  // VoiceOver ignores the live region, and reads the strip's value before the new day reaches it
+  // (the action runs asynchronously), so iOS is told the new day
+  const step = (d: number) => {
+    const i = Math.max(0, Math.min(last, index + d));
+    if (i === index) return;
+    onChange(i);
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(labelAt(i));
+  };
 
   return (
     <View style={{ gap: space.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-        <StepButton label="◀" name="Previous day" disabled={index <= 0} onPress={() => onChange(index - 1)} />
+        <StepButton label="◀" name="Previous day" disabled={index <= 0} onPress={() => step(-1)} />
         <T weight="700" align="center" style={{ flex: 1 }} accessibilityLiveRegion="polite">{label}</T>
-        <StepButton label="▶" name="Next day" disabled={index >= last} onPress={() => onChange(index + 1)} />
+        <StepButton label="▶" name="Next day" disabled={index >= last} onPress={() => step(1)} />
       </View>
-      <GestureDetector gesture={gesture}>
+      {/* pan-y so a vertical swipe on the strip still scrolls the page in a phone browser */}
+      <GestureDetector gesture={gesture} touchAction="pan-y">
         <View
           onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel={`History, ${label}`}
+          accessibilityLabel="History"
+          aria-valuetext={label}
           accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-          onAccessibilityAction={(e) => onChange(Math.max(0, Math.min(last, index + (e.nativeEvent.actionName === 'increment' ? 1 : -1))))}
+          onAccessibilityAction={(e) => step(e.nativeEvent.actionName === 'increment' ? 1 : -1)}
           style={{ flexDirection: 'row', height: 40, alignItems: 'flex-end' }}>
           {times.map((t, i) => {
             const monday = fmt(t, timeZone, { weekday: 'short' }).startsWith('Mon');

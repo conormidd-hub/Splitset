@@ -1,6 +1,7 @@
 """Database tests for build phase 8: custom exercises saved through create_custom_exercise() and
 update_custom_exercise() as the signed-in user, with every payload built by the app's own code
-(the New exercise screen's toPayload, through app/scripts/recovery-cli.ts `custom-payload`).
+(the New exercise screen's toPayload, through app/scripts/recovery-cli.ts `custom-payload`; for an
+edit of an older exercise, starting from the screen's draftOf).
 
 Like the other database tests, these run only when SPLITSET_TEST_DB_URL points at a local
 database (the db-tests workflow).
@@ -75,6 +76,13 @@ def update(conn, uid: UUID, exercise_id: str, p: dict) -> None:
     except Exception:
         conn.rollback()
         raise
+
+
+def has_pb_history(conn, exercise_id) -> bool:
+    """What Edit reads before drafting an older bodyweight exercise (draftOf's `scored`): whether
+    any set or known best of it stored an e1RM."""
+    return conn.execute("select exists (select 1 from public.pb_history where exercise_id = %s) as found",
+                        (exercise_id,)).fetchone()["found"]
 
 
 def roles_of(conn, exercise_id: str) -> dict[str, str]:
@@ -189,3 +197,68 @@ def test_db_editing_muscles_rescores_its_workouts(conn):
         "select muscle_id, load from public.workout_muscle_loads where workout_id = %s", (wid,)).fetchall()}
     assert set(after) == {"quads", "chest"}
     assert after["chest"] == pytest.approx(after["quads"] * 0.2)
+
+
+def test_db_editing_an_old_form_exercise_scores_it(conn):
+    """An exercise the old form saved (no slug, no load mode, is_bodyweight from its equipment)
+    gets a slug the first time it's edited and, having stored no e1RM (every set at 0 kg), turns
+    bodyweight, so its sets score (notes 23.3 item 9). The payload is what Edit saves: the
+    screen's draft of the row (draftOf), with a factor and muscles chosen."""
+    legacy_id = conn.execute("""insert into public.exercises (owner_id, name, equipment, measure, is_bodyweight)
+                                values (%s, 'Ring dip', 'bodyweight', 'weight_reps', true) returning id""", (U_MAKER,)).fetchone()["id"]
+    cols = ", ".join(EXERCISE_COLUMNS)
+    row = conn.execute(f"select {cols}, name, equipment, is_bodyweight from public.exercises where id = %s", (legacy_id,)).fetchone()
+    started = NOW - timedelta(hours=6)
+    wid = seed_f26.insert_workout(conn, U_MAKER, "Dip day", started, started + timedelta(hours=1),
+                                  [("ring_dip", [{"w": 0, "r": 12}, {"w": 0, "r": 12}])], {"ring_dip": row}, 80)
+    rw.rescore(conn, U_MAKER, started)
+    conn.commit()
+
+    def loads() -> dict[str, float]:
+        return {r["muscle_id"]: r["load"] for r in conn.execute(
+            "select muscle_id, load from public.workout_muscle_loads where workout_id = %s", (wid,)).fetchall()}
+
+    assert loads() == {}   # no muscles yet, so no load
+    # weight mode, as the engine reads the old row: 0 kg stores no e1RM
+    assert not has_pb_history(conn, legacy_id)
+
+    p = engine({"command": "custom-payload", "edit": {"row": row, "roles": [], "scored": has_pb_history(conn, legacy_id)},
+                "slug": "custom_ringdip1", "today": TODAY, "draft": {"bwFactor": 0.65, "roles": {"triceps": "primary", "chest": "secondary"}}})
+    update(conn, U_MAKER, str(legacy_id), p)
+    saved = conn.execute("select slug, measure, load_mode, bw_factor, is_bodyweight from public.exercises where id = %s",
+                         (legacy_id,)).fetchone()
+    assert (saved["slug"], saved["measure"], saved["load_mode"], saved["is_bodyweight"]) == ("custom_ringdip1", "weight_reps", "bodyweight", True)
+    assert saved["bw_factor"] == pytest.approx(0.65)
+    assert roles_of(conn, str(legacy_id)) == {"triceps": "primary", "chest": "secondary"}
+
+    rw.rescore(conn, U_MAKER, started)   # the recompute rule, from that workout on
+    conn.commit()
+    after = loads()
+    assert set(after) == {"triceps", "chest"}
+    assert after["chest"] < after["triceps"] and after["chest"] > 0
+
+
+def test_db_editing_an_old_form_exercise_with_e1rms_keeps_weight_mode(conn):
+    """One whose sets stored e1RMs (in weight mode, as the engine has always read the old row)
+    stays in weight mode when edited, still marked bodyweight, so those e1RMs keep their meaning:
+    nothing rewrites them (notes 23.3 item 9)."""
+    legacy_id = conn.execute("""insert into public.exercises (owner_id, name, equipment, measure, is_bodyweight)
+                                values (%s, 'Weighted ring dip', 'bodyweight', 'weight_reps', true) returning id""", (U_MAKER,)).fetchone()["id"]
+    cols = ", ".join(EXERCISE_COLUMNS)
+    row = conn.execute(f"select {cols}, name, equipment, is_bodyweight from public.exercises where id = %s", (legacy_id,)).fetchone()
+    started = NOW - timedelta(hours=30)
+    seed_f26.insert_workout(conn, U_MAKER, "Weighted dips", started, started + timedelta(hours=1),
+                            [("weighted_dip", [{"w": 20, "r": 8}])], {"weighted_dip": row}, 80)
+    conn.commit()
+    stored = conn.execute("select e1rm from public.workout_sets where exercise_id = %s", (legacy_id,)).fetchone()["e1rm"]
+    assert has_pb_history(conn, legacy_id)
+
+    p = engine({"command": "custom-payload", "edit": {"row": row, "roles": [], "scored": has_pb_history(conn, legacy_id)},
+                "slug": "custom_wringdip1", "today": TODAY, "draft": {"roles": {"triceps": "primary", "chest": "secondary"}}})
+    update(conn, U_MAKER, str(legacy_id), p)
+    saved = conn.execute(f"select {cols}, equipment, is_bodyweight from public.exercises where id = %s", (legacy_id,)).fetchone()
+    assert (saved["load_mode"], saved["bw_factor"], saved["equipment"], saved["is_bodyweight"]) == ("weight", None, "bodyweight", True)
+    # the stored e1RM is the one a set saved now would get
+    again = engine({"command": "e1rm", "fallback_bodyweight": 80, "sets": [
+        {"id": "s", "exercise": saved, "weight_kg": 20, "reps": 8, "rpe": None, "workout_bodyweight": 80}]})
+    assert again[0]["e1rm"] == pytest.approx(stored)

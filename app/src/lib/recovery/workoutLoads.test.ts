@@ -7,10 +7,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { scoreWorkout } from './engine.ts';
 import { toPbHistory } from './pbHistory.ts';
 import { C, EXERCISES, fixture, historyRows, iso, MUSCLES, near, score, setsHistory, T0, workoutRows } from './testRows.ts';
+import { withOverride } from './thresholds.ts';
 import type { LiftSet } from './types.ts';
-import { libraryFromRows, recoveryMapFromLoads, scoreLiveWorkout, type MuscleLoadRow, type WorkoutLoads } from './workoutLoads.ts';
+import {
+  cacheRows, engineWorkout, libraryFromRows, recoveryMapFromLoads, scoreFinishedWorkouts, scoreLiveWorkout,
+  type MuscleLoadRow, type ScoringRows, type WorkoutLoads,
+} from './workoutLoads.ts';
 
 const muscleLoad = (w: WorkoutLoads, id: string) => w.muscles.find((m) => m.muscle_id === id);
 
@@ -44,6 +49,14 @@ describe('finished workouts → cache rows', () => {
     const c = workoutRows('open', { start: 70, end: 71, exercises: [['bench_press_bb', [{ w: 60, r: 5 }]]] }, false);
     assert.deepEqual(score([a, b, c], []).map((w) => w.workout_id), ['earlier', 'later']);
   });
+
+  test('a stored set with negative reps adds nothing, so no cache row goes below zero (finish_workout checks load >= 0)', () => {
+    const pb = historyRows([{ slug: 'bench_press_bb', e1rm: 120, at: -168, source: 'logged' }]);
+    const [clean] = score([workoutRows('w', { start: -1, end: 0, exercises: [['bench_press_bb', [{ w: 90, r: 8 }]]] })], pb);
+    const [typo] = score([workoutRows('w', { start: -1, end: 0, exercises: [['bench_press_bb', [{ w: 90, r: 8 }, { w: 90, r: -8 }]]] })], pb);
+    assert.deepEqual(typo, clean);
+    assert.ok([...typo.muscles, ...typo.exercises].every((r) => r.load >= 0));
+  });
 });
 
 describe('the recompute rule', () => {
@@ -61,6 +74,54 @@ describe('the recompute rule', () => {
     near(curl(before).pb_value!, 100 * (1 + 5 / 30) * 0.85 * 0.45 * 0.9);
     near(curl(after).pb_value!, 120 * (1 + 5 / 30) * 0.85 * 0.45 * 0.9);
     assert.ok(muscleLoad(after, 'biceps')!.load < muscleLoad(before, 'biceps')!.load, 'a higher reference makes the same curls lighter');
+  });
+
+  test('a full recompute over a long, shuffled history gives exactly what scoring each workout against everything gives', () => {
+    // a small seeded generator, so the history is the same on every run
+    let seed = 7;
+    const rand = () => { seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648; return seed / 2_147_483_648; };
+    const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
+    const shuffle = <T>(xs: T[]) => { for (let i = xs.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [xs[i], xs[j]] = [xs[j], xs[i]]; } return xs; };
+    // estimate chains (sumo deadlift → deadlift → squat, curls → row), bodyweight, assisted and fixed modes
+    const pool = ['bench_press_bb', 'incline_bench_db', 'sumo_deadlift', 'deadlift', 'squat_bb', 'bb_curl', 'lateral_raise_db', 'pull_up', 'assisted_pull_up', 'plank', 'db_row'];
+    const parts: ReturnType<typeof workoutRows>[] = [];
+    let h = 0;
+    for (let i = 0; i < 240; i++) {
+      h += rand() < 0.05 ? 24 * (31 + Math.floor(rand() * 30)) : 20 + Math.floor(rand() * 60);   // now and then a lapse
+      const exercises: [string, LiftSet[]][] = Array.from({ length: 2 + Math.floor(rand() * 4) }, () => [pick(pool), Array.from(
+        { length: 1 + Math.floor(rand() * 4) },
+        () => ({ w: 10 + Math.round(rand() * 120), r: Math.floor(rand() * 12), rpe: rand() < 0.3 ? 6 + Math.round(rand() * 8) / 2 : undefined,
+                 warmup: rand() < 0.15, seconds: 30 + Math.floor(rand() * 60), side: rand() < 0.1 ? ('left' as const) : undefined }),
+      )]);
+      const part = workoutRows(`g${i}`, { start: h, end: h + 1 + rand(), exercises }, rand() > 0.03);
+      part.workout.bodyweight_kg = rand() < 0.5 ? 70 + Math.round(rand() * 20) : null;
+      for (const s of part.sets) s.completed = rand() > 0.1;
+      parts.push(part);
+    }
+    const manual = Array.from({ length: 40 }, () => ({ slug: pick(pool), e1rm: 60 + Math.round(rand() * 8) * 10, at: Math.floor(rand() * h), source: 'manual' }));
+    // ties between a manual and a logged record, so the first-in-history tie-break is exercised
+    const logged = parts.filter((p) => p.workout.finished_at).flatMap(setsHistory);
+    const ties = logged.filter(() => rand() < 0.05).map((r) => ({ ...r, source: 'manual' }));
+    const history = shuffle([...historyRows(manual), ...logged, ...ties]);
+    const rows = (thresholds: typeof C): ScoringRows => ({
+      thresholds, exercises: EXERCISES, muscles: MUSCLES, history,
+      workouts: shuffle(parts.map((p) => p.workout)), blocks: shuffle(parts.flatMap((p) => p.blocks)), sets: shuffle(parts.flatMap((p) => p.sets)),
+    });
+    // the scoring before the rows were grouped: every workout against every block, set and record
+    const reference = (r: ScoringRows): WorkoutLoads[] => {
+      const { lib, keyOf, idOf } = libraryFromRows(r.exercises, r.muscles);
+      const all = toPbHistory(r.history, (id) => keyOf.get(id));
+      return r.workouts.filter((w) => w.finished_at)
+        .sort((a, b) => Date.parse(a.finished_at!) - Date.parse(b.finished_at!))
+        .map((w) => cacheRows(w.id, scoreWorkout({ c: r.thresholds, lib }, engineWorkout(w, r.blocks, r.sets, keyOf), all, w.bodyweight_kg), idOf));
+    };
+    for (const thresholds of [C, withOverride(C, 'pb.manual_policy', 'replace_on_log')]) {
+      const r = rows(thresholds);
+      const got = scoreFinishedWorkouts(r);
+      assert.ok(got.length > 200 && got.some((w) => w.exercises.some((e) => e.pb_source === 'estimated'))
+        && got.some((w) => w.exercises.some((e) => e.pb_source === 'lapsed')));
+      assert.deepEqual(got, reference(r));
+    }
   });
 });
 

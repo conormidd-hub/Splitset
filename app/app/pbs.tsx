@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { useExercises, useRecords } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { useLiftPbs, useRunPbs } from '@/api/pbs';
+import { useThresholds } from '@/api/recovery';
 import { PbTable } from '@/components/pbs/PbTable';
 import { liftRows, runRows } from '@/components/pbs/rows';
 import { Button } from '@/components/ui/Button';
@@ -25,6 +26,8 @@ export default function PersonalBests() {
   const lifts = useLiftPbs();
   const exercises = useExercises();
   const records = useRecords();
+  // the rep cap of the e1RM, from the user's thresholds (the constants forbid hard-coding it)
+  const maxReps = useThresholds().e1rm.max_reps;
 
   const liftList = useMemo(() => {
     const byId = new Map((exercises.data ?? []).map((e) => [e.id, e]));
@@ -57,7 +60,7 @@ export default function PersonalBests() {
       ) : lifts.isLoading ? <Loading /> : (
         <>
           <T variant="small" tone="mut">
-            {"1RM is your best single, or an estimate from a set of up to 12 reps (Epley; the small print shows the set, e.g. 132.5×5). 3RM is the heaviest weight you've moved for 3 or more reps. Warm-ups don't count."}
+            {`1RM is your best estimate from any set: Epley on weight × reps, with reps (plus reps in reserve when you log RPE) capped at ${maxReps}. Bodyweight and assisted lifts count your bodyweight in. The small print shows the set, e.g. 132.5×5, or BW+20×5 with weight added to bodyweight; "tested" is a single with nothing in reserve. 3RM is the heaviest weight (the added load, for bodyweight lifts) you've moved for 3 or more reps; assisted lifts have no 3RM, since more assistance is easier. Warm-ups don't count.`}
           </T>
           {(lifts.data?.size ?? 0) > 6 ? (
             <TextField value={query} onChangeText={setQuery} placeholder="Find a lift" autoCapitalize="none" />
@@ -71,7 +74,7 @@ export default function PersonalBests() {
               title={l.exercise?.name ?? 'Exercise'}
               subtitle={[l.exercise?.muscle_group, l.exercise?.equipment].filter(Boolean).join(' · ') || undefined}
               right={<Button title="History" variant="ghost" small onPress={() => router.push(`/lift/exercises/${l.id}`)} />}>
-              <PbTable rows={liftRows(l.byMetric, units)} />
+              <PbTable rows={liftRows(l.byMetric, units, { loadMode: l.exercise?.load_mode })} />
             </Card>
           ))}
           <View style={{ height: 8 }} />

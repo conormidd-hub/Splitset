@@ -36,6 +36,11 @@ type Props = {
   onSelect?: (muscle: MuscleId) => void;
   /** Display names, for the screen-reader summary. */
   nameOf?: (id: MuscleId) => string;
+  /** What the summary says the figure shows, e.g. "muscles used" or "fatigue on Tue 13 Oct";
+   *  "fatigue now" (recovery) or "this workout" (session) by default. */
+  context?: string;
+  /** The summary when no region is coloured; "every muscle Ready" by default. */
+  emptyText?: string;
 };
 
 /**
@@ -44,13 +49,13 @@ type Props = {
  * Every region can be tapped. Screen readers get a one-line summary; the list view (MuscleList)
  * is the full text equivalent.
  */
-export function BodyMap({ map, view, mode, theme, thresholds = DEFAULT_THRESHOLDS, width, onSelect, nameOf }: Props) {
+export function BodyMap({ map, view, mode, theme, thresholds = DEFAULT_THRESHOLDS, width, onSelect, nameOf, context, emptyText }: Props) {
   const figure = FIGURES[view];
   const painted = paintFigure(figure, map, theme, thresholds);
   const name = nameOf ?? ((id: MuscleId) => id.replace(/_/g, ' '));
   const coloured = musclesIn(figure).filter((id) => (map?.[id].level ?? 0) > 0);
-  const summary = `Body map, ${view} view, ${mode === 'session' ? 'this workout' : 'fatigue now'}: ` +
-    (coloured.length ? coloured.map((id) => `${name(id)} ${map![id].label}`).join(', ') : 'every muscle Ready');
+  const summary = `Body map, ${view} view, ${context ?? (mode === 'session' ? 'this workout' : 'fatigue now')}: ` +
+    (coloured.length ? coloured.map((id) => `${name(id)} ${map![id].label}`).join(', ') : (emptyText ?? 'every muscle Ready'));
 
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={summary}>

@@ -1,5 +1,7 @@
 """Database tests for build phase 4: the per-workout cache that finish_workout() and
-save_workout_loads() write, the recompute rule, the access rules, and the F26 seed.
+save_workout_loads() write, the recompute rule, the access rules, and the F26 seed. Also the
+rollout: workouts logged by the main-branch app (no e1RMs, no bodyweight snapshot, no cache),
+scored by the deploy's backfill-then-rescore or by the backfill run by hand.
 
 Like the other database tests, these run only when SPLITSET_TEST_DB_URL points at a local
 database (the db-tests workflow), and every number comes from the app's engine through
@@ -14,7 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -26,7 +28,7 @@ sys.path.insert(0, str(SUPABASE))
 import rescore_workouts as rw  # noqa: E402
 import seed_f26  # noqa: E402
 import seed_library as sl  # noqa: E402
-from backfill_e1rm import engine  # noqa: E402
+from backfill_e1rm import backfill, engine  # noqa: E402
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 U_F20 = UUID("00000000-0000-4000-a000-0000000000d1")
@@ -34,7 +36,11 @@ U_F28 = UUID("00000000-0000-4000-a000-0000000000d2")
 U_EDIT = UUID("00000000-0000-4000-a000-0000000000d3")
 U_SEED = UUID("00000000-0000-4000-a000-0000000000d4")
 U_OTHER = UUID("00000000-0000-4000-a000-0000000000d5")
+U_OLD = UUID("00000000-0000-4000-a000-0000000000d6")     # logged by the main-branch app, then deployed
+U_HAND = UUID("00000000-0000-4000-a000-0000000000d7")    # the same, rescored first, then backfilled by hand
+U_MOVED = UUID("00000000-0000-4000-a000-0000000000d8")   # a finish time moved after caching
 HOUR0 = datetime(2026, 10, 5, tzinfo=timezone.utc)   # a Monday: fixture hour 0
+OLD_APP_LIFTS = [("bench_press_bb", 100, 5), ("pull_up", 10, 5)]   # (slug, kg, reps); pull-up kg is added load
 
 
 def at(h: float) -> datetime:
@@ -70,6 +76,25 @@ def finish_as_user(conn, uid: UUID, wid: str, finished: datetime) -> None:
         raise
 
 
+def old_app_workout(conn, uid: UUID, name: str, start: float, end: float, lifts) -> str:
+    """A workout as the main-branch app logs it: sets saved without an e1RM, no bodyweight
+    snapshot, and finished by a plain update of finished_at, so no cache rows either."""
+    ex = seed_f26.exercise_rows(conn, {slug for slug, _, _ in lifts})
+    wid = str(uuid4())
+    conn.execute("insert into public.workouts (id, user_id, name, started_at) values (%s, %s, %s, %s)", (wid, uid, name, at(start)))
+    for i, (slug, kg, reps) in enumerate(lifts):
+        weid = str(uuid4())
+        conn.execute("insert into public.workout_exercises (id, workout_id, user_id, exercise_id, position) values (%s, %s, %s, %s, %s)",
+                     (weid, wid, uid, ex[slug]["id"], i))
+        conn.execute("""insert into public.workout_sets (id, workout_exercise_id, workout_id, exercise_id, user_id, position,
+                                                         weight_kg, reps, completed, completed_at)
+                        values (%s, %s, %s, %s, %s, 0, %s, %s, true, %s)""",
+                     (str(uuid4()), weid, wid, ex[slug]["id"], uid, kg, reps, at(end)))
+    # updated_at = now(): the same instant the insert stamped, so the last-write-wins guard keeps it
+    conn.execute("update public.workouts set finished_at = %s, updated_at = now() where id = %s", (at(end), wid))
+    return wid
+
+
 def muscle_rows(conn, wid: str) -> dict[str, dict]:
     return {r["muscle_id"]: r for r in conn.execute(
         "select muscle_id, load, recovery_hours, finished_at, source from public.workout_muscle_loads where workout_id = %s", (wid,)).fetchall()}
@@ -93,7 +118,7 @@ def conn():
     assert urlparse(url).hostname in LOCAL_HOSTS, "SPLITSET_TEST_DB_URL must point at a local database"
     with psycopg.connect(url, row_factory=dict_row) as c:
         sl.seed(c, sl.load_json(sl.LIBRARY_PATH), sl.load_json(sl.CONSTANTS_PATH))
-        for uid in (U_F20, U_F28, U_EDIT, U_SEED, U_OTHER):
+        for uid in (U_F20, U_F28, U_EDIT, U_SEED, U_OTHER, U_OLD, U_HAND, U_MOVED):
             c.execute("insert into auth.users (instance_id, id, aud, role, email) "
                       "values ('00000000-0000-0000-0000-000000000000', %s, 'authenticated', 'authenticated', %s) "
                       "on conflict (id) do nothing", (uid, f"phase4-{str(uid)[-2:]}@splitset.test"))
@@ -167,11 +192,78 @@ def test_db_editing_monday_rescores_tuesday(conn):
 
 
 def test_db_rescoring_again_changes_nothing(conn, push_day):
+    last_id = lambda: conn.execute("select coalesce(max(id), 0) as m from public.workout_muscle_loads").fetchone()["m"]  # noqa: E731
     rw.rescore(conn)
     conn.commit()
+    before = last_id()
     again = rw.rescore(conn)
     conn.commit()
     assert again.workouts > 0 and again.changed == 0
+    assert last_id() == before   # nothing was deleted and written again
+
+
+def test_db_a_moved_finish_is_rewritten(conn):
+    """The cache's t_w follows the workout's finished_at even when the loads come out the same."""
+    wid = workout(conn, U_MOVED, "Moved", 17, 18, [("bench_press_bb", [{"w": 100, "r": 5}])])
+    rw.rescore(conn, U_MOVED)
+    conn.execute("update public.workouts set finished_at = %s, updated_at = now() where id = %s", (at(19), wid))
+    conn.commit()
+    report = rw.rescore(conn, U_MOVED)
+    conn.commit()
+    assert report.changed == 1
+    assert {r["finished_at"] for r in muscle_rows(conn, wid).values()} == {at(19)}
+
+
+def test_db_workouts_the_old_app_logged_are_scored_by_the_deploy(conn):
+    """Rollout: workouts the main-branch app logged reach `rescore_workouts.py --fill`, run by hand
+    after the merge (catch_up: the e1RM backfill, then the rescore), with no e1RMs, no bodyweight
+    snapshot and no cache rows. After it Tuesday's bench is referenced to Monday's sets, and the pull-ups are
+    weighed at the profile's 80 kg rather than the 75 kg fallback."""
+    conn.execute("update public.profiles set bodyweight_kg = 80, bodyweight_updated_at = now() where id = %s", (U_OLD,))
+    mon = old_app_workout(conn, U_OLD, "Monday", 17, 18, OLD_APP_LIFTS)
+    tue = old_app_workout(conn, U_OLD, "Tuesday", 41, 42, OLD_APP_LIFTS)
+    conn.commit()
+    assert muscle_rows(conn, mon) == {} and muscle_rows(conn, tue) == {}
+
+    filled, report = rw.catch_up(conn, U_OLD)
+    conn.commit()
+    assert (filled.workouts, filled.sets, filled.rescored, filled.changed) == (2, 4, 2, 2)
+    assert (report.workouts, report.changed) == (2, 0)   # the backfill already rescored them
+    assert {r["bodyweight_kg"] for r in conn.execute("select bodyweight_kg from public.workouts where user_id = %s",
+                                                     (U_OLD,)).fetchall()} == {80}
+    bench, pull_up = exercise_rows(conn, tue)["bench_press_bb"], exercise_rows(conn, tue)["pull_up"]
+    assert (bench["pb_source"], bench["pb_detail"]) == ("monthly", "logged")
+    assert bench["pb_value"] == pytest.approx(100 * (1 + 5 / 30))
+    assert bench["load"] == pytest.approx(0.35, abs=0.01)
+    assert (pull_up["pb_source"], pull_up["pb_detail"]) == ("monthly", "logged")
+    assert pull_up["pb_value"] == pytest.approx(90 * (1 + 5 / 30))   # 80 kg body + 10 kg added; 75 kg would give 99.17
+    assert muscle_rows(conn, mon) and muscle_rows(conn, tue)
+
+    # the next deploy finds nothing to fill and nothing to rewrite
+    filled, report = rw.catch_up(conn, U_OLD)
+    conn.commit()
+    assert (filled.users, report.workouts, report.changed) == ({}, 2, 0)
+
+
+def test_db_the_backfill_by_hand_rescores_what_it_fills(conn):
+    """Merge day the other way round: the rescore ran before the e1RMs were filled, so Tuesday's
+    bench was cached as calibrating. Running backfill_e1rm.py by hand brings the cache into line."""
+    conn.execute("update public.profiles set bodyweight_kg = 80, bodyweight_updated_at = now() where id = %s", (U_HAND,))
+    old_app_workout(conn, U_HAND, "Monday", 17, 18, OLD_APP_LIFTS)
+    tue = old_app_workout(conn, U_HAND, "Tuesday", 41, 42, OLD_APP_LIFTS)
+    conn.commit()
+    rw.rescore(conn, U_HAND)
+    conn.commit()
+    assert exercise_rows(conn, tue)["bench_press_bb"]["pb_source"] == "calibration"
+
+    filled = backfill(conn, U_HAND)
+    conn.commit()
+    assert filled.rescored == 2 and filled.changed >= 1
+    bench, pull_up = exercise_rows(conn, tue)["bench_press_bb"], exercise_rows(conn, tue)["pull_up"]
+    assert (bench["pb_source"], bench["pb_detail"]) == ("monthly", "logged")
+    assert bench["pb_value"] == pytest.approx(100 * (1 + 5 / 30))
+    assert pull_up["pb_value"] == pytest.approx(90 * (1 + 5 / 30))
+    assert backfill(conn, U_HAND).users == {}   # a second run finds nothing
 
 
 def test_db_cache_access_rules(conn, push_day):

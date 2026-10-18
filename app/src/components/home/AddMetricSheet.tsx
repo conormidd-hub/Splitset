@@ -72,13 +72,23 @@ export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }
 
   // the scrim is the dark of whichever palette is on: the page's own black at night, ink by day
   const scrim = name === 'night' ? palette.bg : palette.ink;
+  const title = mode === 'pick' ? 'Choose In focus' : 'Add to At a glance';
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close} aria-label={title}>
       <View style={{ flex: 1 }}>
-        <Pressable onPress={close} accessibilityLabel="Close" style={[StyleSheet.absoluteFill, { backgroundColor: scrim, opacity: 0.5 }]} />
+        {/* a tap outside the card closes it. Not a button: kept out of the web's focus order and
+            hidden from screen readers, which get the card's Close, Escape and the escape scrub */}
+        <View
+          aria-hidden
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={close}
+          style={[StyleSheet.absoluteFill, { backgroundColor: scrim, opacity: 0.5 }]}
+        />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          accessibilityViewIsModal
+          onAccessibilityEscape={close}
           style={{ flex: 1, justifyContent: wide ? 'center' : 'flex-end', alignItems: wide ? 'center' : 'stretch', pointerEvents: 'box-none' }}>
           <View
             style={{
@@ -87,7 +97,7 @@ export function AddMetricSheet({ visible, mode, layout, onClose, onAdd, onPick }
               borderWidth: 1, borderColor: palette.hair, paddingBottom: wide ? 0 : insets.bottom,
             }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, paddingBottom: space.sm }}>
-              <T variant="h2" style={{ flex: 1 }}>{mode === 'pick' ? 'Choose In focus' : 'Add to At a glance'}</T>
+              <T variant="h2" accessibilityRole="header" style={{ flex: 1 }}>{title}</T>
               <Pressable
                 onPress={close}
                 accessibilityRole="button"

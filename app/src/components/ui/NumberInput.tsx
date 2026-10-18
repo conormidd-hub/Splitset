@@ -12,10 +12,17 @@ type Props = {
   width?: number;
   style?: TextStyle;
   muted?: boolean;
+  /** What screen readers call the field, since its label is a separate Text. */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 };
 
-/** A compact numeric cell for the set sheet. Shows the stored value until edited. */
-export function NumberInput({ value, onChange, placeholder, integer, width = 72, style, muted }: Props) {
+/**
+ * A compact numeric cell for the set sheet. Shows the stored value until edited. Every caller
+ * holds a quantity (weight, reps, seconds, km, a year), so a negative or non-finite number is
+ * not passed on; the text reverts to the stored value on blur.
+ */
+export function NumberInput({ value, onChange, placeholder, integer, width = 72, style, muted, accessibilityLabel, accessibilityHint }: Props) {
   const { palette } = useTheme();
   const [text, setText] = useState<string | null>(null);
   const shown = text ?? (value == null ? '' : String(value));
@@ -27,13 +34,15 @@ export function NumberInput({ value, onChange, placeholder, integer, width = 72,
         const cleaned = t.replace(',', '.').trim();
         if (cleaned === '') return onChange(null);
         const n = integer ? parseInt(cleaned, 10) : parseFloat(cleaned);
-        if (!Number.isNaN(n)) onChange(n);
+        if (Number.isFinite(n) && n >= 0) onChange(n);
       }}
       onBlur={() => setText(null)}
       placeholder={placeholder}
       placeholderTextColor={palette.mut}
       keyboardType={integer ? 'number-pad' : 'decimal-pad'}
       selectTextOnFocus
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       style={[
         {
           width, textAlign: 'center', paddingVertical: 8, paddingHorizontal: 6,

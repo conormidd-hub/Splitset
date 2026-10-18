@@ -28,6 +28,7 @@ export function NextReadyStrip({ map, nameOf }: { map: RecoveryMap; nameOf: (id:
           {items.map((r) => (
             <View
               key={r.muscle}
+              accessible
               accessibilityLabel={`${nameOf(r.muscle)}, ${r.label}, trainable in ${fmtHours(r.in_h)}`}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6 }}>
               <Swatch colour={name === 'night' ? map[r.muscle].fill_dark : map[r.muscle].fill} />
@@ -62,7 +63,8 @@ export function TrainNextCard({ map, nameOf }: { map: RecoveryMap; nameOf: (id: 
                     key={e.id}
                     onPress={() => router.push(`/lift/exercises/${e.id}`)}
                     accessibilityRole="button"
-                    style={({ pressed }) => ({ backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6, opacity: pressed ? 0.7 : 1 })}>
+                    hitSlop={4}
+                    style={({ pressed }) => ({ backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 10, opacity: pressed ? 0.7 : 1 })}>
                     <T variant="small" tone="ink2">{e.name}</T>
                   </Pressable>
                 ))}

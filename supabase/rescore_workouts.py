@@ -7,11 +7,17 @@ Build phase 4's one-off backfill, and the recompute rule of spec §14 for anythi
 app: after a library change to an exercise's muscles or fatigue class (migrate.yml runs it after
 seed_library.py), or by hand. The app runs the same rule itself after the changes it makes.
 
+With --fill it first runs backfill_e1rm.py's fill (catch_up()): finished workouts logged by an app
+from before build phase 3 have sets with no e1RM and no bodyweight snapshot, so without it they
+would be scored as calibrating and at the 75 kg fallback. The fill only touches nulls, so once
+there is nothing left to fill it changes nothing. migrate.yml runs the plain rescore; the fill is
+run by hand (notes §26).
+
 Reads SUPABASE_DB_URL from the environment or the root .env. Every number comes from the app's
 engine through app/scripts/recovery-cli.ts (`score-workouts`, Node 22.18+), the same code the app
 scores with: each finished workout, in time order, against the PB history dated before it
-started (pb_history: stored set e1RMs and manual PBs). Rows are written through
-save_workout_loads(), which replaces each workout's cache. A second run changes nothing.
+started (pb_history: stored set e1RMs and manual PBs). Only workouts whose cache differs are
+rewritten, through save_workout_loads(), so a second run writes nothing.
 """
 
 from __future__ import annotations
@@ -28,7 +34,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from backfill_e1rm import EXERCISE_COLUMNS, engine  # noqa: E402
+from backfill_e1rm import EXERCISE_COLUMNS, Plan, backfill, engine  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SAVE_BATCH = 50
@@ -90,12 +96,15 @@ def _same(a: dict[str, Any], b: dict[str, Any]) -> bool:
 
 
 def cached(conn: psycopg.Connection[Any], workout_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """The cache rows stored now, shaped like the engine's."""
-    out: dict[str, dict[str, Any]] = {w: {"workout_id": w, "muscles": [], "exercises": []} for w in workout_ids}
+    """The cache rows stored now, shaped like the engine's. `moved` is set when a muscle row's t_w
+    is no longer its workout's finished_at, which the engine's rows don't carry."""
+    out: dict[str, dict[str, Any]] = {w: {"workout_id": w, "muscles": [], "exercises": [], "moved": False} for w in workout_ids}
     with conn.cursor(row_factory=dict_row) as cur:
-        for r in cur.execute("select workout_id, muscle_id, load, recovery_hours from public.workout_muscle_loads where workout_id = any(%s::uuid[])",
-                             (workout_ids,)).fetchall():
+        for r in cur.execute("""select l.workout_id, l.muscle_id, l.load, l.recovery_hours, l.finished_at <> w.finished_at as moved
+                                  from public.workout_muscle_loads l join public.workouts w on w.id = l.workout_id
+                                 where l.workout_id = any(%s::uuid[])""", (workout_ids,)).fetchall():
             out[str(r["workout_id"])]["muscles"].append(r)
+            out[str(r["workout_id"])]["moved"] |= bool(r["moved"])
         for r in cur.execute("""select workout_id, exercise_id, load, pb_source, pb_detail, pb_value
                                   from public.workout_exercise_loads where workout_id = any(%s::uuid[])""", (workout_ids,)).fetchall():
             out[str(r["workout_id"])]["exercises"].append(r)
@@ -127,7 +136,8 @@ class Report:
 
 
 def rescore(conn: psycopg.Connection[Any], user_id: Any = None, since: Any = None) -> Report:
-    """Rescore and rewrite every matching finished workout. The caller commits or rolls back."""
+    """Rescore every matching finished workout and rewrite the cache of those whose rows differ,
+    so an unchanged workout's rows are neither deleted nor locked. The caller commits or rolls back."""
     report = Report()
     with conn.cursor(row_factory=dict_row) as cur:
         users = cur.execute(
@@ -138,17 +148,28 @@ def rescore(conn: psycopg.Connection[Any], user_id: Any = None, since: Any = Non
     for u in users:
         loads = score(conn, u["id"], since)
         before = cached(conn, [str(w["workout_id"]) for w in loads])
-        changed = sum(not _same(before[str(w["workout_id"])], w) for w in loads)
-        save(conn, loads)
-        report.users[u["display_name"]] = (len(loads), changed, sum(len(w["muscles"]) for w in loads))
+        stale = [w for w in loads if before[str(w["workout_id"])]["moved"] or not _same(before[str(w["workout_id"])], w)]
+        save(conn, stale)
+        report.users[u["display_name"]] = (len(loads), len(stale), sum(len(w["muscles"]) for w in loads))
     return report
+
+
+def catch_up(conn: psycopg.Connection[Any], user_id: Any = None, since: Any = None) -> tuple[Plan, Report]:
+    """What --fill runs: fill the e1RMs and bodyweight snapshots an older app left null
+    (backfill_e1rm.backfill, which rescores what it fills), then rescore. The caller commits or
+    rolls back. migrate.yml doesn't fill (Conor runs it by hand), it only rescores."""
+    filled = backfill(conn, user_id)
+    return filled, rescore(conn, user_id, since)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--dry-run", action="store_true", help="work it all out and write it, then roll back")
     parser.add_argument("--user", help="only this user id")
-    parser.add_argument("--from", dest="since", help="only workouts starting at or after this instant (ISO 8601)")
+    parser.add_argument("--from", dest="since", help="only rescore workouts starting at or after this instant (ISO 8601); "
+                                                     "the fill looks at every finished workout")
+    parser.add_argument("--fill", action="store_true", help="first fill the e1RMs and bodyweight snapshots an older app "
+                                                            "left null (backfill_e1rm.py), then rescore")
     args = parser.parse_args()
 
     sys.path.insert(0, str(ROOT / "sync"))
@@ -158,13 +179,14 @@ def main() -> None:
     if not url:
         raise SystemExit("SUPABASE_DB_URL is not set (see .env.example)")
     with psycopg.connect(url, connect_timeout=20, application_name="splitset-rescore") as conn:
-        report = rescore(conn, args.user, args.since)
+        filled, report = catch_up(conn, args.user, args.since) if args.fill else (None, rescore(conn, args.user, args.since))
+        fill = f"fill {filled}\n" if filled is not None else ""
         if args.dry_run:
             conn.rollback()
-            print(f"dry run, rolled back. {report}")
+            print(f"dry run, rolled back. {fill}{report}")
         else:
             conn.commit()
-            print(report)
+            print(f"{fill}{report}")
 
 
 if __name__ == "__main__":

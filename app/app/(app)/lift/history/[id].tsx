@@ -14,8 +14,9 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
 import { longDate, shortTime } from '@/lib/dates';
-import { formatLoad } from '@/lib/pbs';
-import { formatDurationShort, formatWeight, kgToDisplay } from '@/lib/units';
+import { setCount, volumeKg } from '@/lib/lifting/sideCounts';
+import { formatLoad, loggedWeight } from '@/lib/pbs';
+import { formatDurationShort, formatWeight } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -35,9 +36,8 @@ export default function WorkoutHistory() {
 
   const sets = w.workout_exercises.flatMap((e) => e.workout_sets);
   const done = sets.filter((s) => s.completed);
-  const volume = done.filter((s) => s.set_type !== 'warmup').reduce((t, s) => t + (s.weight_kg ?? 0) * (s.reps ?? 0), 0);
+  const volume = volumeKg(done.filter((s) => s.set_type !== 'warmup'));
   const duration = w.finished_at ? (new Date(w.finished_at).getTime() - new Date(w.started_at).getTime()) / 1000 : null;
-  const unit = units === 'imperial' ? 'lb' : 'kg';
 
   const onDelete = async () => {
     const ok = await confirm('Delete workout', 'This removes the session and its sets from your history.', 'Delete', true);
@@ -64,7 +64,7 @@ export default function WorkoutHistory() {
         <Card>
           <Grid>
             <StatTile label="Duration" value={formatDurationShort(duration)} />
-            <StatTile label="Sets" value={`${done.length}`} sub={`${w.workout_exercises.length} exercises`} />
+            <StatTile label="Sets" value={`${setCount(done)}`} sub={`${w.workout_exercises.length} exercises`} />
             <StatTile label="Volume" value={formatWeight(volume, units, 0)} />
           </Grid>
         </Card>
@@ -77,7 +77,8 @@ export default function WorkoutHistory() {
                   <T variant="small" tone="mut" style={{ width: 32 }}>{s.set_type === 'warmup' ? 'W' : s.set_type === 'drop' ? 'D' : s.set_type === 'failure' ? 'F' : i + 1}</T>
                   <T variant="mono" style={{ flex: 1 }}>
                     {[
-                      s.weight_kg != null ? `${kgToDisplay(s.weight_kg, units)} ${unit}` : null,
+                      // the added load or the assistance for a bodyweight or assisted lift (notes §4.6)
+                      s.weight_kg != null ? loggedWeight(s.weight_kg, units, e.exercise?.load_mode) : null,
                       s.reps != null ? `${s.reps} reps` : null,
                       s.seconds != null ? `${s.seconds} s` : null,
                     ].filter(Boolean).join(' × ') || '–'}

@@ -159,7 +159,8 @@ export function sideFactor(m: Model, s: LiftSet): number {
  * §3–§5 for one exercise in one session: per-set detail, the exercise load L_e and the e1RM
  * records its sets produce. `sessionBest` is the e1RM already reached on this exercise earlier
  * in the same workout, so an exercise logged in two blocks keeps one running reference (F28).
- * Sets with no effective weight above zero, or no reps, are skipped (§14).
+ * Sets with no effective weight above zero, or no reps, are skipped (§14), and so are sets with
+ * negative or non-finite reps, which would score negative INOL and cancel real sets.
  */
 export function scoreExercise(
   m: Model, slug: string, sets: readonly LiftSet[], start: number, history: readonly PbRecord[],
@@ -189,7 +190,7 @@ export function scoreExercise(
   const newRecords: NewRecord[] = [];
   for (const s of sets) {
     const w = effectiveWeight(s, ex, bodyweight);
-    if (!w || w <= 0 || s.r == null) continue;
+    if (!w || w <= 0 || !Number.isFinite(w) || s.r == null || !Number.isFinite(s.r) || s.r < 0) continue;
     const r = s.r;
     const rir = rirFromRpe(s.rpe);
     const scoringRir = rir ?? (calibrating ? m.c.pb.calibration_rir : m.c.e1rm.rir_default);
@@ -397,10 +398,14 @@ function fixedHalfEven(x: number, digits: number): string {
   return ((lower % 2 === 0 ? lower : lower + 1) / scale).toFixed(digits);
 }
 
-/** "now", "N h" under a day, otherwise "N.N days" (§9). "—" when there is no time. */
+/** "now", "N h" under a day, otherwise "N.N days" (§9). "—" when there is no time. Half an hour
+ *  or less reads "< 1 h", where the reference would say "0 h" for a muscle not yet trainable. */
 export function fmtHours(h: number | null | undefined): string {
   if (h == null) return '—';
   if (h <= 0) return 'now';
-  if (h < HOURS_PER_DAY) return `${fixedHalfEven(h, 0)} h`;
+  if (h < HOURS_PER_DAY) {
+    const whole = fixedHalfEven(h, 0);
+    return whole === '0' ? '< 1 h' : `${whole} h`;
+  }
   return `${fixedHalfEven(h / HOURS_PER_DAY, 1)} days`;
 }

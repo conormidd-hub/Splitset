@@ -1,8 +1,11 @@
-import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { router, usePathname } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 
-import { useRoutines, useWorkouts } from '@/api/lifting';
+import { invalidateWorkoutData, useExercises, useRoutines, useWorkouts } from '@/api/lifting';
 import { useLiftPbs } from '@/api/pbs';
+import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { useCurrentBodyweight } from '@/api/recovery';
 import { PbButton } from '@/components/pbs/PbButton';
@@ -12,7 +15,8 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, Loading } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
-import { relativeDay, shortTime } from '@/lib/dates';
+import { relativeDay, shortTime, todayIso } from '@/lib/dates';
+import { stopRest } from '@/lib/restTimer';
 import { useUserId } from '@/lib/session';
 import { formatDurationShort, formatWeight } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
@@ -29,6 +33,37 @@ export default function LiftHome() {
   // the workout's bodyweight snapshot (D5); null until known, and the workout screen fills it in
   const bodyweight = useCurrentBodyweight();
   const snapshot = bodyweight.ready ? bodyweight.kg : null;
+  const qc = useQueryClient();
+  const pathname = usePathname();
+  const exercises = useExercises();
+  const activeId = active?.id;
+  const finishedId = useActiveWorkout((s) => s.finishedId);
+
+  // This screen stays mounted under the workout sheet, so it keeps the sheet in step from here.
+  // A block copies its exercise's facts when added: an exercise edited since (mapped from its
+  // screen mid-workout, or started from a stale routine) or a block saved by an older build takes
+  // the library's current ones, and its sets their e1RM.
+  useEffect(() => {
+    if (activeId && exercises.data) useActiveWorkout.getState().refreshFacts(exercises.data);
+  }, [activeId, exercises.data]);
+
+  // A queue left from before a restart: nothing else sends it (edits are refused once a finish is
+  // queued), so drain it once the workout is back. Here, not on rehydrate, where the session may
+  // not be restored yet; flush() joins a drain already running.
+  useEffect(() => {
+    const s = useActiveWorkout.getState();
+    if (activeId && s.outbox.length) void s.flush();
+  }, [activeId]);
+
+  // A finish that synced away from the Finish button (Retry now, or the drain above): stop the
+  // rest timer, link it to the plan, refresh, and swap the sheet for its summary.
+  useEffect(() => {
+    if (!finishedId) return;
+    useActiveWorkout.getState().clearFinished();
+    void stopRest();
+    void linkWorkoutToPlan(uid, finishedId, todayIso()).catch(() => false).then(() => invalidateWorkoutData(qc, uid));
+    if (pathname === '/lift/workout') router.replace(`/lift/history/${finishedId}`);
+  }, [finishedId, pathname, uid, qc]);
 
   const startEmpty = () => {
     if (!active) start(uid, null, undefined, snapshot);
@@ -43,7 +78,7 @@ export default function LiftHome() {
       onRefresh={() => { routines.refetch(); workouts.refetch(); lifts.refetch(); }}
       right={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-          <PbButton />
+          <PbButton compact />
           <Button title="Recovery" variant="ghost" small onPress={() => router.push('/lift/recovery')} />
           <Button title="Exercises" variant="ghost" small onPress={() => router.push('/lift/exercises')} />
         </View>
