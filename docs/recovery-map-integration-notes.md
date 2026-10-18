@@ -901,3 +901,121 @@ Phase 5 output · 2026-10-18. The read side: `recovery_map`, `session_map` and `
 - **"`session_map(workout)` → `trainable_after_h`, `ready_after_h`":** these are the engine's `trainable_in_h` and `ready_in_h` for one workout, renamed because they count from the workout's finish, not from now.
 - **"`recovery_history` over 7 days returns 7 samples":** this holds when the samples end on `to` (item 6).
 - **"Expose as HTTP endpoints or a local store":** reads go to Supabase over HTTP (PostgREST, `recovery_loads`), and the maths runs in the app. That's the local store of notes §8.
+
+---
+
+## 20. Phase 6: decisions made
+
+Phase 6 output · 2026-10-18. The body map: the figure, the legend, the tap detail, the list view and a temporary dev screen.
+
+### 20.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| SVG files | **Embedded byte for byte.** `npm run gen:body-figure` (`app/scripts/gen-body-figure.ts`) copies `assets/body-front.svg` and `body-back.svg` into `src/lib/recovery/bodySvg.ts` as strings. The app parses them at load. A test fails if the copy and the files ever differ. There's no Metro transformer and no new dependency (notes §8) |
+| Layout | **Side by side from 640 px wide**, like the preview image. Narrower, one view at a time with a Front/Back toggle and a horizontal swipe |
+| List view | **All 17 muscles**, highest first, with Ready ones at the bottom: the full text equivalent of the figure |
+
+### 20.2 The figure as data (`src/lib/recovery/figure.ts`, pure)
+
+1. **`parseSvg`** is a small parser for what the figure files use: elements, double-quoted attributes, text, comments and declarations. Anything else throws rather than drawing half a figure.
+2. **`figureOf`** turns a file into its shapes in drawing order. It enforces the spec §10 contract, and throws on:
+   - a transform;
+   - an element other than `g`, `title`, `desc` and the five basic shapes;
+   - a region whose `data-muscle` isn't one of the 17 IDs;
+   - a region with no `data-side`;
+   - a shape that is both a region and silhouette.
+
+   So a replacement SVG that breaks the contract fails its tests, not silently on screen.
+3. **`paintFigure(figure, map, theme, thresholds)`** applies the contract:
+   - **Regions** take the map entry's `fill` or `fill_dark`, which the engine already sets to `ready_fill(_dark)` at level 0, and `region_stroke(_dark)` as their outline. With no map yet, every region is Ready.
+   - **Silhouette shapes** (`data-role="silhouette"`) only ever take `silhouette_fill(_dark)`.
+   - **Everything else** keeps its own attributes. Geometry is never touched.
+4. **Every colour comes from the thresholds,** so from `recovery_constants.json` plus any overrides. The page background behind the figure is the app's own surface.
+5. **`legendRows`, `listRows`, `referenceMarker` and `ROLE_BADGE`** are the legend, list and tap-detail pieces. They're pure, so tested.
+   - **Legend ranges:** "F < 0.25", "0.25 – 0.75" … "≥ 4.0", built from `levels`; L instead of F on the session view.
+   - **List order:** level first, then F (or L), so a muscle raised by the weekly guard sorts with its level.
+   - **Times** are formatted by the engine's `fmtHours`.
+
+### 20.3 Components (`src/components/recovery/`)
+
+6. **`BodyMap`** takes `map`, `view`, `mode` and `theme` (plus `thresholds`, `width`, `onSelect` and `nameOf`) and draws the painted shapes with react-native-svg.
+   - **Tapping a region** reports its muscle.
+   - **Screen readers** get one summary line ("Body map, back view, fatigue now: Hamstrings Very high, …"); the list is the full equivalent.
+   - **On web,** react-native-svg turns `onPress` into responder props React warns about, and overwrites `onClick` unless `onPress` is exactly `null`. So on web a region gets `onPress: null` and its own `onClick`; on phones it keeps `onPress`.
+7. **`Legend`:** six swatches with label, range and advice.
+8. **`MuscleSheet`:** the tap detail of spec §10. It's a bottom sheet on a phone and a centred card from 640 px, built like the "Add metric" sheet.
+   - **Recovery view:** name, level and advice, F, trainable in, ready in and W. Then "This week": each contributing exercise with a P/S/T badge, its workout's finish in the profile's time zone, and `role_weight × L_e`, largest first. Estimated and calibration references carry an "estimated" or "calibrating" badge.
+   - **Session view:** L, the recovery window R, trainable after and ready after.
+9. **`MuscleList`:** the list view; its rows open the same sheet.
+10. **`RecoveryFigure`** puts it together:
+    - a Figure/List toggle, so the list is always one tap away;
+    - the figure or figures, as in 20.1;
+    - the legend;
+    - the sheet;
+    - "Updating…" while the recompute rule runs (Phase 4's `useRecomputeStatus`).
+
+    Light or dark follows the app theme.
+11. **Muscle names** come from the `muscles` table (`useMuscleNames()`, cached for the session), so traps reads "Traps & upper back". Until they load, IDs show as words.
+12. **`ThemeOverride`** (in `ThemeProvider.tsx`) gives its children a fixed theme without saving anything. The dev screen uses it to show light and dark side by side with the app's own setting.
+
+### 20.4 The dev screen (temporary): `app/(app)/lift/recovery-dev.tsx`
+
+13. **Development builds only (`__DEV__`).** The Lift screen links to it ("Recovery map (dev preview)") only in development builds. A production or Vercel build shows neither the link nor the screen.
+14. **Recovery view at any instant:**
+    - **Now:** the default.
+    - **"F26 Wednesday 20:00":** two hours after the last finished workout, which is how `seed_f26.py` dates Legs.
+    - **±1 h and ±1 day** steppers.
+    - **A typed time:** `YYYY-MM-DD HH:mm` in the device's time, or an ISO instant.
+15. **Session view:** pick one of the last 10 finished workouts.
+16. **Theme:** App, Light or Dark.
+
+Phase 7 replaces this screen and its Lift link.
+
+### 20.5 One change to Phase 5
+
+17. **The map at "now" is computed at the end of the current minute.** Phase 5 rounded down. A workout finished at 18:42:40 was then outside a map at 18:42:00, so it was missing for up to a minute after Finish. That showed up in the in-app check (20.7).
+
+### 20.6 Tests
+
+- **`npm test`: 127 tests.** The new `figure.test.ts` covers:
+  - all 17 muscle IDs across the two views;
+  - no element id repeating, within a view or across both, and every id prefixed `front-` or `back-`;
+  - every region with a muscle and a side;
+  - the embedded copy identical to the files;
+  - malformed figures refused;
+  - silhouette never coloured, even with every muscle at Extreme;
+  - Ready and unloaded regions taking the ready colour, with geometry untouched;
+  - the F26 regions taking the preview image's colours;
+  - F20 at 0, 24 and 48 h giving chest High, then Moderate, then Low, as F23 says;
+  - the legend, the list order, and the reference markers.
+- **Snapshots:** 10 SVG files in `src/lib/recovery/__snapshots__/`, which open in any browser:
+  - F26 front and back, light and dark;
+  - F20 at 0, 24 and 48 h, front and back.
+
+  A missing or changed snapshot fails. `UPDATE_SNAPSHOTS=1 npm test` rewrites them, and the new files should be looked at before committing. Node 22's own snapshot API needs a flag, so the test compares the files itself.
+- **Shared helper:** `loadWindow` (fixture workouts as `recovery_loads()` would return them) moved into `testRows.ts`.
+- **pytest:** 79 passed, 38 skipped, unchanged; Phase 6 adds no database code.
+
+### 20.7 Checked in the web preview (2026-10-18, demo athlete)
+
+- **Wide, light,** at the seeded Wednesday 20:00:
+  - the figure matches `docs/recovery-map-preview.png` region for region;
+  - the list matches its table row for row: hamstrings 2.56 Very high, 1.0 days, 2.2 days … chest 0.40 Low, now, 4 h.
+- **Dark:** silhouette `#262A31`, Ready regions `#3A3F47`, outlines `#16181C`, and the dark level fills.
+- **Tap detail:** tapping hamstrings opened the sheet: F 2.56, trainable in 1.0 days, ready in 2.2 days, W 2.94, and five contributions (RDL P 1.25, lying leg curl P 0.86, deadlift S 0.32, back squat T 0.27, leg press T 0.23), dated in Australia/Melbourne.
+- **Phone width:** one view with the toggle, and swiping left turned it to Back.
+- **Session view:** Legs shows quads and hamstrings Very high and glutes High.
+- **Phase 5's "done when", in the app:**
+  - I finished a one-set bench workout (90 × 8) through the logger, then went back to the dev screen without reloading.
+  - Chest went from F 0.39 to 0.71, which is the new cache row's 0.32.
+  - That run is what found the rounding in 20.5.
+- **Afterwards:** the F26 seed was re-run, so the demo again holds just the F26 week, with "now" at the time of the re-seed as Wednesday 20:00.
+
+### 20.8 Ambiguities resolved
+
+- **"Region fill: level `fill` / `fill_dark`, or `ready_fill` / `ready_fill_dark` at level 0":** Phase 5's map entries already carry that choice (the engine's `muscleState` and `sessionMap`), so the figure uses the entry's colours and only falls back to the ready colour when there's no entry.
+- **"Snapshot the F26 state … compare by eye":** `node --test` has no stable snapshot API on Node 22, so the snapshots are plain SVG files written from the same painted shapes `BodyMap` draws. They're viewable as they are.
+- **"Swipe on mobile":** a horizontal pan with react-native-gesture-handler, which is already installed (its root view is in `app/_layout.tsx`). Left shows the back, right the front.
+- **"Mark contributions whose `pb_source` is estimated or calibration":** a small "estimated" or "calibrating" badge next to the exercise's name.
+- **"Put it on a temporary dev screen":** `lift/recovery-dev.tsx`, development builds only, linked from Lift.
