@@ -18,6 +18,7 @@ export default function SettingsStack() {
       }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="connect" options={{ title: 'intervals.icu' }} />
+      <Stack.Screen name="recovery" options={{ title: 'Recovery map' }} />
     </Stack>
   );
 }

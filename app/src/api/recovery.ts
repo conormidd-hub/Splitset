@@ -16,7 +16,8 @@ import {
   type LoadWindow, type RecoveryMap, type RecoverySample, type SessionMap,
 } from '@/lib/recovery/read';
 import { currentBodyweight, engineKey, exerciseDef, setE1rm } from '@/lib/recovery/sets';
-import { thresholdsFor, type Thresholds } from '@/lib/recovery/thresholds';
+import { diffOverrides, type Edits } from '@/lib/recovery/settings';
+import { thresholdsFor, type ThresholdOverride, type Thresholds } from '@/lib/recovery/thresholds';
 import type { ExerciseDef, Model } from '@/lib/recovery/types';
 import { libraryFromRows, scoreLiveWorkout } from '@/lib/recovery/workoutLoads';
 import { queryClient } from '@/lib/query';
@@ -441,4 +442,49 @@ function invalidateExercises(qc: ReturnType<typeof useQueryClient>, uid: string)
   qc.invalidateQueries({ queryKey: ['exercises', uid] });
   qc.invalidateQueries({ queryKey: recoveryKeys.libraryRows() });
   qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+}
+
+// ---------------------------------------------------------------- settings (build phase 9)
+
+/** The signed-in user's user_thresholds rows, as stored. */
+export function useThresholdRows() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: [...recoveryKeys.thresholds(uid), 'rows'],
+    enabled: !!uid,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('user_thresholds').select('user_id, key, value').eq('user_id', uid);
+      if (error) throw error;
+      return data as ThresholdOverride[];
+    },
+  });
+}
+
+/**
+ * Saves the settings screen's edits as user_thresholds rows (upserts and deletes; the defaults in
+ * data/recovery_constants.json never change), then rescores every finished workout with the new
+ * thresholds (the recompute rule, spec §14) in the background, so the figure follows.
+ */
+export function useSaveThresholds() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (edits: Edits) => {
+      const { upsert, remove } = diffOverrides(DEFAULT_THRESHOLDS, edits);
+      const now = new Date().toISOString();
+      if (upsert.length) {
+        const { error } = await supabase.from('user_thresholds')
+          .upsert(upsert.map((r) => ({ user_id: uid, key: r.key, value: r.value, updated_at: now })), { onConflict: 'user_id,key' });
+        if (error) throw error;
+      }
+      if (remove.length) {
+        const { error } = await supabase.from('user_thresholds').delete().eq('user_id', uid).in('key', remove);
+        if (error) throw error;
+      }
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: recoveryKeys.thresholds(uid) });
+      recomputeInBackground(uid, null);
+    },
+  });
 }

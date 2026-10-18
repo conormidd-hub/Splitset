@@ -164,6 +164,10 @@ export default function Settings() {
         />
       </Card>
 
+      <Card title="Recovery map" subtitle="Recovery times, load shares, colour boundaries and PB rules" onPress={() => router.push('/settings/recovery')}>
+        <Button title="Tune the recovery map" variant="secondary" small onPress={() => router.push('/settings/recovery')} />
+      </Card>
+
       {/* development builds only: the recovery map at any instant, light or dark (build phase 6) */}
       {__DEV__ ? (
         <Card title="Developer" subtitle="Only in development builds">

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Animated, Platform, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BodyMap } from './BodyMap';
@@ -29,7 +29,26 @@ type Props = {
   thresholds?: Thresholds;
   /** IANA zone for dates in the tap detail. */
   timeZone?: string | null;
+  /** The map being left (the history slider): drawn under `map` while `map` fades in over it. */
+  previous?: RecoveryMap | SessionMap | null;
+  /** Changes whenever `map` is a new day, to restart the fade. */
+  fadeKey?: string | number;
+  /** The fade has finished; the caller drops `previous`. */
+  onFaded?: () => void;
 };
+
+/** Crossfade length for the history slider (build phase 9). */
+const FADE_MS = 250;
+
+/** Fades its child in from transparent when it mounts; a new key remounts it. */
+function FadeIn({ children, onDone }: { children: ReactNode; onDone?: () => void }) {
+  const [opacity] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: FADE_MS, useNativeDriver: Platform.OS !== 'web' })
+      .start(({ finished }) => { if (finished) onDone?.(); });
+  }, [opacity, onDone]);
+  return <Animated.View style={{ opacity }}>{children}</Animated.View>;
+}
 
 /**
  * The body map with everything around it (build phase 6): front and back side by side when
@@ -37,7 +56,7 @@ type Props = {
  * toggle, so the text equivalent is always one tap away; the legend; the tap-detail sheet; and
  * "Updating…" while the recompute rule rewrites the cache. Light or dark follows the theme.
  */
-export function RecoveryFigure({ map, mode, nameOf, thresholds = DEFAULT_THRESHOLDS, timeZone }: Props) {
+export function RecoveryFigure({ map, mode, nameOf, thresholds = DEFAULT_THRESHOLDS, timeZone, previous, fadeKey, onFaded }: Props) {
   const { name } = useTheme();
   const theme: FigureTheme = name === 'night' ? 'dark' : 'light';
   const updating = useRecomputeStatus((s) => s.running > 0);
@@ -59,7 +78,20 @@ export function RecoveryFigure({ map, mode, nameOf, thresholds = DEFAULT_THRESHO
 
   const figure = (v: FigureView) => (
     <View key={v} style={{ alignItems: 'center', gap: space.xs }}>
-      <BodyMap map={map} view={v} mode={mode} theme={theme} thresholds={thresholds} width={figureWidth} onSelect={setSelected} nameOf={nameOf} />
+      <View>
+        {previous ? (
+          <View style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
+            <BodyMap map={previous} view={v} mode={mode} theme={theme} thresholds={thresholds} width={figureWidth} nameOf={nameOf} />
+          </View>
+        ) : null}
+        {fadeKey != null && previous ? (
+          <FadeIn key={fadeKey} onDone={onFaded}>
+            <BodyMap map={map} view={v} mode={mode} theme={theme} thresholds={thresholds} width={figureWidth} onSelect={setSelected} nameOf={nameOf} />
+          </FadeIn>
+        ) : (
+          <BodyMap map={map} view={v} mode={mode} theme={theme} thresholds={thresholds} width={figureWidth} onSelect={setSelected} nameOf={nameOf} />
+        )}
+      </View>
       <T variant="label" tone="mut">{v === 'front' ? 'Front' : 'Back'}</T>
     </View>
   );
