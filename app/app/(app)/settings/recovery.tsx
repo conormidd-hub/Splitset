@@ -23,6 +23,7 @@ const GROUPS: { id: SettingGroup; title: string; subtitle: string }[] = [
   { id: 'recovery', title: 'Recovery', subtitle: 'How long each muscle takes to recover' },
   { id: 'figure', title: 'The figure', subtitle: 'Where each colour starts' },
   { id: 'pbs', title: 'PBs', subtitle: 'Which best your sets are scored against' },
+  { id: 'cardio', title: 'Cardio', subtitle: 'Runs, rides and more from your watch' },
 ];
 
 const fmt = (def: NumberSetting, v: number) => `${def.integer ? v.toFixed(0) : String(Math.round(v * 100) / 100)}${def.unit ? ` ${def.unit}` : ''}`;
@@ -49,7 +50,7 @@ export default function RecoverySettings() {
   const now = afterEdits(base, uid, rows.data, edits);
   const problems = validateEdits(base, uid, rows.data, edits, defs);
   const dirty = Object.keys(edits).length > 0;
-  const edit = (key: string, value: number | string | null) => setEdits((cur) => ({ ...cur, [key]: value }));
+  const edit = (key: string, value: number | string | boolean | null) => setEdits((cur) => ({ ...cur, [key]: value }));
   const onSave = () => {
     setTried(true);
     if (problems.length) return;
@@ -96,8 +97,8 @@ export default function RecoverySettings() {
 }
 
 function SettingRow({ def, first, value, overridden, onChange, onReset }: {
-  def: Setting; first: boolean; value: number | string; overridden: boolean;
-  onChange: (v: number | string) => void; onReset: () => void;
+  def: Setting; first: boolean; value: number | string | boolean; overridden: boolean;
+  onChange: (v: number | string | boolean) => void; onReset: () => void;
 }) {
   const { palette } = useTheme();
   return (
@@ -116,9 +117,16 @@ function SettingRow({ def, first, value, overridden, onChange, onReset }: {
       {def.kind === 'choice' ? (
         <Segmented options={def.choices} value={value as string} onChange={onChange} />
       ) : null}
+      {def.kind === 'toggle' ? (
+        <Segmented
+          options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
+          value={value ? 'on' : 'off'}
+          onChange={(v) => onChange(v === 'on')}
+        />
+      ) : null}
       {overridden ? (
         <Pressable onPress={onReset} accessibilityRole="button" hitSlop={6}>
-          <T variant="small" tone="accent" weight="600">Reset to default ({String(valueAt(DEFAULT_THRESHOLDS, def.key))}{def.kind === 'number' && def.unit ? ` ${def.unit}` : ''})</T>
+          <T variant="small" tone="accent" weight="600">Reset to default ({def.kind === 'toggle' ? (valueAt(DEFAULT_THRESHOLDS, def.key) ? 'on' : 'off') : String(valueAt(DEFAULT_THRESHOLDS, def.key))}{def.kind === 'number' && def.unit ? ` ${def.unit}` : ''})</T>
         </Pressable>
       ) : null}
     </View>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { useProfile } from '@/api/profile';
-import { useMuscleNames, useRecoveryHistory, useRecoveryMap, useThresholds, type RecoveryMap } from '@/api/recovery';
+import { useActivityCatchUp, useMuscleNames, useRecoveryHistory, useRecoveryMap, useThresholds, type RecoveryMap } from '@/api/recovery';
 import { DayScrubber } from '@/components/recovery/DayScrubber';
 import { NextReadyStrip, TrainNextCard } from '@/components/recovery/RecoveryExtras';
 import { RecoveryFigure } from '@/components/recovery/RecoveryFigure';
@@ -22,6 +22,7 @@ const HOUR_MS = 3_600_000;
  * describe now.
  */
 export default function Recovery() {
+  useActivityCatchUp();
   const live = useRecoveryMap();
   const names = useMuscleNames();
   const c = useThresholds();

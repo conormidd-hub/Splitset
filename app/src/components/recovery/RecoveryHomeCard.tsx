@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 
 import { FigurePair } from './FigurePair';
-import { useMuscleNames, useRecoveryMap, useThresholds } from '@/api/recovery';
+import { useActivityCatchUp, useMuscleNames, useRecoveryMap, useThresholds } from '@/api/recovery';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/States';
@@ -16,6 +16,7 @@ const FIGURE_WIDTH = 52;
 /** The compact Recovery card on Today (build phase 7): a small front-and-back figure, the most
  *  tired muscles, and the next to become trainable. Tapping it opens the Recovery screen. */
 export function RecoveryHomeCard() {
+  useActivityCatchUp();
   const map = useRecoveryMap();
   const names = useMuscleNames();
   const c = useThresholds();

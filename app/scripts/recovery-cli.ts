@@ -33,9 +33,13 @@
 //     "slug", "today", "bodyweight_kg"? }
 //       → Payload: what the New exercise screen saves (build phase 8), starting from the similar
 //         exercise when one is given
+//   { "command": "score-activities", "activities": ActivityRow[] }
+//       → what save_activity_loads() takes: each countable activity's muscle rows (build phase 10);
+//         nothing when the user's cardio.enabled_default is off
 
 import { readFileSync } from 'node:fs';
 
+import { activityLoads, type ActivityRow } from '../src/lib/recovery/cardio.ts';
 import { emptyDraft, fromSimilar, toPayload, type Draft, type SourceRow } from '../src/lib/recovery/customExercise.ts';
 import { setRowPayload, type ExerciseFacts, type SetRow, type WorkoutRef } from '../src/lib/lifting/setRow.ts';
 import { buildLibrary } from '../src/lib/recovery/engine.ts';
@@ -111,6 +115,8 @@ function handle(req: Request): unknown {
       if (sim) draft = { ...fromSimilar(draft, sim.row, sim.roles), ...(req.draft as Partial<Draft>), similar: sim.row.slug };
       return toPayload(c, draft, { slug: String(req.slug), today: String(req.today), bodyweightKg: (req.bodyweight_kg as number | undefined) ?? null });
     }
+    case 'score-activities':
+      return activityLoads({ c, lib: new Map() }, req.activities as ActivityRow[]);
     default:
       throw new Error(`unknown command ${req.command}`);
   }

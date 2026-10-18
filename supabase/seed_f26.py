@@ -120,8 +120,9 @@ def seed(conn: psycopg.Connection[Any], user_id: Any, now: datetime) -> list[str
     rescore(conn, user_id)
 
     with conn.cursor(row_factory=dict_row) as cur:
-        loads = cur.execute("select muscle_id, load, recovery_hours, finished_at from public.workout_muscle_loads where user_id = %s",
-                            (user_id,)).fetchall()
+        # lifting only: F26 is a lifting week, and the demo's imported runs count too since phase 10
+        loads = cur.execute("select muscle_id, load, recovery_hours, finished_at from public.workout_muscle_loads "
+                            "where user_id = %s and source = 'lift'", (user_id,)).fetchall()
         library = cur.execute(f"select {', '.join(EXERCISE_COLUMNS)} from public.exercises where owner_id is null").fetchall()
         muscles = cur.execute("select exercise_id, muscle_id, role from public.exercise_muscles").fetchall()
         thresholds = cur.execute("select user_id, key, value from public.user_thresholds where user_id = %s", (user_id,)).fetchall()

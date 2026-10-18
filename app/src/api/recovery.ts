@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import { useExercises, type Exercise } from '@/api/lifting';
 import { useProfile } from '@/api/profile';
 import { useLatestWeighIn } from '@/api/wellness';
-import { fetchLibraryRows, fetchPbHistoryRows, fetchThresholds, loadKeys, recomputeInBackground } from '@/api/workoutLoads';
+import { catchUpActivities, fetchLibraryRows, fetchPbHistoryRows, fetchThresholds, loadKeys, recomputeInBackground } from '@/api/workoutLoads';
 import { useNowHour, useNowMinute } from '@/lib/clock';
 import { buildLibrary, sessionMap } from '@/lib/recovery/engine';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
@@ -487,4 +488,15 @@ export function useSaveThresholds() {
       recomputeInBackground(uid, null);
     },
   });
+}
+
+// ---------------------------------------------------------------- imported activities (build phase 10)
+
+/** Scores imported activities that have no loads yet, in the background, when a screen that
+ *  shows the recovery map opens (at most every ten minutes). */
+export function useActivityCatchUp() {
+  const uid = useUserId();
+  useEffect(() => {
+    if (uid) void catchUpActivities(uid);
+  }, [uid]);
 }

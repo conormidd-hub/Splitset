@@ -1621,6 +1621,10 @@ export type Database = {
       }
     }
     Functions: {
+      clear_activity_loads: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       connect_intervals: {
         Args: {
           p_athlete_id: string
@@ -1675,6 +1679,12 @@ export type Database = {
           p_kind?: string
         }
         Returns: Json
+      }
+      save_activity_loads: {
+        Args: {
+          p: Json
+        }
+        Returns: number
       }
       save_workout_loads: {
         Args: {

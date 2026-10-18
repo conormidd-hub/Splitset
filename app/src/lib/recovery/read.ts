@@ -7,6 +7,7 @@
 // Times are engine hours (epoch ms ÷ 3,600,000). A map at `at` only ever sees workouts finished by
 // `at`, so a past moment reads as it did then, ready and trainable times included.
 
+import { cardioKind, cardioRole } from './cardio.ts';
 import { lookbackHours, recoveryHours, sessionMap } from './engine.ts';
 import { isMuscleId, MUSCLE_IDS, ROLES, type MuscleId, type Role } from './library.ts';
 import { hoursOf } from './pbHistory.ts';
@@ -39,10 +40,20 @@ export interface WindowExerciseRow {
   finished_at: string;
 }
 
+/** An imported activity in the window (build phase 10), for its contributions. */
+export interface WindowActivityRow {
+  activity_id: string;
+  name: string | null;
+  type: string;
+  finished_at: string;
+}
+
 /** What recovery_loads(from, to) returns. */
 export interface LoadWindow {
   muscles: readonly WindowMuscleRow[];
   exercises: readonly WindowExerciseRow[];
+  /** Imported activities with rows in the window (build phase 10). */
+  activities?: readonly WindowActivityRow[];
 }
 
 // ---------------------------------------------------------------- results
@@ -139,6 +150,19 @@ export function recoveryMapAt(m: Model, keyOf: ReadonlyMap<string, string>, load
         });
       }
     }
+  }
+  // imported activities: each of their rows is already role_weight × L_e for that muscle
+  const activities = new Map((loads.activities ?? []).map((a) => [a.activity_id, a]));
+  for (const r of loads.muscles) {
+    if (!r.activity_id || !isMuscleId(r.muscle_id) || !(r.load > 0)) continue;
+    const age = at - hoursOf(r.finished_at);
+    if (!(age >= 0 && age < week)) continue;
+    const act = activities.get(r.activity_id);
+    const kind = cardioKind(act?.type);
+    contributing[r.muscle_id].push({
+      exercise_id: r.activity_id, exercise: act?.name || act?.type || 'Activity', workout_id: r.activity_id, workout_date: r.finished_at,
+      role: (kind && cardioRole(m, kind, r.muscle_id)) || 'primary', load: r.load, pb_source: 'not needed', pb_detail: null,
+    });
   }
   const order = (a: Contribution, b: Contribution) =>
     b.load - a.load || hoursOf(b.workout_date) - hoursOf(a.workout_date) || a.exercise.localeCompare(b.exercise);

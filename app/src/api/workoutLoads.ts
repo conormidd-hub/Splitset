@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 
+import { activityLoads, CARDIO_TYPES, type ActivityRow } from '@/lib/recovery/cardio';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
 import type { PbHistoryRow } from '@/lib/recovery/pbHistory';
 import type { ExerciseMuscleRow, ExerciseRow } from '@/lib/recovery/sets';
@@ -103,6 +104,82 @@ async function scoreStored(uid: string, workouts: Awaited<ReturnType<typeof fetc
   return scoreFinishedWorkouts({ thresholds, ...library, ...workouts, history });
 }
 
+// ---------------------------------------------------------------- imported activities (build phase 10)
+
+const ACTIVITY_COLUMNS = 'id, type, name, start_time, moving_time_s, elapsed_time_s, hr_zone_times';
+
+/** The user's countable activities (runs, rides, swims, hikes, rows), starting at or after
+ *  `from` (all with null) or exactly `ids`. */
+async function fetchActivities(uid: string, scope: { from?: string | null; ids?: string[] }): Promise<ActivityRow[]> {
+  return paged<ActivityRow>((a, b) => {
+    let q = supabase.from('activities').select(ACTIVITY_COLUMNS).eq('user_id', uid).in('type', [...CARDIO_TYPES]);
+    if (scope.ids) q = q.in('id', scope.ids);
+    else if (scope.from) q = q.gte('start_time', scope.from);
+    return q.order('start_time').range(a, b) as unknown as PromiseLike<{ data: ActivityRow[] | null; error: unknown }>;
+  });
+}
+
+/** Scores activities with the engine and saves their rows (save_activity_loads); with cardio off
+ *  (the user's cardio.enabled_default) clears every activity row instead. Returns how many. */
+async function saveActivities(uid: string, activities: ActivityRow[] | null, thresholds?: Thresholds): Promise<number> {
+  const c = thresholds ?? await fetchThresholds(uid);
+  if (!c.cardio.enabled_default) {
+    const { data, error } = await supabase.rpc('clear_activity_loads');
+    if (error) throw error;
+    return data ?? 0;
+  }
+  const acts = activities ?? [];
+  const loads = activityLoads({ c, lib: new Map() }, acts);
+  // an activity that scores nothing (no moving time) still clears any old rows
+  const scored = new Set(loads.map((l) => l.activity_id));
+  const all = [...loads, ...acts.filter((a) => !scored.has(a.id)).map((a) => ({ activity_id: a.id, muscles: [] }))];
+  for (let i = 0; i < all.length; i += SAVE_BATCH) {
+    const { error } = await supabase.rpc('save_activity_loads', { p: all.slice(i, i + SAVE_BATCH) as never });
+    if (error) throw error;
+  }
+  return all.length;
+}
+
+let lastCatchUp: { uid: string; at: number } | null = null;
+/** How often the catch-up may run on its own, at most. */
+const CATCH_UP_EVERY_MS = 10 * 60_000;
+
+/**
+ * Scores imported activities that have no rows yet (new since the last sync), or clears them all
+ * when cardio is off. The Recovery screen and the Today card start it; it runs at most every
+ * ten minutes per user unless `force`d. Runs in the background and reports through
+ * useRecomputeStatus like the recompute rule.
+ */
+export async function catchUpActivities(uid: string, force = false): Promise<void> {
+  const now = Date.now();
+  if (!uid || (!force && lastCatchUp?.uid === uid && now - lastCatchUp.at < CATCH_UP_EVERY_MS)) return;
+  lastCatchUp = { uid, at: now };
+  useRecomputeStatus.setState((s) => ({ running: s.running + 1 }));
+  try {
+    const c = await fetchThresholds(uid);
+    if (!c.cardio.enabled_default) {
+      const cleared = await saveActivities(uid, null, c);
+      if (cleared) void queryClient.invalidateQueries({ queryKey: loadKeys.all(uid) });
+      return;
+    }
+    const [acts, scored] = await Promise.all([
+      fetchActivities(uid, {}),
+      paged<{ activity_id: string | null }>((a, b) => supabase.from('workout_muscle_loads').select('activity_id')
+        .eq('user_id', uid).eq('source', 'activity').order('activity_id').range(a, b)),
+    ]);
+    const have = new Set(scored.map((r) => r.activity_id));
+    const missing = acts.filter((a) => !have.has(a.id));
+    if (missing.length) {
+      await saveActivities(uid, missing, c);
+      void queryClient.invalidateQueries({ queryKey: loadKeys.all(uid) });
+    }
+  } catch (e) {
+    useRecomputeStatus.setState({ lastError: e instanceof Error ? e.message : 'Could not add your activities' });
+  } finally {
+    useRecomputeStatus.setState((s) => ({ running: s.running - 1 }));
+  }
+}
+
 /**
  * The recompute rule (spec §14): rescore every finished workout that started at or after `from`
  * (all of them with null), in time order, and replace their cached rows. Returns how many were
@@ -116,6 +193,8 @@ export async function recomputeFrom(uid: string, from: string | null): Promise<n
       const { error } = await supabase.rpc('save_workout_loads', { p_loads: loads.slice(i, i + SAVE_BATCH) as never });
       if (error) throw error;
     }
+    // imported activities follow the same thresholds (build phase 10)
+    await saveActivities(uid, await fetchActivities(uid, { from }));
     useRecomputeStatus.setState({ lastError: null });
     return loads.length;
   } catch (e) {

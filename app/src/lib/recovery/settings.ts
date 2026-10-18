@@ -8,7 +8,7 @@
 import { MUSCLE_IDS, type MuscleId } from './library.ts';
 import { isValidOverride, thresholdsFor, type ThresholdOverride, type Thresholds } from './thresholds.ts';
 
-export type SettingGroup = 'load' | 'recovery' | 'figure' | 'pbs';
+export type SettingGroup = 'load' | 'recovery' | 'figure' | 'pbs' | 'cardio';
 
 export interface NumberSetting {
   kind: 'number';
@@ -33,7 +33,15 @@ export interface ChoiceSetting {
   choices: { value: string; label: string }[];
 }
 
-export type Setting = NumberSetting | ChoiceSetting;
+export interface ToggleSetting {
+  kind: 'toggle';
+  key: string;
+  group: SettingGroup;
+  label: string;
+  help: string;
+}
+
+export type Setting = NumberSetting | ChoiceSetting | ToggleSetting;
 
 /** Base recovery hours per muscle (build phase 9). */
 export const BASE_HOURS = { min: 12, max: 96, step: 1 } as const;
@@ -73,6 +81,8 @@ export function settingDefs(c: Thresholds, nameOf: (id: MuscleId) => string): Se
     { kind: 'choice', key: 'pb.manual_policy', group: 'pbs', label: 'A logged session replaces my known best',
       help: 'When a best you typed in stops being your reference.',
       choices: [{ value: 'max', label: 'Only when it\'s higher' }, { value: 'replace_on_log', label: 'At the next logged set' }] },
+    { kind: 'toggle', key: 'cardio.enabled_default', group: 'cardio', label: 'Count runs, rides, swims, hikes and rows',
+      help: 'Activities synced from Garmin or Strava add load like sets do: legs for runs, rides and hikes; back and arms for swims and rows.' },
   ];
 }
 
@@ -88,14 +98,14 @@ function leaf(t: Thresholds, key: string): unknown {
 }
 
 /** A setting's value in `t`. A muscle without its own base hours has the default's. */
-export function valueAt(t: Thresholds, key: string): number | string {
+export function valueAt(t: Thresholds, key: string): number | string | boolean {
   const v = leaf(t, key);
   if (v === undefined && key.startsWith('base_recovery_hours.')) return t.base_recovery_hours.default;
-  return v as number | string;
+  return v as number | string | boolean;
 }
 
 /** Edits on the screen, by key: a new value, or null for "reset to default". */
-export type Edits = Readonly<Record<string, number | string | null>>;
+export type Edits = Readonly<Record<string, number | string | boolean | null>>;
 
 /** The thresholds the user would have after saving `edits`. */
 export function afterEdits(base: Thresholds, userId: string, rows: readonly ThresholdOverride[], edits: Edits): Thresholds {
@@ -137,8 +147,8 @@ export function validateEdits(base: Thresholds, userId: string, rows: readonly T
  * The writes that save `edits`: rows to upsert, and keys to delete (a reset, or a value equal to
  * the constants' own default, so no copy of a default is ever stored).
  */
-export function diffOverrides(base: Thresholds, edits: Edits): { upsert: { key: string; value: number | string }[]; remove: string[] } {
-  const upsert: { key: string; value: number | string }[] = [];
+export function diffOverrides(base: Thresholds, edits: Edits): { upsert: { key: string; value: number | string | boolean }[]; remove: string[] } {
+  const upsert: { key: string; value: number | string | boolean }[] = [];
   const remove: string[] = [];
   for (const [key, value] of Object.entries(edits)) {
     if (value == null || leaf(base, key) === value) remove.push(key);
