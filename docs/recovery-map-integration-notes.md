@@ -1633,3 +1633,124 @@ migrate.yml still runs the plain `rescore_workouts.py` after a migration or libr
 - **Settings:** the Save bar is pinned with "1 unsaved change", and Discard clears it.
 - **Workout history** renders its figure, rows and tiles.
 - **Console:** clean after the last edit.
+
+## 27. Lift tab and workout screen updates
+
+UI pass · 2026-10-19, Conor's list after Phase 10.
+
+- **Commits:** `e76c6a5` and the follow-up.
+- **Migration:** `20261019000300_lift_ui.sql`, applied to splitset-dev by Conor on 2026-10-19.
+
+### 27.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| What counts as the template changing at Finish | **An exercise added or removed** (`templateChanged`). Reordering, a different set count and different weights or reps don't prompt; that's normal progress |
+| "Update template" takes | **Today's exercises in today's order, with today's sets and loads as the targets** (`templateFromWorkout`). Each exercise keeps the note the template had for it |
+| Routine groups | **Folders the user makes, and routines dragged between them** by a handle on each card |
+| A note in a workout with no template | **Stays with that workout** (`workout_exercises.notes`) |
+| Rest timer when a workout starts | **Off by default**; Settings → Workout changes the default |
+
+### 27.2 Lift tab (`app/(app)/lift/index.tsx`)
+
+1. **The recovery figure at the top,** front and back side by side, sized like the Run tab's map.
+   - The two most tired muscles show under it; tapping opens the Recovery screen.
+   - The header stays fixed (`Screen fixedHeader`): "Your recovery" over "Lift", then PBs and Exercises.
+   - The "Recovery" text button is gone; the figure is the way in.
+2. **The bubble** (`FigureBubble`).
+   - **When it shows:** once the figure has scrolled out of view, a 40 pt round bubble with a mini figure appears next to PBs. It grows from zero width, so a hidden bubble leaves no gap.
+   - **Tapping it:** opens a `QuickView`, a card floating under the header with the figure, the most tired muscles and Open Recovery.
+   - **Closing:** a tap outside closes it, and scrolling back to the top closes it too.
+3. **Routines as cards,** two to a row (`RoutineGrid`): the name, the exercise count, a ⠿ handle, and Start and View.
+   - **Card width:** floored, with a pixel spare, so two cards always fit a row. The web rounds a measured 309.6 px up to 310.
+4. **Groups** (`routine_groups`, `routines.group_id`).
+   - **Creating one:** New group names it.
+   - **Order on the screen:** the groups come first, in order, then "My routines". That holds ungrouped routines, and any whose group no longer exists.
+   - **Collapsing:** tapping a group's name collapses it.
+   - **Rename or delete:** from its ⋯ button. Deleting a group keeps its routines; they move to My routines (on delete set null).
+5. **Dragging a routine card.**
+   - **Moving:** the handle drags a card to another place, or into another group. The section under the finger is highlighted, and a collapsed or empty group takes the card at its end.
+   - **Saving:** `moveRoutine` renumbers the target group from 0 and writes only the rows that changed. The list updates at once and is refetched after.
+6. **View** (`RoutineQuickView`).
+   - Lists each exercise with its sets in a few words (`setsSummary`, e.g. "3 × 5 @ 110 kg, 1 × 3 @ 120 kg"; warm-ups left out), plus its 📌 template note and 🔗 note.
+   - Has Start, Edit (the routine editor) and Close. A tap outside closes it.
+
+### 27.3 Workout screen (`app/(app)/lift/workout.tsx`)
+
+7. **The session figure stays at the top;** once scrolled away, it becomes a header bubble that opens the session view, with the figure and a row per muscle.
+8. **The rest timer is one setting for the whole workout** (`workout.rest`, kept with the workout in the store), not one per exercise.
+   - **The header bubble** reads "⏱ Off" or "⏱ 1:30".
+   - **Its panel:** On or Off, chips from 0:30 to 5:00, and ±15 s (15 s to 10 min).
+   - **When it runs:** only when it's on does ticking a set start the countdown. Turning it off stops a countdown that's running.
+   - **The per-exercise "rest" pill is gone,** from the workout and from the routine editor. `rest_seconds` stays in the schema, unused.
+   - **A new workout starts from Settings → Workout:** `profiles.rest_timer_on` (default false) and `rest_seconds` (default 90). These save as soon as they change.
+9. **Reordering exercises.** The ≡ button on each card collapses the workout to a list of names (`ReorderList`). A row is dragged up or down and dropped, then Done.
+   - **Why a separate list:** a drag can't start on a card that collapses under it, because the gesture would go with the card.
+   - **Saving:** `moveExercise` saves the new positions.
+   - **Screen readers:** move a row with the adjustable actions.
+10. **Notes** (📝 next to the PB button; `NoteEditor`).
+    - **In a workout from a template,** a switch says where the note lives:
+      - 📌 this template (`routine_exercises.notes`, written straight away);
+      - 🔗 every workout with the exercise (`exercise_notes`).
+    - **With no template,** the note stays with the workout (`workout_exercises.notes`).
+    - **On the card,** each note shows under the exercise name with its icon.
+    - **Switching scope** loads that scope's note, unless the user has already typed something.
+    - **Starting from a template** no longer copies its note into the workout's own note.
+11. **Finish.**
+    - **From a template with the same exercises:** no template prompt. The only question left is the existing one about filled-in sets that aren't ticked.
+    - **An exercise added or removed:** `FinishPrompt` offers Update template, Save as new template (opens the routine editor prefilled, to name it, after the summary) or Keep template as is. Each one saves the workout; "Back to workout" cancels.
+    - **No template:** finishes as before.
+    - **What "Update" and "Save as new" take:** the sets Finish keeps; untouched empty ones are dropped.
+
+### 27.4 Exercise picker (`PickerRow`)
+
+12. **Each row is just the exercise's name and ⓘ;** the green load-split bar is gone from the picker.
+    - **ⓘ opens:** the kind of exercise, the mini figure with the primary, secondary and tertiary key ("Not on the recovery map" for unmapped rows), and the PB line.
+    - **The exercise screen** keeps its split bar.
+    - **Screen readers** still get all of it in the row's label.
+
+### 27.5 Gestures, for whoever touches them next
+
+- **Moved distance:** both drags work out how far the pointer moved from absolute positions saved in `onBegin`.
+  - Starting a drag changes state (scrolling off, the highlight), and the re-render rebuilds the gesture.
+  - A rebuilt gesture reports its translation from 0 again, so `translationY` at the end was 0.
+- **The live drag's state:** module-level holders keep it, changed only through small module functions. The React Compiler lint refuses refs read during render, and mutation of state objects.
+- **Page scrolling:** stops while a card or row is dragged (`Screen scrollEnabled`).
+
+### 27.6 Tests
+
+- **`npm test`: 269 tests.** `template.test.ts` covers:
+  - the change rule (reordered, added, removed, swapped, duplicates, no template);
+  - the update payload (per-side pairs, template notes kept);
+  - grouping (orphaned groups go to My routines);
+  - moves (within a group, into another, out of all, unknown id);
+  - set summaries.
+- **db-tests (CI): 87 tests, 3 new in `test_lift_ui.py`:**
+  - deleting a group keeps its routines;
+  - groups and notes are owner-only;
+  - rest settings default to off and 90 s, and stay in range.
+- **Generated types:** `gen_types.py` against splitset-dev matches the hand-written types exactly.
+
+### 27.7 Checked in the web preview (2026-10-19, demo athlete, 375 pt)
+
+- **Lift tab:**
+  - the figure is on top, and the bubble appears next to PBs when scrolled;
+  - the quick view opens, and a tap outside closes it;
+  - cards sit two to a row, and View lists Lower A's sets.
+- **Groups:**
+  - created "Upper/Lower" and dragged Lower A, then Lower B, into it;
+  - both stayed there after a reload;
+  - collapsing and expanding work.
+- **Workout:**
+  - the rest timer starts off, and ticking a set starts no timer;
+  - on at 1:30, ticking starts the countdown, and Off stops it;
+  - the session bubble shows when scrolled;
+  - dragging Plank to the top of the reorder list saved;
+  - a 📌 note on Back squat saved to Lower A, and a 🔗 note saved for every workout; both show on the card.
+- **Finish:**
+  - the same exercises: no template prompt;
+  - one removed: the prompt appeared, and Keep, Save as new (named "Upper B short") and Update (5 to 4 exercises) each worked.
+- **Settings → Workout:** On at 2:00 made a new workout start with ⏱ 2:00.
+- **Afterwards:**
+  - the test workouts and "Upper B short" were deleted, and the demo's rest settings reset to off and 90 s;
+  - the "Upper/Lower" group and the two Back squat notes were left as examples.

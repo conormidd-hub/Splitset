@@ -73,6 +73,7 @@ export function NoteEditor({ open, exerciseName, hasTemplate, notes, onSave, onC
                   onPress={() => pick(s)}
                   accessibilityRole="radio"
                   accessibilityState={{ checked: scope === s }}
+                  aria-checked={scope === s}
                   accessibilityLabel={SCOPE_TEXT[s]}
                   style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: space.sm,
                     borderRadius: radius.md, borderWidth: 1.5, borderColor: scope === s ? palette.accent : palette.hair,
