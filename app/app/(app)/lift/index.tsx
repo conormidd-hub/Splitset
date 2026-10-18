@@ -28,6 +28,7 @@ import { useUserId } from '@/lib/session';
 import { mostTired } from '@/lib/recovery/screens';
 import { formatDurationShort, formatWeight } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
+import { useLayoutPrefs } from '@/stores/layoutPrefs';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
@@ -63,6 +64,9 @@ export default function LiftHome() {
   const [viewing, setViewing] = useState<RoutineWithStructure | null>(null);
   const [newGroup, setNewGroup] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // ✕ on the figure collapses it into the header bubble, remembered on this device
+  const collapsed = useLayoutPrefs((s) => s.liftFigureCollapsed);
+  const setCollapsed = useLayoutPrefs((s) => s.setLiftFigureCollapsed);
 
   // This screen stays mounted under the workout sheet, so it keeps the sheet in step from here.
   // A block copies its exercise's facts when added: an exercise edited since (mapped from its
@@ -100,8 +104,8 @@ export default function LiftHome() {
     router.push('/lift/workout');
   };
 
-  // the figure is as tall as the Run tab's map, front and back side by side
-  const figureWidth = Math.round(Math.min(140, (Math.min(windowW, 640) - 2 * space.lg - space.md) / 2 - space.lg));
+  // front and back side by side, compact enough to leave the routines in view
+  const figureWidth = Math.round(Math.min(96, (Math.min(windowW, 640) - 2 * space.lg - space.md) / 2 - space.xl));
   const tired = map.data ? mostTired(map.data, 2) : [];
   const tiredText = tired.length ? tired.map((id) => `${names(id)} (${map.data![id].label.toLowerCase()})`).join(', ') : 'Every muscle is ready';
 
@@ -121,26 +125,41 @@ export default function LiftHome() {
       onRefresh={() => { routines.refetch(); groups.refetch(); workouts.refetch(); lifts.refetch(); }}
       right={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-          <FigureBubble map={map.data ?? null} mode="recovery" shown={scrolled} onPress={() => setQuick(true)} nameOf={names} label="Recovery map, quick view" />
+          <FigureBubble map={map.data ?? null} mode="recovery" shown={collapsed || scrolled} onPress={() => setQuick(true)} nameOf={names} label="Recovery map, quick view" />
           <PbButton compact />
           <Button title="Exercises" variant="ghost" small onPress={() => router.push('/lift/exercises')} />
         </View>
       }>
-      {/* the recovery figure, at the top like the Run tab's map */}
-      <Pressable
-        onLayout={(e) => setFigureBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
-        onPress={() => router.push('/lift/recovery')}
-        accessibilityRole="button"
-        accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
-        style={({ pressed }) => ({ backgroundColor: palette.surface, borderRadius: radius.lg, padding: space.md, gap: space.sm, opacity: pressed ? 0.9 : 1 })}>
-        {map.data ? (
-          <FigurePair map={map.data} mode="recovery" figureWidth={figureWidth} nameOf={names} labels />
-        ) : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <View style={{ height: figureWidth * 2 }}><Loading label="Loading your recovery" /></View>}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-          <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
-          <T variant="small" tone="accent" weight="600">Recovery ›</T>
+      {/* the recovery figure, at the top like the Run tab's map; ✕ tucks it into the header bubble */}
+      {collapsed ? null : (
+        <View
+          onLayout={(e) => setFigureBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+          style={{ backgroundColor: palette.surface, borderRadius: radius.lg }}>
+          <Pressable
+            onPress={() => router.push('/lift/recovery')}
+            accessibilityRole="button"
+            accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
+            style={({ pressed }) => ({ padding: space.sm, gap: space.xs, opacity: pressed ? 0.9 : 1 })}>
+            {map.data ? (
+              <FigurePair map={map.data} mode="recovery" figureWidth={figureWidth} nameOf={names} />
+            ) : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <View style={{ height: figureWidth * 2 }}><Loading label="Loading your recovery" /></View>}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.xs }}>
+              <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
+              <T variant="small" tone="accent" weight="600">Recovery ›</T>
+            </View>
+          </Pressable>
+          {/* beside the figure's button, not inside it: a button can't hold another */}
+          <Pressable
+            onPress={() => { setCollapsed(true); setScrolled(false); }}
+            accessibilityRole="button"
+            accessibilityLabel="Tuck the recovery figure into the bubble"
+            hitSlop={10}
+            style={{ position: 'absolute', top: space.sm, right: space.sm, width: 28, height: 28, borderRadius: 14,
+              alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface2 }}>
+            <T variant="small" tone="mut" weight="700">✕</T>
+          </Pressable>
         </View>
-      </Pressable>
+      )}
 
       {active ? (
         <Card
@@ -202,7 +221,10 @@ export default function LiftHome() {
         <T variant="h3">Recovery</T>
         {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels /> : <Loading />}
         <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
-        <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} />
+        <View style={{ flexDirection: 'row', gap: space.sm }}>
+          <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} style={{ flex: 1 }} />
+          {collapsed ? <Button title="Show at the top" small variant="ghost" onPress={() => { setQuick(false); setCollapsed(false); }} style={{ flex: 1 }} /> : null}
+        </View>
       </QuickView>
       <RoutineQuickView
         routine={viewing}

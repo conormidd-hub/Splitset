@@ -1754,3 +1754,45 @@ UI pass · 2026-10-19, Conor's list after Phase 10.
 - **Afterwards:**
   - the test workouts and "Upper B short" were deleted, and the demo's rest settings reset to off and 90 s;
   - the "Upper/Lower" group and the two Back squat notes were left as examples.
+
+## 28. Drag to reorder, and room for the routines and runs
+
+Follow-up to §27 · 2026-10-19, from Conor's requests. Commits `a16ba61` and the one after it.
+
+### 28.1 Drag and drop in the workout and the routine editor (`SortableList`)
+
+1. **Holding an exercise's ≡ handle and dragging moves the card itself.** This works in the live workout and in the routine editor.
+   - **While dragging:** the other cards slide aside to show where it will land (`dropSlot`, `makeRoom` in `src/lib/sortable.ts`, tested). Near the top or bottom of the window the page scrolls under the finger.
+   - **What it replaces:** the workout's separate reorder list (§27.3 item 9, removed) and the editor's ↑/↓ arrows.
+   - **Screen readers:** move an item with the handle's Move up and Move down actions.
+2. **It follows the Today grid's `ReorderGrid` approach.**
+   - **No reordering mid-drag:** items only move by transform while a finger is down, and the new order is handed back on the drop. A browser drops its pointer capture when the captured element moves in the DOM.
+   - **Where the gesture is built:** in a small `Handle` component from callback props, so the React Compiler lint allows the refs in those callbacks.
+   - **The start point:** taken in `onBegin`, before the list re-renders.
+3. **Checked in the web preview:**
+   - in a live Lower A workout, Back squat dragged below Romanian deadlift, and the order survived a reload;
+   - in Lower A's editor, the same drag swapped them. It wasn't saved, so the routine is unchanged.
+
+### 28.2 The Lift tab's figure
+
+4. **Smaller:** each view is now at most 96 pt wide (was 140), with tighter padding, so the routines show below it on a phone.
+5. **An ✕ on the figure tucks it into the header bubble.** The choice is remembered on the device (`useLayoutPrefs.liftFigureCollapsed`, persisted like the map preferences).
+   - **While it's tucked away,** the bubble always shows beside PBs.
+   - **Getting it back:** its quick view has "Show at the top".
+   - **Why the ✕ sits beside the figure's button, not inside it:** a button can't hold another; on the web that is invalid HTML.
+6. **Checked:** ✕ hid the figure and showed the bubble, which stayed so after a reload. "Show at the top" brought the figure back.
+
+### 28.3 The Run tab's map
+
+7. **Smaller:** 170–240 px tall (26% of the window; was 220–320 px at 34%).
+8. **It scrolls with the run list now,** as the list's header; the title row stays fixed.
+   - **Scrolled past:** a 96 × 64 mini map appears top right, beside Maps, showing what the big map showed: every route, the route picked, or the run opened.
+   - **Tapping it:** opens a larger interactive map in a floating card (zoom, pan, and tapping a route still picks it). A tap outside shrinks it back.
+   - **The title row** keeps the mini map's height, so it doesn't jump.
+9. **Attribution on the mini map:** `TileMap` has a `compact` mode for thumbnails, where the attribution is just its © mark (the full text is its accessibility label). The full text stays on the big and the larger maps.
+10. **Checked:** the mini map appeared once scrolled, showing the Melbourne routes. It opened larger, and Escape or a tap outside closed it. The console was clean.
+
+### 28.4 Tests
+
+- **`npm test`: 271 tests,** adding `sortable.test.ts`.
+- **Type check and lint:** clean.

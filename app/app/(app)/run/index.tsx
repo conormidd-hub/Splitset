@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { SectionList, View, useWindowDimensions } from 'react-native';
+import { Pressable, SectionList, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useActivities, useRunRoutes, type ActivityListRow } from '@/api/activities';
 import { useUnits } from '@/api/profile';
 import { HeatLayer, HeatLegend } from '@/components/map/HeatLayer';
 import { TileMap, type Projector } from '@/components/map/TileMap';
+import { QuickView } from '@/components/recovery/FigureBubble';
 import { RunRow, type RunSummary } from '@/components/run/RunRow';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
@@ -58,6 +59,10 @@ export default function RunHome() {
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [view, setView] = useState<MapView | null>(null);
+  // scrolled past the map: it waits top-right as a mini map, and opens larger when tapped
+  const [mapBottom, setMapBottom] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
+  const [large, setLarge] = useState(false);
   const history = useActivities('runs');
   const routesQ = useRunRoutes();
 
@@ -85,7 +90,7 @@ export default function RunHome() {
     () => (expanded ? [expanded.pts] : routeRuns.length ? routeRuns.map((r) => r.pts) : null),
     [expanded, routeRuns],
   );
-  const mapHeight = Math.round(Math.min(320, Math.max(220, windowH * 0.34)));
+  const mapHeight = Math.round(Math.min(240, Math.max(170, windowH * 0.26)));
 
   const onMapPress = (pt: Pt, project: Projector, cam: MapView) => {
     const hit = nearestRoute(heat, project, cam, pt);
@@ -112,52 +117,33 @@ export default function RunHome() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
       <View style={{ paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.sm }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md }}>
+        {/* as tall as the mini map, so the row holds still when it appears */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md, minHeight: 64 }}>
           <View>
             <T variant="label" tone="mut">{route ? 'This route' : 'Where you run'}</T>
             <T variant="display">Run</T>
           </View>
-          <Button title="Maps" variant="secondary" small onPress={() => router.push('/run/heatmap')} />
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
+            {scrolled && bounds ? (
+              <Pressable
+                onPress={() => setLarge(true)}
+                accessibilityRole="button"
+                accessibilityLabel={expanded ? 'Map of this run, larger' : route ? 'Map of this route, larger' : 'Map of your runs, larger'}
+                style={({ pressed }) => ({ width: 96, height: 64, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1.5,
+                  borderColor: palette.accent, opacity: pressed ? 0.85 : 1 })}>
+                <View pointerEvents="none">
+                  <TileMap bounds={bounds} height={64} padding={6} compact>
+                    {(project, size, cam) => (
+                      <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
+                    )}
+                  </TileMap>
+                </View>
+              </Pressable>
+            ) : null}
+            <Button title="Maps" variant="secondary" small onPress={() => router.push('/run/heatmap')} />
+          </View>
         </View>
 
-        {routesQ.isLoading ? (
-          <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
-            <Loading label="Loading your routes" />
-          </View>
-        ) : routesQ.error ? (
-          <ErrorBanner message={errorMessage(routesQ.error)} />
-        ) : bounds ? (
-          <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
-            {(project, size, cam) => (
-              <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
-            )}
-          </TileMap>
-        ) : (
-          <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
-            <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
-          </View>
-        )}
-
-        {bounds ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 28 }}>
-            {route ? (
-              <>
-                <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-                  {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
-                  {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
-                </T>
-                <Button title="All runs" variant="ghost" small onPress={clearRoute} />
-              </>
-            ) : (
-              <>
-                <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
-                  {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
-                </T>
-                <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
-              </>
-            )}
-          </View>
-        ) : null}
       </View>
 
       <SectionList
@@ -187,10 +173,58 @@ export default function RunHome() {
             onOpen={() => router.push(`/run/${item.id}`)}
           />
         )}
+        onScroll={(e) => {
+          const past = mapBottom > 0 && e.nativeEvent.contentOffset.y > mapBottom - 24;
+          if (past !== scrolled) setScrolled(past);
+          if (!past && large) setLarge(false);
+        }}
+        scrollEventThrottle={16}
         ListHeaderComponent={
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
-            <T variant="h3">{route ? 'Runs on this route' : 'Your runs'}</T>
-            <T variant="tiny" tone="mut">{route ? 'Tap a run for its stats' : 'Tap a route on the map, or a run'}</T>
+          <View style={{ gap: space.sm }}>
+            <View style={{ gap: space.sm }} onLayout={(e) => setMapBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+          {routesQ.isLoading ? (
+            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
+              <Loading label="Loading your routes" />
+            </View>
+          ) : routesQ.error ? (
+            <ErrorBanner message={errorMessage(routesQ.error)} />
+          ) : bounds ? (
+            <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
+              {(project, size, cam) => (
+                <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
+              )}
+            </TileMap>
+          ) : (
+            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
+              <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
+            </View>
+          )}
+
+          {bounds ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 28 }}>
+              {route ? (
+                <>
+                  <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+                    {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
+                    {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
+                  </T>
+                  <Button title="All runs" variant="ghost" small onPress={clearRoute} />
+                </>
+              ) : (
+                <>
+                  <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
+                  </T>
+                  <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
+                </>
+              )}
+            </View>
+          ) : null}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
+              <T variant="h3">{route ? 'Runs on this route' : 'Your runs'}</T>
+              <T variant="tiny" tone="mut">{route ? 'Tap a run for its stats' : 'Tap a route on the map, or a run'}</T>
+            </View>
           </View>
         }
         ListFooterComponent={!routeKey && history.isFetchingNextPage ? <Loading /> : null}
@@ -209,6 +243,20 @@ export default function RunHome() {
           routesQ.refetch();
         }}
       />
+
+      {/* the mini map, opened larger: the same map, interactive; a tap outside shrinks it back */}
+      <QuickView visible={large && !!bounds} onClose={() => setLarge(false)} title="Map">
+        {bounds ? (
+          <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={Math.round(Math.min(320, windowH * 0.4))} onPress={onMapPress}>
+            {(project, size, cam) => (
+              <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
+            )}
+          </TileMap>
+        ) : null}
+        <T variant="small" tone="mut" numberOfLines={1}>
+          {expanded ? expanded.name ?? 'This run' : route ? `${route.count} ${runsWord(route.count)} on this route` : 'Every route, coloured by how often you run it'}
+        </T>
+      </QuickView>
     </SafeAreaView>
   );
 }
