@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 
 import type { RoutineDraft, RoutineWithStructure } from '@/api/lifting';
+import { pairedSets } from '../lib/lifting/template.ts';
 import type { ActiveWorkout } from './activeWorkout';
 
 export type DraftExercise = RoutineDraft['exercises'][number] & { key: string; name: string; measure: string };
@@ -30,13 +31,6 @@ type State = {
 
 let counter = 0;
 const key = () => `d${Date.now().toString(36)}${(counter++).toString(36)}`;
-
-/** A routine set has no side, so it replays as one set for both sides (1.0 under spec §4.4, where a
- *  per-side set counts 0.5): sets logged one side per set keep one target per left/right pair. */
-function pairedSets<S extends { side?: unknown }>(sets: S[]): S[] {
-  let sided = 0;
-  return sets.filter((s) => !s.side || sided++ % 2 === 0);
-}
 
 export const useRoutineDraft = create<State>()((set, get) => ({
   id: null,

@@ -1,26 +1,35 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, usePathname } from 'expo-router';
-import { useEffect } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, View, useWindowDimensions } from 'react-native';
 
-import { invalidateWorkoutData, useExercises, useRoutines, useWorkouts } from '@/api/lifting';
+import {
+  invalidateWorkoutData, useDeleteRoutineGroup, useExercises, useMoveRoutines, useRoutineGroups, useRoutines, useSaveRoutineGroup, useWorkouts,
+  type RoutineWithStructure,
+} from '@/api/lifting';
 import { useLiftPbs } from '@/api/pbs';
 import { linkWorkoutToPlan } from '@/api/plan';
-import { useUnits } from '@/api/profile';
-import { useCurrentBodyweight } from '@/api/recovery';
+import { useRestSettings, useUnits } from '@/api/profile';
+import { useActivityCatchUp, useCurrentBodyweight, useMuscleNames, useRecoveryMap } from '@/api/recovery';
+import { GroupEditor, RoutineGrid } from '@/components/lift/RoutineGrid';
+import { RoutineQuickView } from '@/components/lift/RoutineQuickView';
 import { PbButton } from '@/components/pbs/PbButton';
+import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
+import { FigurePair } from '@/components/recovery/FigurePair';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
-import { EmptyState, Loading } from '@/components/ui/States';
+import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { relativeDay, shortTime, todayIso } from '@/lib/dates';
 import { stopRest } from '@/lib/restTimer';
 import { useUserId } from '@/lib/session';
+import { mostTired } from '@/lib/recovery/screens';
 import { formatDurationShort, formatWeight } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
-import { space } from '@/theme/tokens';
+import { useTheme } from '@/theme/ThemeProvider';
+import { radius, space } from '@/theme/tokens';
 
 export default function LiftHome() {
   const uid = useUserId();
@@ -38,6 +47,22 @@ export default function LiftHome() {
   const exercises = useExercises();
   const activeId = active?.id;
   const finishedId = useActiveWorkout((s) => s.finishedId);
+  const rest = useRestSettings();
+  const groups = useRoutineGroups();
+  const moveRoutines = useMoveRoutines();
+  const saveGroup = useSaveRoutineGroup();
+  const deleteGroup = useDeleteRoutineGroup();
+  const { palette } = useTheme();
+  const { width: windowW } = useWindowDimensions();
+  useActivityCatchUp();
+  const map = useRecoveryMap();
+  const names = useMuscleNames();
+  const [figureBottom, setFigureBottom] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
+  const [quick, setQuick] = useState(false);
+  const [viewing, setViewing] = useState<RoutineWithStructure | null>(null);
+  const [newGroup, setNewGroup] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   // This screen stays mounted under the workout sheet, so it keeps the sheet in step from here.
   // A block copies its exercise's facts when added: an exercise edited since (mapped from its
@@ -66,23 +91,57 @@ export default function LiftHome() {
   }, [finishedId, pathname, uid, qc]);
 
   const startEmpty = () => {
-    if (!active) start(uid, null, undefined, snapshot);
+    if (!active) start(uid, null, undefined, snapshot, rest);
     router.push('/lift/workout');
   };
+  const startRoutine = (r: RoutineWithStructure) => {
+    setViewing(null);
+    start(uid, r, undefined, snapshot, rest);
+    router.push('/lift/workout');
+  };
+
+  // the figure is as tall as the Run tab's map, front and back side by side
+  const figureWidth = Math.round(Math.min(140, (Math.min(windowW, 640) - 2 * space.lg - space.md) / 2 - space.lg));
+  const tired = map.data ? mostTired(map.data, 2) : [];
+  const tiredText = tired.length ? tired.map((id) => `${names(id)} (${map.data![id].label.toLowerCase()})`).join(', ') : 'Every muscle is ready';
 
   return (
     <Screen
       title="Lift"
-      subtitle="Strength"
+      subtitle="Your recovery"
+      fixedHeader
+      scrollEnabled={!dragging}
+      onScroll={(e) => {
+        // the figure's bubble shows once the figure itself has scrolled away
+        const past = figureBottom > 0 && e.nativeEvent.contentOffset.y > figureBottom - 24;
+        if (past !== scrolled) setScrolled(past);
+        if (!past && quick) setQuick(false);
+      }}
       refreshing={routines.isFetching || workouts.isFetching}
-      onRefresh={() => { routines.refetch(); workouts.refetch(); lifts.refetch(); }}
+      onRefresh={() => { routines.refetch(); groups.refetch(); workouts.refetch(); lifts.refetch(); }}
       right={
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+          <FigureBubble map={map.data ?? null} mode="recovery" shown={scrolled} onPress={() => setQuick(true)} nameOf={names} label="Recovery map, quick view" />
           <PbButton compact />
-          <Button title="Recovery" variant="ghost" small onPress={() => router.push('/lift/recovery')} />
           <Button title="Exercises" variant="ghost" small onPress={() => router.push('/lift/exercises')} />
         </View>
       }>
+      {/* the recovery figure, at the top like the Run tab's map */}
+      <Pressable
+        onLayout={(e) => setFigureBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+        onPress={() => router.push('/lift/recovery')}
+        accessibilityRole="button"
+        accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
+        style={({ pressed }) => ({ backgroundColor: palette.surface, borderRadius: radius.lg, padding: space.md, gap: space.sm, opacity: pressed ? 0.9 : 1 })}>
+        {map.data ? (
+          <FigurePair map={map.data} mode="recovery" figureWidth={figureWidth} nameOf={names} labels />
+        ) : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <View style={{ height: figureWidth * 2 }}><Loading label="Loading your recovery" /></View>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
+          <T variant="small" tone="accent" weight="600">Recovery ›</T>
+        </View>
+      </Pressable>
+
       {active ? (
         <Card
           tone="accent"
@@ -95,30 +154,32 @@ export default function LiftHome() {
         <Button title="Start empty workout" onPress={startEmpty} />
       )}
 
-      <Card title="Routines" right={<Button title="New" variant="ghost" small onPress={() => router.push('/lift/routines/new')} />}>
+      <Card
+        title="Routines"
+        right={
+          <View style={{ flexDirection: 'row', gap: space.xs }}>
+            <Button title="New group" variant="ghost" small onPress={() => setNewGroup(true)} />
+            <Button title="New" variant="ghost" small onPress={() => router.push('/lift/routines/new')} />
+          </View>
+        }>
         {routines.isLoading ? <Loading /> : null}
         {routines.data?.length === 0 ? (
           <T tone="mut">No routines yet. Build one here, or finish a workout and save it as a routine.</T>
         ) : null}
-        {routines.data?.map((r, i) => (
-          <View key={r.id} style={{ borderTopWidth: i ? 1 : 0, borderTopColor: 'rgba(127,127,127,0.15)', paddingVertical: space.md, gap: space.sm }}>
-            <View>
-              <T variant="h3">{r.name}</T>
-              <T variant="small" tone="mut" numberOfLines={2}>
-                {r.routine_exercises.map((e) => `${e.routine_sets.length || 1}× ${e.exercise?.name ?? 'exercise'}`).join(' · ') || 'Empty routine'}
-              </T>
-            </View>
-            <View style={{ flexDirection: 'row', gap: space.sm }}>
-              <Button
-                title="Start"
-                small
-                disabled={!!active}
-                onPress={() => { start(uid, r, undefined, snapshot); router.push('/lift/workout'); }}
-              />
-              <Button title="Edit" small variant="secondary" onPress={() => router.push(`/lift/routines/${r.id}`)} />
-            </View>
-          </View>
-        ))}
+        {routines.data?.length ? (
+          <RoutineGrid
+            routines={routines.data}
+            groups={groups.data ?? []}
+            startDisabled={!!active}
+            onStart={startRoutine}
+            onView={setViewing}
+            onMove={(moves) => moveRoutines.mutate(moves)}
+            onDragging={setDragging}
+            onRenameGroup={(id, name) => saveGroup.mutate({ id, name })}
+            onDeleteGroup={(id) => deleteGroup.mutate(id)}
+          />
+        ) : null}
+        <ErrorBanner message={moveRoutines.error ? `Couldn't move it: ${errorMessage(moveRoutines.error)}` : saveGroup.error ? errorMessage(saveGroup.error) : null} />
       </Card>
 
       <Card title="History">
@@ -136,6 +197,22 @@ export default function LiftHome() {
           />
         ))}
       </Card>
+
+      <QuickView visible={quick} onClose={() => setQuick(false)} title="Recovery">
+        <T variant="h3">Recovery</T>
+        {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels /> : <Loading />}
+        <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
+        <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} />
+      </QuickView>
+      <RoutineQuickView
+        routine={viewing}
+        startDisabled={!!active}
+        onStart={startRoutine}
+        onEdit={(r) => { setViewing(null); router.push(`/lift/routines/${r.id}`); }}
+        onClose={() => setViewing(null)}
+      />
+      <GroupEditor group={null} creating={newGroup} onClose={() => setNewGroup(false)}
+        onCreate={(name) => saveGroup.mutate({ name, position: groups.data?.length ?? 0 })} />
     </Screen>
   );
 }

@@ -258,6 +258,42 @@ export type Database = {
           },
         ]
       }
+      exercise_notes: {
+        Row: {
+          user_id: string
+          exercise_id: string
+          note: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          exercise_id: string
+          note: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          exercise_id?: string
+          note?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_notes_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_notes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercises: {
         Row: {
           id: string
@@ -602,6 +638,8 @@ export type Database = {
           sex: string | null
           bodyweight_kg: number | null
           bodyweight_updated_at: string | null
+          rest_timer_on: boolean
+          rest_seconds: number
         }
         Insert: {
           id: string
@@ -616,6 +654,8 @@ export type Database = {
           sex?: string | null
           bodyweight_kg?: number | null
           bodyweight_updated_at?: string | null
+          rest_timer_on?: boolean
+          rest_seconds?: number
         }
         Update: {
           id?: string
@@ -630,6 +670,8 @@ export type Database = {
           sex?: string | null
           bodyweight_kg?: number | null
           bodyweight_updated_at?: string | null
+          rest_timer_on?: boolean
+          rest_seconds?: number
         }
         Relationships: [
         ]
@@ -751,6 +793,41 @@ export type Database = {
           },
         ]
       }
+      routine_groups: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          position: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          position?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          position?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "routine_groups_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       routine_sets: {
         Row: {
           id: string
@@ -818,6 +895,7 @@ export type Database = {
           archived: boolean
           created_at: string
           updated_at: string
+          group_id: string | null
         }
         Insert: {
           id?: string
@@ -828,6 +906,7 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          group_id?: string | null
         }
         Update: {
           id?: string
@@ -838,8 +917,16 @@ export type Database = {
           archived?: boolean
           created_at?: string
           updated_at?: string
+          group_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "routines_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "routine_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "routines_user_id_fkey"
             columns: ["user_id"]

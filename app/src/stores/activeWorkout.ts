@@ -60,6 +60,11 @@ export type ActiveWorkout = {
   bodyweightKg: number | null;
   exercises: ExerciseBlock[];
   updatedAt: string;
+  /** The exercises of the template it started from, at the start: Finish compares them with the
+   *  workout's to see whether the template changed. Null for a workout with no template. */
+  templateExerciseIds?: string[] | null;
+  /** The rest timer, for this workout: on or off, and how long. Left out by older builds (off). */
+  rest?: { on: boolean; seconds: number };
 };
 
 type Op =
@@ -86,7 +91,14 @@ type State = {
    *  left from before a restart): the Lift tab links it to the plan, refreshes and opens it. */
   finishedId: string | null;
 
-  start: (userId: string, routine?: RoutineWithStructure | null, name?: string, bodyweightKg?: number | null) => ActiveWorkout;
+  start: (userId: string, routine?: RoutineWithStructure | null, name?: string, bodyweightKg?: number | null,
+    rest?: { on: boolean; seconds: number }) => ActiveWorkout;
+  /** Turn the rest timer on or off, or change its length, for this workout. */
+  setRest: (rest: { on?: boolean; seconds?: number }) => void;
+  /** Move an exercise to another place in the workout. */
+  moveExercise: (blockId: string, toIndex: number) => void;
+  /** The exercise's note for this workout only (workout_exercises.notes). */
+  setExerciseNote: (blockId: string, notes: string) => void;
   rename: (name: string) => void;
   setNotes: (notes: string) => void;
   addExercise: (exercise: ExerciseForWorkout, restSeconds?: number | null) => ExerciseBlock;
@@ -177,19 +189,21 @@ export const useActiveWorkout = create<State>()(
         thresholds: DEFAULT_THRESHOLDS,
         finishedId: null,
 
-        start: (userId, routine, name, bodyweightKg) => {
+        start: (userId, routine, name, bodyweightKg, rest) => {
           const startedAt = now();
           const c = get().thresholds;
           const w: ActiveWorkout = {
             id: uuid(), userId, routineId: routine?.id ?? null,
             name: name ?? routine?.name ?? 'Workout', startedAt, notes: null, bodyweightKg: bodyweightKg ?? null, exercises: [], updatedAt: startedAt,
+            templateExerciseIds: routine ? routine.routine_exercises.map((re) => re.exercise_id) : null,
+            rest: rest ?? { on: false, seconds: get().defaultRestSeconds },
           };
           const ops: Op[] = [{ kind: 'upsert', table: 'workouts', row: rowOf.workout(w) }];
           for (const re of routine?.routine_exercises ?? []) {
             const block: ExerciseBlock = {
               id: uuid(), exerciseId: re.exercise_id, name: re.exercise?.name ?? 'Exercise', measure: re.exercise?.measure ?? 'weight_reps',
               ...(re.exercise ? factsOf(re.exercise) : {}),
-              position: w.exercises.length, restSeconds: re.rest_seconds, supersetGroup: re.superset_group, notes: re.notes, sets: [], updatedAt: startedAt,
+              position: w.exercises.length, restSeconds: re.rest_seconds, supersetGroup: re.superset_group, notes: null, sets: [], updatedAt: startedAt,
             };
             const targets = re.routine_sets.length ? re.routine_sets : [{ set_type: 'working', target_reps: null, target_weight_kg: null, target_seconds: null }];
             for (const t of targets) {
@@ -211,6 +225,37 @@ export const useActiveWorkout = create<State>()(
         rename: (name) => {
           const w = mutate((x) => { x.name = name; });
           if (w) queue({ kind: 'upsert', table: 'workouts', row: rowOf.workout(w) });
+        },
+
+        setRest: (rest) => {
+          // a setting, not part of what's logged: allowed after Finish too, and nothing to save
+          const w = get().workout;
+          if (!w) return;
+          const cur = w.rest ?? { on: false, seconds: get().defaultRestSeconds };
+          set({ workout: { ...w, rest: { ...cur, ...rest } } });
+        },
+
+        moveExercise: (blockId, toIndex) => {
+          const w = mutate((x) => {
+            const from = x.exercises.findIndex((b) => b.id === blockId);
+            if (from < 0) return;
+            const [b] = x.exercises.splice(from, 1);
+            x.exercises.splice(Math.max(0, Math.min(toIndex, x.exercises.length)), 0, b);
+            x.exercises = x.exercises.map((e, i) => (e.position === i ? e : { ...e, position: i, updatedAt: now() }));
+          });
+          if (w) queue(...w.exercises.map((b): Op => ({ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, b) })));
+        },
+
+        setExerciseNote: (blockId, notes) => {
+          let block: ExerciseBlock | undefined;
+          const w = mutate((x) => {
+            block = x.exercises.find((b) => b.id === blockId);
+            if (block) {
+              block.notes = notes.trim() || null;
+              block.updatedAt = now();
+            }
+          });
+          if (w && block) queue({ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) });
         },
 
         setNotes: (notes) => {

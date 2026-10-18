@@ -12,18 +12,13 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { confirm } from '@/lib/confirm';
-import { formatClock } from '@/lib/restTimer';
 import { displayToKg, kgToDisplay } from '@/lib/units';
 import { useRoutineDraft } from '@/stores/routineDraft';
-import { useTheme } from '@/theme/ThemeProvider';
-import { radius, space } from '@/theme/tokens';
-
-const REST_STEPS = [60, 90, 120, 150, 180, 240];
+import { space } from '@/theme/tokens';
 
 export default function RoutineEditor() {
   const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const isNew = id === 'new';
-  const { palette } = useTheme();
   const units = useUnits();
   const existing = useRoutine(isNew ? undefined : id);
   const save = useSaveRoutine();
@@ -78,14 +73,6 @@ export default function RoutineEditor() {
                 <Pressable onPress={() => draft.removeExercise(e.key)} hitSlop={6}><T tone="neg">✕</T></Pressable>
               </View>
             }>
-            <Pressable
-              onPress={() => {
-                const i = e.restSeconds == null ? -1 : REST_STEPS.indexOf(e.restSeconds);
-                draft.setRest(e.key, i === -1 ? REST_STEPS[0] : i + 1 >= REST_STEPS.length ? null : REST_STEPS[i + 1]);
-              }}
-              style={{ alignSelf: 'flex-start', backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4, marginBottom: space.sm }}>
-              <T variant="small" tone="ink2">{e.restSeconds ? `rest ${formatClock(e.restSeconds)}` : 'no rest timer'}</T>
-            </Pressable>
             <View style={{ flexDirection: 'row', gap: space.sm, paddingBottom: 4 }}>
               <T variant="label" tone="mut" style={{ width: 32 }}>set</T>
               {e.measure !== 'reps' && e.measure !== 'duration' ? <T variant="label" tone="mut" style={{ width: 72, textAlign: 'center' }}>{units === 'imperial' ? 'lb' : 'kg'}</T> : null}

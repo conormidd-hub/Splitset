@@ -10,6 +10,7 @@ export type Exercise = Tables<'exercises'>;
 export type Routine = Tables<'routines'>;
 export type RoutineExercise = Tables<'routine_exercises'>;
 export type RoutineSet = Tables<'routine_sets'>;
+export type RoutineGroup = Tables<'routine_groups'>;
 export type Workout = Tables<'workouts'>;
 export type WorkoutExercise = Tables<'workout_exercises'>;
 export type WorkoutSet = Tables<'workout_sets'>;
@@ -19,6 +20,8 @@ export type ExerciseRecord = Views<'exercise_records'>;
 export const liftKeys = {
   exercises: (uid: string) => ['exercises', uid] as const,
   routines: (uid: string) => ['routines', uid] as const,
+  routineGroups: (uid: string) => ['routineGroups', uid] as const,
+  exerciseNotes: (uid: string) => ['exerciseNotes', uid] as const,
   routine: (id: string) => ['routine', id] as const,
   workouts: (uid: string) => ['workouts', uid] as const,
   workout: (id: string) => ['workout', id] as const,
@@ -96,6 +99,8 @@ export function useRoutine(id: string | undefined) {
 export type RoutineDraft = {
   id?: string;
   name: string;
+  /** A new routine's group (null or left out: My routines). */
+  groupId?: string | null;
   notes?: string | null;
   exercises: {
     exerciseId: string;
@@ -125,7 +130,7 @@ export function useSaveRoutine() {
       } else {
         const { data, error } = await supabase
           .from('routines')
-          .insert({ user_id: uid, name: draft.name.trim(), notes: draft.notes ?? null })
+          .insert({ user_id: uid, name: draft.name.trim(), notes: draft.notes ?? null, ...(draft.groupId ? { group_id: draft.groupId } : {}), position: Date.now() % 1_000_000_000 })
           .select('id')
           .single();
         if (error) throw error;
@@ -170,6 +175,123 @@ export function useArchiveRoutine() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: liftKeys.routines(uid) }),
+  });
+}
+
+// ---------------------------------------------------------------- routine groups and notes
+
+/** The user's routine groups ("PPL", "Upper/Lower"), in order. */
+export function useRoutineGroups() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: liftKeys.routineGroups(uid),
+    enabled: !!uid,
+    queryFn: async (): Promise<RoutineGroup[]> => {
+      const { data, error } = await supabase.from('routine_groups').select('*').eq('user_id', uid).order('position').order('created_at');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** Create a group (no id) at the end, or rename one. */
+export function useSaveRoutineGroup() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (g: { id?: string; name: string; position?: number }) => {
+      const updated_at = new Date().toISOString();
+      const { error } = g.id
+        ? await supabase.from('routine_groups').update({ name: g.name.trim(), updated_at }).eq('id', g.id)
+        : await supabase.from('routine_groups').insert({ user_id: uid, name: g.name.trim(), position: g.position ?? 0 });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: liftKeys.routineGroups(uid) }),
+  });
+}
+
+/** Delete a group; its routines move to "My routines" (on delete set null). */
+export function useDeleteRoutineGroup() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('routine_groups').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: liftKeys.routineGroups(uid) });
+      qc.invalidateQueries({ queryKey: liftKeys.routines(uid) });
+    },
+  });
+}
+
+/** Apply moveRoutine()'s writes. The routines list updates at once and is refetched after. */
+export function useMoveRoutines() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (moves: { id: string; group_id: string | null; position: number }[]) => {
+      const updated_at = new Date().toISOString();
+      for (const m of moves) {
+        const { error } = await supabase.from('routines').update({ group_id: m.group_id, position: m.position, updated_at }).eq('id', m.id);
+        if (error) throw error;
+      }
+    },
+    onMutate: (moves) => {
+      qc.setQueryData<RoutineWithStructure[]>(liftKeys.routines(uid), (cur) => cur?.map((r) => {
+        const m = moves.find((x) => x.id === r.id);
+        return m ? { ...r, group_id: m.group_id, position: m.position } : r;
+      }));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: liftKeys.routines(uid) }),
+  });
+}
+
+/** Notes that show in every workout with the exercise, by exercise id. */
+export function useExerciseNotes() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: liftKeys.exerciseNotes(uid),
+    enabled: !!uid,
+    queryFn: async (): Promise<Map<string, string>> => {
+      const { data, error } = await supabase.from('exercise_notes').select('exercise_id, note').eq('user_id', uid);
+      if (error) throw error;
+      return new Map(data.map((n) => [n.exercise_id, n.note]));
+    },
+  });
+}
+
+/**
+ * Save a note at one of its places: every workout with the exercise (exercise_notes), the
+ * template's exercise (routine_exercises.notes), or nowhere else (the workout's own note is kept
+ * by the workout store). An empty note removes it.
+ */
+export function useSaveExerciseNote() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (n: { scope: 'exercise' | 'template'; exerciseId: string; routineId?: string | null; note: string }) => {
+      const note = n.note.trim();
+      if (n.scope === 'exercise') {
+        const { error } = note
+          ? await supabase.from('exercise_notes').upsert({ user_id: uid, exercise_id: n.exerciseId, note, updated_at: new Date().toISOString() }, { onConflict: 'user_id,exercise_id' })
+          : await supabase.from('exercise_notes').delete().eq('user_id', uid).eq('exercise_id', n.exerciseId);
+        if (error) throw error;
+      } else if (n.routineId) {
+        const { error } = await supabase.from('routine_exercises')
+          .update({ notes: note || null, updated_at: new Date().toISOString() })
+          .eq('routine_id', n.routineId).eq('exercise_id', n.exerciseId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_d, n) => {
+      if (n.scope === 'exercise') qc.invalidateQueries({ queryKey: liftKeys.exerciseNotes(uid) });
+      else {
+        qc.invalidateQueries({ queryKey: liftKeys.routines(uid) });
+        if (n.routineId) qc.invalidateQueries({ queryKey: liftKeys.routine(n.routineId) });
+      }
+    },
   });
 }
 

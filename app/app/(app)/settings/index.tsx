@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { useConnection } from '@/api/connections';
-import { useDeleteAccount, useProfile, useUnits, useUpdateProfile } from '@/api/profile';
+import { useDeleteAccount, useProfile, useRestSettings, useUnits, useUpdateProfile } from '@/api/profile';
+import { REST_CHOICES, REST_MAX, REST_MIN } from '@/components/lift/RestBubble';
 import { useCurrentBodyweight } from '@/api/recovery';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge, Segmented } from '@/components/ui/Chip';
+import { Badge, Chip, ChipRow, Segmented } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { Screen } from '@/components/ui/Screen';
@@ -16,6 +17,7 @@ import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
 import { confirm } from '@/lib/confirm';
 import { relativeDay } from '@/lib/dates';
+import { formatClock } from '@/lib/restTimer';
 import { isDemoUser } from '@/lib/demo';
 import { formatLoad } from '@/lib/pbs';
 import { useSession } from '@/lib/session';
@@ -41,6 +43,9 @@ export default function Settings() {
   const connection = useConnection();
   const units = useUnits();
   const bodyweight = useCurrentBodyweight();
+  const rest = useRestSettings();
+  const restUpdate = useUpdateProfile();
+  const setRestSeconds = (s: number) => restUpdate.mutate({ rest_seconds: Math.max(REST_MIN, Math.min(REST_MAX, s)) });
 
   // Inputs show the saved value until the user edits them; edits live here until saved.
   const [nameEdit, setNameEdit] = useState<string | null>(null);
@@ -181,6 +186,32 @@ export default function Settings() {
           value={choice}
           onChange={setChoice}
         />
+      </Card>
+
+      <Card title="Workout" subtitle="The rest timer between sets. In a workout, ⏱ at the top turns it on or off and changes its length.">
+        <View style={{ gap: space.md }}>
+          <View style={{ gap: space.xs }}>
+            <T weight="600">Start workouts with the rest timer</T>
+            <Segmented
+              label="Start workouts with the rest timer"
+              options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
+              value={rest.on ? 'on' : 'off'}
+              onChange={(v) => restUpdate.mutate({ rest_timer_on: v === 'on' })}
+            />
+          </View>
+          <View style={{ gap: space.sm }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+              <T weight="600" style={{ flex: 1 }}>Default rest</T>
+              <Button title="−15 s" small variant="secondary" disabled={rest.seconds <= REST_MIN} onPress={() => setRestSeconds(rest.seconds - 15)} />
+              <T weight="700" style={{ minWidth: 52, textAlign: 'center', fontVariant: ['tabular-nums'] }}>{formatClock(rest.seconds)}</T>
+              <Button title="+15 s" small variant="secondary" disabled={rest.seconds >= REST_MAX} onPress={() => setRestSeconds(rest.seconds + 15)} />
+            </View>
+            <ChipRow>
+              {REST_CHOICES.map((s) => <Chip key={s} label={formatClock(s)} selected={rest.seconds === s} onPress={() => setRestSeconds(s)} />)}
+            </ChipRow>
+          </View>
+          <ErrorBanner message={restUpdate.error ? errorMessage(restUpdate.error) : null} />
+        </View>
       </Card>
 
       <Card title="Recovery map" subtitle="Recovery times, load shares, colour boundaries, PB rules and cardio" onPress={() => router.push('/settings/recovery')}>

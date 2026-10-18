@@ -22,12 +22,14 @@ type Props = {
   /** For a child that scrolls the page itself (a drag near the edge). */
   scrollRef?: RefObject<ScrollView | null>;
   onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Keep the title row above the scrolling content, so what sits in `right` stays in reach. */
+  fixedHeader?: boolean;
   style?: ViewStyle;
 };
 
 export function Screen({
   children, title, subtitle, right, scroll = true, padded = true,
-  edges, refreshing, onRefresh, scrollEnabled = true, scrollRef, onScroll, style,
+  edges, refreshing, onRefresh, scrollEnabled = true, scrollRef, onScroll, fixedHeader = false, style,
 }: Props) {
   // a screen that draws its own title is a tab root with no navigation header above it, so it
   // keeps clear of the status bar itself; under a header, the header already does
@@ -45,13 +47,14 @@ export function Screen({
 
   const content = (
     <View style={[padded ? { padding: space.lg, gap: space.md } : null, style]}>
-      {header}
+      {fixedHeader ? null : header}
       {children}
     </View>
   );
 
   return (
     <SafeAreaView edges={safeEdges} style={{ flex: 1, backgroundColor: palette.bg }}>
+      {fixedHeader && header ? <View style={{ paddingHorizontal: space.lg, paddingTop: space.lg, zIndex: 1 }}>{header}</View> : null}
       {scroll ? (
         <ScrollView
           ref={scrollRef}

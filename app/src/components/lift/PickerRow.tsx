@@ -2,7 +2,7 @@ import { Pressable, View } from 'react-native';
 
 import type { Exercise } from '@/api/lifting';
 import type { MuscleRole } from '@/api/recovery';
-import { ExerciseMuscles, LoadSplitBar, NOT_ON_MAP, NotOnMap, useLoadSplit } from '@/components/recovery/ExerciseMuscles';
+import { ExerciseMuscles, NOT_ON_MAP, NotOnMap, useLoadSplit } from '@/components/recovery/ExerciseMuscles';
 import { T } from '@/components/ui/T';
 import type { MuscleId } from '@/lib/recovery/library';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -22,9 +22,10 @@ type Props = {
 };
 
 /**
- * One exercise in the picker (build phase 7): name and kind, where one set's load lands (the load
- * split bar) and the PB source line. The info button opens the mini figure underneath. An
- * unmapped exercise (a legacy or older custom one) says it is not on the recovery map instead.
+ * One exercise in the picker: just its name, to scan the list fast, and an info button. The info
+ * button opens the detail underneath: where it lands on the body (the mini figure with its
+ * primary, secondary and tertiary muscles), what kind of exercise it is, and the PB source line.
+ * An unmapped exercise (a legacy or older custom one) says it is not on the recovery map.
  */
 export function PickerRow({ exercise, first, roles, reference, expanded, onToggle, onChoose, nameOf }: Props) {
   const { palette } = useTheme();
@@ -34,32 +35,34 @@ export function PickerRow({ exercise, first, roles, reference, expanded, onToggl
   // already has still stands (notes D4)
   const line = unmapped && reference?.startsWith('calibrating') ? null : reference;
   const subtitle = [exercise.muscle_group ?? exercise.group, exercise.equipment, exercise.owner_id ? 'yours' : null].filter(Boolean).join(' · ');
-  // the label replaces the row's text for a screen reader, so it carries every line
+  // the label replaces the row's text for a screen reader, so it carries the detail too
   const label = [`Add ${exercise.name}`, subtitle, unmapped ? NOT_ON_MAP : split.parts.length ? split.label : null, line]
     .filter((s): s is string => !!s).map((s) => s.replace(/ · /g, ', ')).join('. ');
   return (
-    <View style={{ borderTopWidth: first ? 0 : 1, borderTopColor: palette.hair, paddingVertical: space.md, gap: space.sm }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.md }}>
+    <View style={{ borderTopWidth: first ? 0 : 1, borderTopColor: palette.hair, paddingVertical: space.sm, gap: space.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
         <Pressable onPress={onChoose} accessibilityRole="button" accessibilityLabel={label}
-          style={({ pressed }) => ({ flex: 1, gap: 4, opacity: pressed ? 0.7 : 1 })}>
+          style={({ pressed }) => ({ flex: 1, minHeight: 40, justifyContent: 'center', opacity: pressed ? 0.7 : 1 })}>
           <T variant="h3" numberOfLines={1}>{exercise.name}</T>
-          {subtitle ? <T variant="small" tone="mut" numberOfLines={1}>{subtitle}</T> : null}
-          {unmapped ? <NotOnMap /> : roles?.length ? <LoadSplitBar roles={roles} nameOf={nameOf} height={6} /> : null}
-          {line ? <T variant="tiny" tone="ink2" numberOfLines={1}>{line}</T> : null}
         </Pressable>
-        {roles?.length ? (
-          <Pressable
-            onPress={onToggle}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? `Hide ${exercise.name}'s muscles` : `Show ${exercise.name}'s muscles`}
-            style={({ pressed }) => ({ width: 30, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
-              backgroundColor: expanded ? palette.accentSoft : palette.surface2, opacity: pressed ? 0.7 : 1 })}>
-            <T variant="small" tone={expanded ? 'accent' : 'ink2'} weight="700">i</T>
-          </Pressable>
-        ) : null}
+        <Pressable
+          onPress={onToggle}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={expanded ? `Hide ${exercise.name}'s details` : `Show ${exercise.name}'s details`}
+          style={({ pressed }) => ({ width: 30, height: 30, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: expanded ? palette.accentSoft : palette.surface2, opacity: pressed ? 0.7 : 1 })}>
+          <T variant="small" tone={expanded ? 'accent' : 'ink2'} weight="700">i</T>
+        </Pressable>
       </View>
-      {expanded && roles?.length ? <ExerciseMuscles roles={roles} nameOf={nameOf} figureWidth={64} showSplit={false} /> : null}
+      {expanded ? (
+        <View style={{ gap: space.sm, paddingBottom: space.xs }}>
+          {subtitle ? <T variant="small" tone="mut">{subtitle}</T> : null}
+          {unmapped ? <NotOnMap /> : roles?.length ? <ExerciseMuscles roles={roles} nameOf={nameOf} figureWidth={64} showSplit={false} /> : null}
+          {line ? <T variant="tiny" tone="ink2">{line}</T> : null}
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -4,13 +4,20 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { invalidateWorkoutData, useExercises, usePreviousSets } from '@/api/lifting';
+import { invalidateWorkoutData, useExerciseNotes, useExercises, usePreviousSets, useRoutines, useSaveExerciseNote, useSaveRoutine } from '@/api/lifting';
 import { useLiftPbs } from '@/api/pbs';
 import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
-import { useCurrentBodyweight, useManualBests, useThresholds } from '@/api/recovery';
+import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useThresholds } from '@/api/recovery';
+import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
+import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
+import { ReorderList } from '@/components/lift/ReorderList';
+import { RestBubble } from '@/components/lift/RestBubble';
 import { LivePbPanel } from '@/components/pbs/LivePbPanel';
+import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
+import { FigurePair } from '@/components/recovery/FigurePair';
 import { LiveSessionFigure } from '@/components/recovery/LiveSessionFigure';
+import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
@@ -20,17 +27,17 @@ import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
 import { setRowE1rm } from '@/lib/lifting/setRow';
+import { templateChanged, templateFromWorkout } from '@/lib/lifting/template';
 import { formatLiftPb, formatLoad, liftMetricShort, mergeSession, metricsFor, sessionBests } from '@/lib/pbs';
 import { useUserId } from '@/lib/session';
 import { confirm } from '@/lib/confirm';
 import { adjustRest, formatClock, startRest, stopRest, useRestRemaining } from '@/lib/restTimer';
-import { displayToKg, kgToDisplay, type Units } from '@/lib/units';
-import { useActiveWorkout, type ExerciseBlock, type SetRow, type SetType } from '@/stores/activeWorkout';
 import { useRoutineDraft } from '@/stores/routineDraft';
+import { displayToKg, kgToDisplay, type Units } from '@/lib/units';
+import { useActiveWorkout, type ActiveWorkout, type ExerciseBlock, type SetRow, type SetType } from '@/stores/activeWorkout';
 import { useTheme } from '@/theme/ThemeProvider';
 import { fontSize, radius, space } from '@/theme/tokens';
 
-const REST_STEPS = [60, 90, 120, 150, 180, 240];
 const TYPE_LABEL: Record<SetType, string> = { warmup: 'W', working: '', drop: 'D', failure: 'F' };
 const NEXT_TYPE: Record<SetType, SetType> = { working: 'warmup', warmup: 'drop', drop: 'failure', failure: 'working' };
 /** The RPE picker: 6 to 10 in half points (workout_sets.rpe is checked to these). */
@@ -59,6 +66,16 @@ export default function ActiveWorkoutScreen() {
   const [finishing, setFinishing] = useState(false);
   const thresholds = useThresholds();
   const bodyweight = useCurrentBodyweight();
+  const routines = useRoutines();
+  const saveRoutine = useSaveRoutine();
+  const live = useLiveSession();
+  const names = useMuscleNames();
+  const [figureBottom, setFigureBottom] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
+  const [quick, setQuick] = useState(false);
+  const [prompt, setPrompt] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   // every saved set's e1RM uses the user's thresholds and the workout's bodyweight snapshot (D5);
   // a workout started before bodyweight had loaded takes it as soon as it has
@@ -77,19 +94,47 @@ export default function ActiveWorkoutScreen() {
     );
   }
 
-  const onFinish = async () => {
-    const incomplete = workout.exercises.flatMap((b) => b.sets).filter((s) => !s.completed && (s.weightKg != null || s.reps != null)).length;
-    const ok = await confirm('Finish workout', incomplete ? `${incomplete} filled-in set${incomplete === 1 ? ' is' : 's are'} not ticked and will be kept as unfinished. Finish anyway?` : 'Save this workout to your history?', 'Finish');
-    if (!ok) return;
+  const template = workout.routineId ? routines.data?.find((r) => r.id === workout.routineId) ?? null : null;
+  const unticked = workout.exercises.flatMap((b) => b.sets).filter((s) => !s.completed && (s.weightKg != null || s.reps != null)).length;
+
+  /** Finish, then do what was chosen for the template. Every choice saves the workout. */
+  const finishWith = async (choice: TemplateChoice) => {
+    setPrompt(false);
     setFinishing(true);
     await stopRest();
+    // what the template takes: the sets Finish keeps (the untouched empty ones are dropped)
+    const kept: ActiveWorkout = { ...workout, exercises: workout.exercises.map((b) => ({
+      ...b, sets: b.sets.filter((s) => s.completed || s.weightKg != null || s.reps != null || s.seconds != null),
+    })) };
     const id = await finish();
     setFinishing(false);
-    if (id) {
-      await linkWorkoutToPlan(uid, id, todayIso()).catch(() => false);
-      invalidateWorkoutData(qc, uid);
-      router.replace(`/lift/history/${id}`);
+    if (!id) return;
+    if (choice === 'update' && template) {
+      try {
+        await saveRoutine.mutateAsync({
+          id: template.id, name: template.name, notes: template.notes,
+          exercises: templateFromWorkout(kept, new Map(template.routine_exercises.map((re) => [re.exercise_id, re.notes]))),
+        });
+      } catch (e) {
+        await confirm('Template not updated', `Your workout is saved, but ${template.name} couldn't be updated: ${e instanceof Error ? e.message : 'unknown error'}.`, 'OK');
+      }
     }
+    await linkWorkoutToPlan(uid, id, todayIso()).catch(() => false);
+    invalidateWorkoutData(qc, uid);
+    router.replace(`/lift/history/${id}`);
+    if (choice === 'new') {
+      useRoutineDraft.getState().fromWorkout(kept);
+      router.push('/lift/routines/new?from=workout');
+    }
+  };
+
+  const onFinish = async () => {
+    const changed = templateChanged(workout.templateExerciseIds, workout.exercises.map((b) => b.exerciseId));
+    // a changed template asks what to do with it; an unchanged one just finishes
+    if (changed && template) return setPrompt(true);
+    if (changed === false && !unticked) return finishWith('keep');
+    const ok = await confirm('Finish workout', unticked ? `${unticked} filled-in set${unticked === 1 ? ' is' : 's are'} not ticked and will be kept as unfinished. Finish anyway?` : 'Save this workout to your history?', 'Finish');
+    if (ok) await finishWith('keep');
   };
 
   const onDiscard = async () => {
@@ -118,6 +163,9 @@ export default function ActiveWorkoutScreen() {
               placeholder="Workout"
               placeholderTextColor={palette.mut}
             />
+            <FigureBubble map={live?.session ?? null} mode="session" shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
+              label="This session's muscles, quick view" />
+            <RestBubble />
             <Button title="Finish" small loading={finishing} onPress={onFinish} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
@@ -144,7 +192,17 @@ export default function ActiveWorkoutScreen() {
           </View>
         ) : null}
 
-        <ScrollView contentContainerStyle={{ padding: space.lg, paddingTop: 0, gap: space.md, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={{ padding: space.lg, paddingTop: 0, gap: space.md, paddingBottom: 120 }}
+          keyboardShouldPersistTaps="handled"
+          scrollEnabled={!dragging}
+          scrollEventThrottle={16}
+          onScroll={(e) => {
+            // the session figure's bubble shows once the figure has scrolled away
+            const past = figureBottom > 0 && e.nativeEvent.contentOffset.y > figureBottom - 16;
+            if (past !== scrolled) setScrolled(past);
+            if (!past && quick) setQuick(false);
+          }}>
           {lastError ? (
             <View style={{ gap: space.sm }}>
               <ErrorBanner message={`Some changes have not reached the server yet: ${lastError}. They are kept on this device.`} />
@@ -152,25 +210,59 @@ export default function ActiveWorkoutScreen() {
             </View>
           ) : null}
 
-          {workout.exercises.length ? <LiveSessionFigure /> : null}
+          {workout.exercises.length ? (
+            <View onLayout={(e) => setFigureBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+              <LiveSessionFigure />
+            </View>
+          ) : null}
 
-          {workout.exercises.map((block) => (
-            <ExerciseCard key={block.id} block={block} units={units} />
+          {reordering ? (
+            <ReorderList
+              items={workout.exercises.map((b) => ({ id: b.id, name: b.name, sets: b.sets.length }))}
+              onMove={(id, to) => useActiveWorkout.getState().moveExercise(id, to)}
+              onDragging={setDragging}
+              onDone={() => setReordering(false)}
+            />
+          ) : workout.exercises.map((block) => (
+            <ExerciseCard key={block.id} block={block} units={units} routineId={workout.routineId} onReorder={() => setReordering(true)} />
           ))}
 
-          <Button title="Add exercise" variant="secondary" onPress={() => router.push('/lift/picker?target=workout')} />
+          {reordering ? null : <Button title="Add exercise" variant="secondary" onPress={() => router.push('/lift/picker?target=workout')} />}
           {workout.exercises.length === 0 ? (
-            <T tone="mut" align="center">Add an exercise to start logging. Sets you tick start the rest timer.</T>
+            <T tone="mut" align="center">Add an exercise to start logging. For a countdown between sets, turn on the rest timer (⏱) at the top.</T>
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <QuickView visible={quick} onClose={() => setQuick(false)} title="This session">
+        <T variant="h3">This session</T>
+        {live ? (
+          <>
+            <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
+            <SessionMuscleRows session={live.session} nameOf={names} />
+          </>
+        ) : null}
+      </QuickView>
+      <FinishPrompt open={prompt} templateName={template?.name ?? 'the template'} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
     </SafeAreaView>
   );
 }
 
-function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) {
+function ExerciseCard({ block, units, routineId, onReorder }: { block: ExerciseBlock; units: Units; routineId: string | null; onReorder: () => void }) {
   const { palette } = useTheme();
-  const { addSet, updateSet, removeExercise, setExerciseRest, setExerciseOptions } = useActiveWorkout.getState();
+  const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote } = useActiveWorkout.getState();
+  const routines = useRoutines();
+  const exerciseNotes = useExerciseNotes();
+  const saveNote = useSaveExerciseNote();
+  const [noting, setNoting] = useState(false);
+  const templateNote = routineId
+    ? routines.data?.find((r) => r.id === routineId)?.routine_exercises.find((re) => re.exercise_id === block.exerciseId)?.notes ?? null
+    : null;
+  const notes: ExerciseNotes = { template: templateNote, exercise: exerciseNotes.data?.get(block.exerciseId) ?? null, workout: block.notes };
+  const onSaveNote = (scope: NoteScope, text: string) => {
+    if (scope === 'workout') setExerciseNote(block.id, text);
+    else saveNote.mutate({ scope, exerciseId: block.exerciseId, routineId, note: text });
+  };
   const thresholds = useActiveWorkout((s) => s.thresholds);
   const workoutBodyweight = useActiveWorkout((s) => s.workout?.bodyweightKg ?? null);
   const previous = usePreviousSets(block.exerciseId);
@@ -216,13 +308,6 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
   const weightLabel = loadMode === 'assisted' ? 'assist' : loadMode === 'bodyweight' ? `+${unitLabel}` : unitLabel;
   const col = perSide && showRpe ? COL_TIGHT : COL;
 
-  const cycleRest = () => {
-    const current = block.restSeconds;
-    const idx = current == null ? -1 : REST_STEPS.indexOf(current);
-    const next = idx === -1 ? REST_STEPS[0] : idx + 1 >= REST_STEPS.length ? null : REST_STEPS[idx + 1];
-    setExerciseRest(block.id, next);
-  };
-
   const onRemove = async () => {
     const ok = await confirm('Remove exercise', `Remove ${block.name} and its sets from this workout?`, 'Remove', true);
     if (ok) removeExercise(block.id);
@@ -231,6 +316,15 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
+        <Pressable
+          onPress={onReorder}
+          accessibilityRole="button"
+          accessibilityLabel="Reorder exercises"
+          accessibilityHint="Shows the exercises as a list to drag into a new order"
+          hitSlop={8}
+          style={{ width: 28, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.surface2 }}>
+          <T tone="mut" weight="700">≡</T>
+        </Pressable>
         <Pressable style={{ flex: 1 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
           <T variant="h3" tone="accent">{block.name}</T>
         </Pressable>
@@ -243,11 +337,24 @@ function ExerciseCard({ block, units }: { block: ExerciseBlock; units: Units }) 
             <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>🏆 PB</T>
           </Pressable>
         ) : null}
-        <Pressable onPress={cycleRest} style={{ backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <T variant="small" tone="ink2">{block.restSeconds ? `rest ${formatClock(block.restSeconds)}` : 'no rest'}</T>
+        <Pressable
+          onPress={() => setNoting(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${block.name} notes`}
+          hitSlop={6}
+          style={{ height: 28, minWidth: 34, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill,
+            backgroundColor: notes.template || notes.exercise || notes.workout ? palette.accentSoft : palette.surface2 }}>
+          <T variant="small">📝</T>
         </Pressable>
-        <Pressable onPress={onRemove} hitSlop={8}><T tone="mut">✕</T></Pressable>
+        <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${block.name}`}><T tone="mut">✕</T></Pressable>
       </View>
+
+      {(['template', 'exercise', 'workout'] as const).filter((s) => notes[s]).map((s) => (
+        <Pressable key={s} onPress={() => setNoting(true)} style={{ marginTop: -4, marginBottom: space.xs }}>
+          <T variant="small" tone="ink2" numberOfLines={3}>{NOTE_ICON[s]} {notes[s]}</T>
+        </Pressable>
+      ))}
+      <NoteEditor open={noting} exerciseName={block.name} hasTemplate={!!routineId} notes={notes} onSave={onSaveNote} onClose={() => setNoting(false)} />
 
       {metrics.length && !showPb ? (
         <Pressable onPress={() => setShowPb(true)} style={{ marginTop: -4, marginBottom: space.sm }}>
@@ -328,7 +435,7 @@ function SetLine({
 }) {
   const { palette } = useTheme();
   const { updateSet, toggleSet, removeSet } = useActiveWorkout.getState();
-  const defaultRest = useActiveWorkout((s) => s.defaultRestSeconds);
+  const rest = useActiveWorkout((s) => s.workout?.rest);
   const [pickingRpe, setPickingRpe] = useState(false);
 
   const prevText = previous
@@ -351,10 +458,8 @@ function SetLine({
   const onToggle = async () => {
     if (!set.completed) fillFromPrevious();
     const row = toggleSet(set.id);
-    if (row?.completed) {
-      const secs = block.restSeconds ?? defaultRest;
-      if (secs) await startRest(secs, `${block.name}: set ${index + 1} done`);
-    }
+    // only when the rest timer is on (⏱ at the top)
+    if (row?.completed && rest?.on) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
   };
 
   const onLongPressNumber = async () => {
