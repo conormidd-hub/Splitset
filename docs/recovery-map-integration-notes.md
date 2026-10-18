@@ -1272,3 +1272,97 @@ Phase 8 output · 2026-10-18. Creating and editing custom exercises.
 - **"Editing its muscles or fatigue later triggers the Phase 4 recompute":** Edit exists now (23.1). The recompute starts from the first finished workout that used the exercise.
 - **"Save with `is_custom = true`, `owner_user_id`":** that's `owner_id` (notes §3). `is_custom` is `owner_id is not null`.
 - **The assisted machine's equipment word:** stored as `machine`, with load mode `assisted`. Timed is stored as `bodyweight` with load mode `fixed` and logged in seconds.
+
+---
+
+## 24. Phase 9: decisions made
+
+Phase 9 output · 2026-10-18. Recovery map settings and the history slider. No migration: `user_thresholds` (Phase 1) already holds per-user overrides, and the loader already applies them.
+
+### 24.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Saving | **A Save bar.** Edits are held on the screen; "Save changes" writes them all, then runs one rescore. "Discard" drops them |
+| Role weights | **Secondary and tertiary only.** Primary stays 1.0, the unit spec §6 measures the others against |
+| Animation | **A crossfade:** the new day's figure fades in over the old in 250 ms. React Native's own Animated, no new dependency |
+| Wrap-up | As usual: tests, notes, commit and push |
+
+### 24.2 The settings (`src/lib/recovery/settings.ts`, pure, tested)
+
+1. **Every setting is one leaf of `recovery_constants.json`, overridden per user.** The defaults never change.
+
+   | Setting | Key | Range |
+   |---|---|---|
+   | Role weights | `role_weights.secondary`, `.tertiary` | 0–1 |
+   | Fatigue factors | `fatigue_factors.high`, `.standard`, `.low` | 0.5–2 |
+   | Base recovery hours, other muscles | `base_recovery_hours.default` | 12–96 h (the plan's range) |
+   | Base recovery hours, per muscle | `base_recovery_hours.<muscle>`, all 17 | 12–96 h |
+   | Recovery slope | `recovery.slope` | 0–1 |
+   | Level boundaries | `levels.1.min` … `levels.5.min` | 0.05–10, strictly increasing |
+   | Weekly cap | `fatigue.weekly_cap` | 2–20 |
+   | PB window | `pb.window_days` | 7–90 days, whole |
+   | Manual-PB policy | `pb.manual_policy` | "Only when it's higher" (`max`) or "At the next logged set" (`replace_on_log`) |
+
+   Apart from the plan's 12–96 h, the ranges are guard rails for the controls, not model constants.
+2. **Each setting has a one-line explanation,** written for the screen.
+3. **A muscle without its own base hours shows the default's value** (`valueAt`). Raising "Every other muscle" therefore moves every such muscle, which the screen previews before saving (`afterEdits`).
+4. **`validateEdits`:** each value in range and whole where it must be, the Phase 1 `isValidOverride`, and the level boundaries strictly increasing once the edits apply.
+5. **`diffOverrides`:** changed values are upserted. A reset, or a value equal to the constants' own default, deletes the row, so no copy of a default is ever stored.
+
+### 24.3 The screen (`settings/recovery.tsx`, linked from Settings as "Recovery map")
+
+6. **Four cards:** Muscle load, Recovery, The figure, PBs. Each row has its explanation, − / + steps (clamped, free of float noise) and "Reset to default (value)" when overridden.
+7. **Save (`useSaveThresholds`):**
+   - it writes the upserts and deletes, then refreshes the user's thresholds;
+   - then it runs the recompute rule over every finished workout in the background (`recomputeInBackground(uid, null)`);
+   - the screen shows "Rescoring your workouts…", and the Recovery figure says "Updating…".
+8. **Every change rescores,** even those that only change colours (levels, weekly cap), as the plan says. For one athlete it takes seconds.
+
+### 24.4 The history slider (Recovery screen)
+
+9. **The history:** `useRecoveryHistory` over the last 28 days, one sample a day (`HISTORY_DAYS`, `HISTORY_STEP_HOURS`).
+   - It ends on the current hour, so its samples sit at the hour you're looking. The last tick shows the live map ("Now").
+   - "Next ready" and Train next always describe now.
+10. **`DayScrubber`:**
+    - one tick per day, each marked with its weekday's initial; Mondays are taller, so last Monday is easy to find;
+    - drag or tap along the strip (gesture-handler);
+    - ◀ / ▶ step a day;
+    - screen readers get an adjustable control with increment and decrement;
+    - the selected day reads like "Mon 12 Oct, 21:00" in your time zone.
+11. **`RecoveryFigure` gains `previous`, `fadeKey` and `onFaded`.** The old day is drawn underneath while the new one fades in, then it's dropped. The coral figure's gaps are transparent, so the old layer can't stay behind it. The list and the tap sheet show the selected day, contributing exercises included.
+
+### 24.5 Tests
+
+- **`npm test`: 155 tests.** The new `settings.test.ts` covers the plan's cases:
+  - a `base_recovery_hours.default` override of 72 makes F20's chest R 89.6 h for that user, while another user's stays 59.7;
+  - with base hours at 96 the longest window is 192 h (the read span 360 h), a heavy quads session from 7 days ago (L 5, R 192 h) still shows at F 0.625, and it has expired 24 h later; under the defaults the same session's window is 96 h;
+  - `pb.manual_policy = replace_on_log` through a user's override gives F29's references, 130 then 116.67, with 132 later; the default keeps the manual 130.
+- **Also tested:** every setting is a valid key with its default in range; the 12–96 h bounds; increasing levels; whole days; an unknown policy refused; the save diff; and the steps.
+- **`db-tests` (CI): 67 tests, 4 of them new (`test_settings.py`):**
+  - a user's override plus a rescore changes their cached chest R to 89.6 while another user's stays 59.7;
+  - a reset restores 59.7;
+  - rows the loader can't use (no such level, wrong type) are ignored;
+  - overrides are owner-only.
+- **pytest locally:** 79 passed, 49 skipped (the database tests).
+
+### 24.6 Checked in the web preview (2026-10-18, demo athlete)
+
+- **History slider:**
+  - last Monday ("Mon 12 Oct, 21:00") shows every muscle Ready, since the seeded week starts on Friday;
+  - stepping to Saturday shows the push and pull fatigue;
+  - the crossfade was caught mid-way.
+- **Settings:**
+  - "Every other muscle" raised from 48 to 72 h, with the per-muscle rows following in the preview, then saved;
+  - without a reload, the Recovery list then showed quads Very high at F 2.51, ready in 3.3 days (it was High, F 2.42, ready in 2.2 days), and chest went from 0.39 to 1.09;
+  - "Reset to default (48 h)" plus Save deleted the row, and the cache went back to the defaults (Legs' quads R 60.2 h).
+- **Console:** clean.
+- **Afterwards:** the F26 seed was re-run.
+
+### 24.7 Ambiguities resolved
+
+- **"Role weights":** secondary and tertiary (24.1).
+- **"Base recovery hours per muscle (12–96 h)":** all 17 muscles, plus "Every other muscle" (`base_recovery_hours.default`), which the plan's own test overrides.
+- **"Level boundaries (must stay increasing)":** levels 1 to 5's lower bounds, strictly increasing. Ready always starts at 0.
+- **"Changing any of them triggers the Phase 4 recompute":** on Save, over every workout, since a changed threshold can move any of them.
+- **"A date slider over the last 28 days":** 28 daily samples ending now, with the last one live.
