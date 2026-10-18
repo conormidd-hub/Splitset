@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, SectionList, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Animated, Easing, Platform, Pressable, SectionList, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useActivities, useRunRoutes, type ActivityListRow } from '@/api/activities';
@@ -125,6 +125,7 @@ export default function RunHome() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
             {scrolled && bounds ? (
+              <FlyIn>
               <Pressable
                 onPress={() => setLarge(true)}
                 accessibilityRole="button"
@@ -139,6 +140,7 @@ export default function RunHome() {
                   </TileMap>
                 </View>
               </Pressable>
+              </FlyIn>
             ) : null}
             <Button title="Maps" variant="secondary" small onPress={() => router.push('/run/heatmap')} />
           </View>
@@ -258,5 +260,26 @@ export default function RunHome() {
         </T>
       </QuickView>
     </SafeAreaView>
+  );
+}
+
+/** The mini map arriving: it flies up from where the full map sat and shrinks into its window. */
+function FlyIn({ children }: { children: ReactNode }) {
+  const [t] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 340, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start();
+  }, [t]);
+  return (
+    <Animated.View
+      style={{
+        opacity: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0.85, 1] }),
+        transform: [
+          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-110, 0] }) },
+          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [150, 0] }) },
+          { scale: t.interpolate({ inputRange: [0, 1], outputRange: [3.4, 1] }) },
+        ],
+      }}>
+      {children}
+    </Animated.View>
   );
 }

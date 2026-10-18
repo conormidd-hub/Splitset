@@ -1,9 +1,11 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { useDeleteWorkout, useWorkout } from '@/api/lifting';
-import { useProfile, useUnits } from '@/api/profile';
+import { useUnits } from '@/api/profile';
 import { useMuscleNames, useSessionMap } from '@/api/recovery';
+import { QuickView } from '@/components/recovery/FigureBubble';
 import { FigurePair } from '@/components/recovery/FigurePair';
 import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
 import { Button } from '@/components/ui/Button';
@@ -28,8 +30,8 @@ export default function WorkoutHistory() {
   const del = useDeleteWorkout();
   const session = useSessionMap(q.data?.finished_at ? id : undefined);
   const names = useMuscleNames();
-  const profile = useProfile();
   const w = q.data;
+  const [details, setDetails] = useState(false);
 
   if (q.isLoading) return <Screen><Loading /></Screen>;
   if (q.error || !w) return <Screen><ErrorBanner message={errorMessage(q.error) || 'Workout not found'} /></Screen>;
@@ -53,11 +55,23 @@ export default function WorkoutHistory() {
           <T tone="mut">{longDate(w.started_at)} · {shortTime(w.started_at)}{w.finished_at ? ` to ${shortTime(w.finished_at)}` : ' · unfinished'}</T>
         </View>
         {w.finished_at && session.data ? (
-          <Card title="Muscles worked" subtitle="This workout's load on each muscle, and when each is trainable and ready again after it">
-            <View style={{ gap: space.md }}>
-              <FigurePair map={session.data} mode="session" figureWidth={110} nameOf={names} detail labels timeZone={profile.data?.timezone} />
-              <SessionMuscleRows session={session.data} nameOf={names} />
-            </View>
+          <Card
+            title="Muscles worked"
+            right={
+              <Pressable
+                onPress={() => setDetails(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Each muscle's load, and when it is trainable and ready again"
+                hitSlop={10}
+                style={({ pressed }) => ({ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: palette.surface2, opacity: pressed ? 0.7 : 1 })}>
+                <T variant="small" tone="ink2" weight="700">i</T>
+              </Pressable>
+            }>
+            {/* small here; the info button opens the full view, muscle by muscle */}
+            <Pressable onPress={() => setDetails(true)} accessible={false}>
+              <FigurePair map={session.data} mode="session" figureWidth={52} nameOf={names} />
+            </Pressable>
           </Card>
         ) : null}
 
@@ -97,6 +111,17 @@ export default function WorkoutHistory() {
 
         <Button title="Delete workout" variant="danger" small loading={del.isPending} onPress={onDelete} />
       </Screen>
+      <QuickView visible={details && !!session.data} onClose={() => setDetails(false)} title="Muscles worked">
+        <T variant="h3">Muscles worked</T>
+        <T variant="small" tone="mut">This workout&apos;s load on each muscle, and when each is trainable and ready again after it</T>
+        {session.data ? (
+          <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: space.md }}>
+            <FigurePair map={session.data} mode="session" figureWidth={110} nameOf={names} labels />
+            <SessionMuscleRows session={session.data} nameOf={names} />
+          </ScrollView>
+        ) : null}
+        <Button title="Open Recovery" small variant="secondary" onPress={() => { setDetails(false); router.push('/lift/recovery'); }} />
+      </QuickView>
     </>
   );
 }

@@ -1826,3 +1826,27 @@ Follow-up · 2026-10-19, from Conor's request.
    - the right tile switched to Sleep and back to the body map;
    - the console was clean.
 6. **Tests:** `npm test`, 276 tests (`homeLayout.test.ts` is new). Type check and lint are clean.
+
+## 30. Shrink animations, the Lift order, and a smaller workout history figure
+
+Follow-up · 2026-10-19, from Conor's request.
+
+1. **Shrinking into a window is animated.**
+   - **The header bubble** (Lift, and the workout screen) flies up from about where the full figure sat: from about 3× its size, 120 pt left and 140 pt down, into its place in 320 ms (`FigureBubble`, `FLY_*`).
+   - **The Run tab's mini map** does the same from where the map sat (`FlyIn`).
+   - **The Lift ✕** first shrinks the figure up and to the right toward the bubble (260 ms), then collapses it. "Show at the top" grows it back out.
+   - **The collapse never waits on the animation;** a timer finishes it at 320 ms. A paused animation (a backgrounded page, which is how the hidden browser pane behaved) would otherwise have left the figure in place.
+2. **Lift tab order:** the workout in progress (when there is one), then Routines, then Start empty workout, then History.
+3. **Workout history (`lift/history/[id]`):**
+   - **"Muscles worked"** now shows the figure small (52 pt a view), with no per-muscle rows under it.
+   - **Its ⓘ, or a tap on the figure,** opens the body recovery view: the larger figure, each muscle's load and when it is trainable and ready again, and Open Recovery.
+   - **That view's figure doesn't open the muscle sheet:** that would be a second popup inside the first. The rows carry the same numbers.
+4. **In focus check (demo athlete):** the saved layout has the recovery figure on the right (`focus2: 'recovery'`). A load fresh from the profile, with the device copy cleared, showed Time on the left and Recovery on the right. A layout from before the second slot also gets recovery there (§29). If it shows otherwise, the page is still running a bundle from before that change; reload it.
+5. **Checked:**
+   - Routines come before Start empty workout, before History;
+   - ✕ collapsed the figure and "Show at the top" brought it back;
+   - the history figure is 52 pt and its ⓘ opens the details;
+   - the console was clean;
+   - `npm test` passes all 276 tests, and the type check and lint are clean.
+
+   The animations themselves couldn't be watched in the browser pane, which was hidden, so its animation frames were paused.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Animated, Modal, Pressable, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Modal, Pressable, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BodyMap } from './BodyMap';
@@ -10,6 +10,11 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
 const SIZE = 40;
+/** Where the bubble flies in from, relative to its place in the header: down and to the left, at
+ *  about the full figure's size, so it reads as the figure shrinking into it. */
+export const FLY_X = 120;
+export const FLY_Y = 140;
+export const FLY_SCALE = 3.2;
 
 /**
  * The body figure shrunk into a round header button: where the full figure sits at the top of a
@@ -25,15 +30,23 @@ export function FigureBubble({ map, mode, shown, onPress, nameOf, label }: {
   const theme: FigureTheme = name === 'night' ? 'dark' : 'light';
   const [t] = useState(() => new Animated.Value(shown ? 1 : 0));
   useEffect(() => {
-    // width animates too (not on the native driver), so a hidden bubble leaves no gap in the header
-    Animated.timing(t, { toValue: shown ? 1 : 0, duration: 180, useNativeDriver: false }).start();
+    // width animates too (not on the native driver), so a hidden bubble leaves no gap in the header;
+    // arriving, it flies up from where the full figure sat, shrinking as it goes
+    Animated.timing(t, { toValue: shown ? 1 : 0, duration: shown ? 320 : 180, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
   }, [shown, t]);
 
   return (
     <Animated.View
       pointerEvents={shown ? 'auto' : 'none'}
-      style={{ opacity: t, width: t.interpolate({ inputRange: [0, 1], outputRange: [0, SIZE] }), overflow: 'visible',
-        transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }}>
+      style={{
+        opacity: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0.9, 1] }),
+        width: t.interpolate({ inputRange: [0, 1], outputRange: [0, SIZE] }), overflow: 'visible',
+        transform: [
+          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-FLY_X, 0] }) },
+          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [FLY_Y, 0] }) },
+          { scale: t.interpolate({ inputRange: [0, 1], outputRange: [FLY_SCALE, 1] }) },
+        ],
+      }}>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"

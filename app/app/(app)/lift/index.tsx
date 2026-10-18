@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Pressable, View, useWindowDimensions } from 'react-native';
 
 import {
   invalidateWorkoutData, useDeleteRoutineGroup, useExercises, useMoveRoutines, useRoutineGroups, useRoutines, useSaveRoutineGroup, useWorkouts,
@@ -67,6 +67,27 @@ export default function LiftHome() {
   // ✕ on the figure collapses it into the header bubble, remembered on this device
   const collapsed = useLayoutPrefs((s) => s.liftFigureCollapsed);
   const setCollapsed = useLayoutPrefs((s) => s.setLiftFigureCollapsed);
+  // 0: the figure in place; 1: shrunk into the bubble's corner
+  const [shrink] = useState(() => new Animated.Value(0));
+  const collapse = () => {
+    // the choice never waits on the animation: a paused animation (a backgrounded page) still collapses
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      setCollapsed(true);
+      setScrolled(false);
+      shrink.setValue(0);
+    };
+    Animated.timing(shrink, { toValue: 1, duration: 260, easing: Easing.in(Easing.cubic), useNativeDriver: false }).start(finish);
+    setTimeout(finish, 320);
+  };
+  const expand = () => {
+    setQuick(false);
+    shrink.setValue(1);
+    setCollapsed(false);
+    Animated.timing(shrink, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+  };
 
   // This screen stays mounted under the workout sheet, so it keeps the sheet in step from here.
   // A block copies its exercise's facts when added: an exercise edited since (mapped from its
@@ -132,9 +153,18 @@ export default function LiftHome() {
       }>
       {/* the recovery figure, at the top like the Run tab's map; ✕ tucks it into the header bubble */}
       {collapsed ? null : (
-        <View
+        <Animated.View
           onLayout={(e) => setFigureBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
-          style={{ backgroundColor: palette.surface, borderRadius: radius.lg }}>
+          style={{
+            backgroundColor: palette.surface, borderRadius: radius.lg,
+            // tucking away, it shrinks up and to the right, into the bubble beside PBs
+            opacity: shrink.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 0.6, 0] }),
+            transform: [
+              { translateX: shrink.interpolate({ inputRange: [0, 1], outputRange: [0, 110] }) },
+              { translateY: shrink.interpolate({ inputRange: [0, 1], outputRange: [0, -150] }) },
+              { scale: shrink.interpolate({ inputRange: [0, 1], outputRange: [1, 0.15] }) },
+            ],
+          }}>
           <Pressable
             onPress={() => router.push('/lift/recovery')}
             accessibilityRole="button"
@@ -150,7 +180,7 @@ export default function LiftHome() {
           </Pressable>
           {/* beside the figure's button, not inside it: a button can't hold another */}
           <Pressable
-            onPress={() => { setCollapsed(true); setScrolled(false); }}
+            onPress={collapse}
             accessibilityRole="button"
             accessibilityLabel="Tuck the recovery figure into the bubble"
             hitSlop={10}
@@ -158,7 +188,7 @@ export default function LiftHome() {
               alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface2 }}>
             <T variant="small" tone="mut" weight="700">✕</T>
           </Pressable>
-        </View>
+        </Animated.View>
       )}
 
       {active ? (
@@ -169,9 +199,7 @@ export default function LiftHome() {
           onPress={() => router.push('/lift/workout')}>
           <Button title="Resume" small onPress={() => router.push('/lift/workout')} />
         </Card>
-      ) : (
-        <Button title="Start empty workout" onPress={startEmpty} />
-      )}
+      ) : null}
 
       <Card
         title="Routines"
@@ -201,6 +229,8 @@ export default function LiftHome() {
         <ErrorBanner message={moveRoutines.error ? `Couldn't move it: ${errorMessage(moveRoutines.error)}` : saveGroup.error ? errorMessage(saveGroup.error) : null} />
       </Card>
 
+      {active ? null : <Button title="Start empty workout" onPress={startEmpty} />}
+
       <Card title="History">
         {workouts.isLoading ? <Loading /> : null}
         {workouts.data?.length === 0 ? <EmptyState title="No workouts yet" body="Finished sessions show up here with their volume and duration." /> : null}
@@ -223,7 +253,7 @@ export default function LiftHome() {
         <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
           <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} style={{ flex: 1 }} />
-          {collapsed ? <Button title="Show at the top" small variant="ghost" onPress={() => { setQuick(false); setCollapsed(false); }} style={{ flex: 1 }} /> : null}
+          {collapsed ? <Button title="Show at the top" small variant="ghost" onPress={expand} style={{ flex: 1 }} /> : null}
         </View>
       </QuickView>
       <RoutineQuickView
