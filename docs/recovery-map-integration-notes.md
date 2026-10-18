@@ -1465,3 +1465,171 @@ Phase 10 output · 2026-10-18. Runs, rides, swims, hikes and rows on the body ma
 - **"The tap detail shows 'Long run (Sun): load 2.25'":** the activity appears as a row in the existing sheet, in the same format as a lift (name, day and time, load), rather than in a new layout.
 - **"Settings toggle stored as the user override":** an override row only while it's off, deleted when reset, the same as every other setting (Phase 9). The default in `recovery_constants.json` is unchanged.
 - **Time of an activity:** its end, the same as a lift's.
+
+## 26. After Phase 10: full review and fixes
+
+Review and fix pass · 2026-10-19. Phase 10 is the last build phase, so the whole feature was reviewed (phases 1–10, the 25 commits on `recovery-map`) and the problems found were fixed.
+
+- **Review:** a multi-agent review in three rounds:
+  - eight reviewers, one per dimension: engine, read model and figure, cardio, database, data layer, UI, phase completeness, tests and CI;
+  - then a completeness critic, which sent two more rounds of reviewers to the areas it found thin.
+- **Verification:** every finding was checked by three independent verifiers (reproduction, spec and intent, user impact), and kept only on a majority. 103 findings came in; 100 were confirmed and 3 rejected.
+- **UI test:** a hand test of every recovery screen in the web preview added two more, X-1 and X-2.
+- **Fixes:** made in 13 batches that touch separate files, each checked by an independent reviewer, with a second pass where the reviewer found a problem.
+
+### 26.1 Settled with Conor
+
+Conor said to ask only about major fixes. Nine findings were major; he decided these:
+
+| Finding | Settled as |
+|---|---|
+| r2-15: "Each side" logging doubles set counts and volume on Today, Lift history, Trends and the streaks | **Fixed** with a migration (26.3) and the matching app counts |
+| r1-11: cache rows can be attached to another user's workout or activity, which blocks the owner's saves | **Not now.** The app is private, and the risk needs a signed-in user acting on purpose |
+| r2-3: a ticked 0-rep set counts as a 1RM PB at its full weight | **Not now** |
+| r2-4: for assisted exercises, Best weight, Best set and volume treat the assistance as weight lifted | **Not now** |
+| r1-39, r2-17, r3-10: should CI fill missing e1RMs and rescore after merges and after changes to the engine or the default constants? | **No, by hand** (26.4). The app part of r2-17 is fixed: Finish re-saves every set with its e1RM |
+| r1-36: activities deleted on intervals.icu stay in Splitset and keep counting | **Mirror the deletions** (26.2) |
+| r1-4: editing a custom exercise can change its load mode or bodyweight factor under stored e1RMs | **Locked**, the minor option: in edit mode the load mode, the log type and a saved bodyweight factor can't change (§23.3 item 9 assumed this) |
+
+Rejected by the verifiers:
+- "the load-cache checks let NaN through": true in Postgres (`'NaN'::float8 > 0`), but no flow can send it, since the app's engine never produces a non-finite load and RLS keeps others out;
+- "notes §21.5 items left out of date": already recorded there as a deferral, since they are in docs/ and scripts/, which this branch doesn't edit;
+- "DB tests can't be re-run on the same database": they are built to run once on a fresh stack, which CI starts every run.
+
+### 26.2 Activities deleted on intervals.icu (sync job)
+
+1. **What the sync now does.** After its upsert, each `splitset-sync run` deletes the stored activities in the window it just fetched that intervals.icu no longer returns (`sync/splitset_sync/deletions.py`, plus `db.activity_ids_in_window` and `db.delete_activities`). Their details, efforts and recovery-map rows go with them (on delete cascade). Workouts and planned sessions linked to them are unlinked (set null).
+2. **Guards, because this deletes real rows:**
+   - nothing is deleted when intervals.icu returns no activities, the existing "stored data left untouched" case;
+   - the window's last day is never deleted, since intervals.icu reads `newest` in the athlete's time zone and the job runs in UTC;
+   - nothing is deleted when more than half of the window and more than 3 activities vanish at once. That looks like a partial response, so the sync logs a warning instead;
+   - `--dry-run` reports what it would remove.
+3. **Checked on Conor's account** with read-only dry runs on 2026-10-19:
+   - the normal window (3 Oct to 20 Oct) would remove nothing;
+   - `--full` (all 239 activities since 2020) would remove nothing too.
+4. **When it starts:** the scheduled sync runs from main, so mirroring starts when this branch merges.
+
+### 26.3 Per-side sets: migration `20261019000200_side_set_counts.sql` (Conor pushes)
+
+5. **`workout_summaries.sets_completed` and `exercise_records.completed_sets`** count a left + right pair as one set, and an unpaired side rounds up.
+6. **`workout_summaries.volume_kg`** adds half of each side set's weight × reps. So "3 × 10 at 20 kg" reads 3 sets and 600 kg whichever way it was logged, as spec §4.4 already scores it.
+7. **Column names and types are unchanged** (bigint counts, real volume), so `create or replace view` keeps the grants and no reader changes.
+8. **The app's own totals use the same rule** (`src/lib/lifting/sideCounts.ts`): the workout history screen's Sets and Volume tiles, and each workout's volume in an exercise's history.
+9. **Tests:** `test_side_set_counts.py` (DB) and `sideCounts.test.ts`.
+
+### 26.4 Run by hand (Conor's choice: CI doesn't fill or rescore beyond what it did before)
+
+migrate.yml still runs the plain `rescore_workouts.py` after a migration or library change, as before. That rescore now rewrites only the workouts whose cache differs. Everything else is by hand, from `sync/`:
+
+| When | Command |
+|---|---|
+| After the merge, or after logging with the main-branch app (its sets have no e1RM or bodyweight snapshot) | `uv run python ../supabase/rescore_workouts.py --fill --dry-run`, then without `--dry-run`. `--fill` runs the e1RM and bodyweight backfill (finished workouts only), then the rescore |
+| After changing the defaults in `data/recovery_constants.json` or the engine code | `uv run python ../supabase/rescore_workouts.py` (lifting). Runs and rides rescore themselves: the app's catch-up compares each activity's stored rows with a fresh score and resaves any that differ |
+
+### 26.5 What changed (minor fixes, all applied)
+
+- **Workout logging**
+  - **Finish and its outbox** (r1-0, r1-46): one shared drain. A synced finish closes the sheet whichever flush ran it. A second Finish, or edits after Finish, can no longer re-open or move a finished workout. Store tests run the real store against a fake server.
+  - **Workout blocks** (r3-2): pick up a mid-workout change to an exercise.
+  - **Routines** (r2-5): a routine saved from per-side sets keeps one target per pair.
+  - **Reps** (r1-7): negative and non-finite reps are refused.
+  - **The set row** (r1-50) fits 375 pt with RPE and Each side both on.
+  - **The weight column** (r2-16) reads "assist" or "+kg" where it means that.
+- **PBs**
+  - **Quick loads** (r1-3) convert into what the weight field means.
+  - **Repeating a set** (r1-19) is no longer a false new PB (0.1 kg precision).
+  - **Assisted exercises** (r1-21): no 3RM or best weight.
+  - **The live panel** (r1-22) counts the manual best.
+  - **Exercise screen** (r2-13): the 1RM line shows only where it means something.
+  - **All PBs copy** (r2-14) describes the current e1RM rule.
+  - **"Add a known best"** waits for the bodyweight (r2-9), follows the PB policy (r1-60), and puts the date on its own line (r1-57).
+  - **Today's "Personal bests" tile** (r2-18) counts lift PBs too.
+- **Cache writers** (`api/workoutLoads.ts`, `lib/recovery/pending.ts`)
+  - **One queue:** the recompute, the activity catch-up and a new workout catch-up go through one serial queue (r1-10).
+  - **A failed recompute** leaves a persisted "owed from" marker that the next catch-up retries (r1-13). RecoveryFigure shows the error with **Try again** (a forced catch-up).
+  - **Catch-up errors** have their own field and show where the figure is (r1-35).
+  - **Activities:** an activity is rescored when its data, type or the thresholds change, and cleared when it stops counting (r1-8).
+  - **Lift-side catch-up:** finished workouts with no cache rows get scored (r3-9). Old-client sets with no e1RM still need `--fill`.
+  - **Paging** uses a total order (r1-12).
+  - **Finish** reads only the PB history it needs (r1-45).
+  - **Fewer re-reads per catch-up** (r1-37).
+- **Recovery data hooks**
+  - **Memoised maps and history** (r1-1), so the Recovery screen no longer recomputes 28 maps per render.
+  - **The catch-up runs** on focus, on returning to the foreground, and after Sync now (r1-9).
+  - **The previous map stays** while the hourly window refetches (r1-14).
+  - **The workout in progress shows on the map** (r1-59, spec §14).
+  - **Zero-weight roles** list no contributions (r1-28).
+  - **The history slider** samples the same wall-clock time each local day, across DST (r1-30).
+  - **The library cache** is per user, and the query cache clears when the account changes (r1-43).
+  - **Saving a custom-exercise edit** never reports failure after it saved (r1-44).
+  - **The picker's PB line** is cached (r1-58).
+  - **Bodyweight** isn't "ready" after a failed read (r2-0).
+- **Engine and units**
+  - **fmtHours:** "< 1 h" instead of "0 h" (X-1).
+  - **The full recompute** groups the PB history once, with the same results (r1-25).
+  - **The same-day bodyweight rule** uses the user's own date (r1-24).
+  - **Bodyweight settings:** a key per unit (r2-2), lb range hints (r2-6), 0.1 lb steps (r2-7), overriding a wrong weigh-in (r2-8), an accessible label (r2-11).
+- **Custom-exercise editor**
+  - **Edit locks** (r1-4, r1-5), and legacy rows that keep their meaning (r3-0, r3-1, r3-3, r3-4, r3-8).
+  - **Starting from Farmer's walk** logs seconds (r3-5).
+  - **A best on a fixed-load chip** no longer blocks Save (r1-26).
+  - **Database refusals in words**, plus duplicate-name and over-100-rep checks (r1-41).
+  - **Readable P/S/T chips** (r1-47).
+  - **The known best** waits for the bodyweight (r2-10).
+  - **Error and Try again** instead of an endless spinner (r3-7).
+- **Recovery screen, figure and Today card**
+  - **The List view shows muscle names** at phone width (r1-2).
+  - **A failed refetch keeps the map** (r1-6).
+  - **The history slider** no longer jumps on touch-down or steals vertical scrolls (r1-16), and tells VoiceOver the new day (r1-31).
+  - **Chip and Segmented** expose their role and selected state (r1-17).
+  - **The Today card's error state** (r1-32).
+  - **Screen-reader summaries** state the right context (r1-33).
+  - **"Workouts and activities" copy** (r1-56).
+  - **The figure's swipe** lets mobile web scroll (r2-1).
+- **Load split and picker**
+  - **Biggest share first, with %** (X-2).
+  - **The user's role weights** (r1-29).
+  - **"Not on the recovery map"** for the 19 unmapped legacy rows instead of "calibrating" (r3-6).
+  - **Fuller accessibility labels** (r1-55).
+- **Muscle sheet and live figure**
+  - **The live figure** is memoised (r1-15) and opens as one 44 pt row (r1-48).
+  - **The sheet** keeps its content while it slides away (r1-54).
+  - **Web focus and the dialog name** (r2-12).
+  - **The keyboard is dismissed** when the sheet opens (r3-15).
+  - **VoiceOver** (r3-16).
+- **Settings → Recovery map**
+  - **The Save bar stays pinned**, and leaving with unsaved edits asks first (r1-51).
+  - **Reset values** (r1-27, r1-52).
+  - **Stricter override validation** (r1-23).
+  - **Hit targets** (r1-49).
+- **Scripts and DB tests**
+  - **rescore_workouts.py** writes only changed workouts (r1-40) and gained `--fill` (26.4).
+  - **backfill_e1rm.py** fills finished workouts only, and rescores what it fills (r3-11, r3-12).
+  - **New DB tests:** the old-app rollout (r3-13), test isolation in test_settings.py (r1-62, r1-63).
+- **CI**
+  - **app.yml** also runs on `data/` and the body figures (r1-18).
+  - **db-tests.yml:** the path filter now includes `sync/pyproject.toml`, `uv.lock` and `.python-version` (r1-65). A new job checks that each new migration sorts after the existing ones (r1-66).
+  - **Snapshots** rewrite only with `UPDATE_SNAPSHOTS=1`, never in CI, and a rewrite still fails once (r1-20).
+
+### 26.6 Left open
+
+- **The muscle sheet's scrim** still slides in with the card rather than fading (r1-54, polish).
+- **A saved bodyweight factor can't be changed in edit mode.** Changing it would need the stored e1RMs rewritten, and a manual best has no bodyweight snapshot to redo it from. If Conor wants this, it's Part B of r1-4.
+- **Not now** (26.1): r1-11, r2-3, r2-4, and CI-run fills and rescores.
+
+### 26.7 Tests
+
+- **`npm test`: 264 tests**, up from 161. tsc and lint are clean.
+- **pytest locally:** 82 passed, 66 skipped (the database tests).
+- **New DB tests** (CI only): side-set counts, the activity lifecycle (crop, retype to Walk, delete cascade), the old-app rollout, an open workout left by the backfill, and legacy custom-exercise edits.
+
+### 26.8 Checked in the web preview (2026-10-19, demo athlete, 375 pt)
+
+- **List view:** muscle names on every row, with the level and the times under each name.
+- **Segmented controls** read as radios with a checked state.
+- **Today card:** "Biceps trainable in 2 h".
+- **Back squat's split:** "quads 42% · glutes 17% · adductors 17% · lower back 8% · abs 8% · hamstrings 8%".
+- **Picker:** "Not on the recovery map: no muscles mapped" for B-stance Romanian deadlift.
+- **Settings:** the Save bar is pinned with "1 unsaved change", and Discard clears it.
+- **Workout history** renders its figure, rows and tiles.
+- **Console:** clean after the last edit.
