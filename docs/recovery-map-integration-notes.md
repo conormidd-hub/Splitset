@@ -799,3 +799,105 @@ Phase 4 output · 2026-10-16. The per-workout cache, the recompute rule, live sc
 - **"Run it as a background job if it takes more than a moment":** the app always runs recompute in the background and shows its status. For one athlete it takes a few seconds; the demo's 101 workouts took about 5 s from Python.
 - **"Editing a finished workout":** the app still can't. The recompute is wired to the edits that exist today (delete, manual PBs), and the database test simulates an edit.
 - **Dates in the F26 seed:** "now falls on the Wednesday at 20:00" is relative: now becomes fixture hour 68. `--now` pins another instant.
+
+---
+
+## 19. Phase 5: decisions made
+
+Phase 5 output · 2026-10-18. The read side: `recovery_map`, `session_map` and `recovery_history`.
+
+### 19.1 Settled with Conor
+
+| | Settled as |
+|---|---|
+| Read path | **One read-only function, `recovery_loads(p_from, p_to)`** (`20261016000400_recovery_read.sql`), rather than plain table reads, so the database tests call exactly what the app calls |
+| History samples | **They end on `to`:** `to`, `to − step`, … while still after `from`, returned oldest first. Seven days at 24 h is 7 samples, and the last one is exactly `to`, usually now |
+
+### 19.2 Schema
+
+1. **`recovery_loads(p_from, p_to default null) → jsonb`:**
+   - It returns `{muscles, exercises}` for workouts (and, from Phase 10, activities) finished in (from, to]. A null `to` means no upper bound.
+   - **Muscle rows:** `workout_id`, `activity_id`, `source`, `muscle_id`, `load`, `recovery_hours`, `finished_at`.
+   - **Exercise rows:** `exercise_id`, the exercise's `name`, `load` (L_e > 0 only), `pb_source`, `pb_detail`, `pb_value`, and the workout's `finished_at`.
+   - **Access:** it's stable and security invoker, and filters on `auth.uid()` (through the Phase 4 index), so a caller only ever reads their own rows. `authenticated` can execute it; `anon` can't. It changes no tables or rows.
+2. **No maths in SQL.** Levels, colours and times are worked out in the app by the engine.
+
+### 19.3 The read model (`src/lib/recovery/read.ts`, pure)
+
+3. **`recoveryMapAt(m, keyOf, loads, at)`** is `recovery_map`.
+   - **Window:** it reads (at − (`lookback_hours()` + 168 h), at], which is 312 h with the defaults.
+   - **Per muscle:** the Phase 2 `muscleState` fields plus `contributing`.
+   - **Past moments:** rows finished after `at` are dropped, so a past moment reads as it did then. That includes ready and trainable times, which would otherwise "know" about later workouts.
+4. **`contributing`:** `{exercise_id, exercise, workout_id, workout_date, role, load, pb_source, pb_detail}`, largest first.
+   - It covers workouts finished in the weekly window before `at` (spec §10's "last 168 h"), with `load = role_weight × L_e`. That's the same window W sums over, so the contributions add up to W.
+   - With the defaults the window is longer than the 144 h lookback, so every workout still adding fatigue is listed.
+   - Roles come from `exercise_muscles` as they are now. After a library change, the rescore in `migrate.yml` brings the cache back in line with them.
+5. **`sessionMapFromLoads(m, rows)`** is `session_map`.
+   - It feeds the cached L and R to the engine's `sessionMap`. A muscle with no row gets L = 0 and the R the engine gives an unloaded muscle, so the result equals scoring the workout afresh.
+   - **Renamed fields:** `trainable_after_h` and `ready_after_h` (hours after the workout), as the plan names them. `useLiveSession()` returns the same shape, so Phase 7 can draw live and finished workouts alike.
+6. **`recoveryHistory(…, from, to, step = 24)`** is `recovery_history`.
+   - One read covers every sample.
+   - It refuses a step ≤ 0, or more than 1,000 samples.
+7. **Thresholds:** a past moment is read with the user's current thresholds and the current cache. Phase 9's threshold changes trigger the recompute, so history follows them.
+
+### 19.4 In the app (`src/api/recovery.ts`)
+
+8. **There's no app server, so the plan's "local store" is:**
+   - **repository functions:** `fetchRecoveryMap(uid, at?)`, `fetchSessionMap(uid, workoutId)` and `fetchRecoveryHistory(uid, from, to, stepHours)`;
+   - **hooks:** `useRecoveryMap(at?)`, `useSessionMap(workoutId)` and `useRecoveryHistory(from, to, stepHours)`;
+   - **times:** given as ISO strings or epoch ms.
+9. **"Finishing a workout changes the map without a restart":**
+   - The hooks' query keys sit under `['workoutLoads', uid]`.
+   - Finishing a workout, the recompute rule and deleting a workout already invalidate that key, so the next render reads the new rows.
+10. **The map "now":**
+    - It follows a new `useNowMinute()` clock and is recomputed in memory each minute.
+    - Its rows are read from an hour-aligned start with no upper bound, so they're only refetched when the hour or the cache changes.
+    - A fixed `at` reads exactly its own window.
+11. **`session_map`** reads the workout's `workout_muscle_loads` rows directly; one select is all it needs.
+
+### 19.5 CLI and scripts
+
+12. **`recovery-cli.ts` commands:**
+    - `recovery-map` now takes `loads` (what `recovery_loads()` returns) and returns `contributing`. Muscle-only `rows` still work, so `seed_f26.py` is unchanged.
+    - New: `session-map` and `recovery-history`.
+
+### 19.6 Tests
+
+- **`npm test`: 109 tests.**
+  - **The new `read.test.ts`:**
+    - F26 at Wednesday 20:00: hamstrings Very high; quads, glutes, biceps and traps High; the other muscles as in F26;
+    - contributions: largest first, correct roles, `role_weight × L_e` each, adding up to W;
+    - past moments: Monday 00:00 is all Ready; Wednesday 17:30 reads the same as if Legs had never happened;
+    - the read window's bounds;
+    - 7 samples over 7 days, the last equal to the map at `to`;
+    - F20's session view from its cache: levels, R, and trainable and ready after, equal to the engine's.
+  - **Shared helpers:** the fixture-row builders moved from `workoutLoads.test.ts` into `testRows.ts`.
+- **`db-tests` (CI): 56 tests, 8 of them new (`test_recovery_read.py`).**
+  - **The real logging path:** F26 is logged the way the app logs it. Each set is built by the logger's own row builder (`set-rows`) and saved as the user, and each workout is finished through `finish_workout()` with the engine's scores, in time order.
+  - **Reading it back:** through `recovery_loads()` as that user. The checks cover:
+    - Wednesday 20:00, with contributions adding up to W;
+    - a past moment;
+    - 7 history samples;
+    - the Legs session view;
+    - the window's bounds;
+    - owner-only access, with `anon` refused.
+  - **"Done when":** finishing a curl workout at 19:00 raises biceps in the next read, and deleting it restores the map exactly.
+- **pytest locally:** 79 passed, 38 skipped. The skipped ones are the database tests, which only run in CI.
+
+### 19.7 On splitset-dev (2026-10-18)
+
+- **Migration:** `20261016000400_recovery_read` was pushed by Conor. The regenerated types matched the hand-written ones exactly.
+- **The F26 seed:** re-run with now = 2026-10-18 07:28 UTC as Wednesday 20:00. It matches F26.
+- **Read back as the demo user** through `recovery_loads()`, then the app's code:
+  - every F, level, "trainable in" and "ready in" matches the table in `docs/recovery-map-preview.png`;
+  - every contribution list adds up to W;
+  - the 7-day history ends on the same map.
+- **In the app:** the hooks are first drawn on Phase 6's dev screen, which is where finishing a workout is checked live.
+
+### 19.8 Ambiguities resolved
+
+- **"Reads … from the last `lookback_hours()` plus 168 h":** that's the read window. The tap detail's "contributing exercises from the last 168 h" is the weekly window inside it.
+- **"`recovery_map` must accept an optional `at`":** a past `at` excludes every workout finished after it, so ready-in times aren't shortened or lengthened by what came later.
+- **"`session_map(workout)` → `trainable_after_h`, `ready_after_h`":** these are the engine's `trainable_in_h` and `ready_in_h` for one workout, renamed because they count from the workout's finish, not from now.
+- **"`recovery_history` over 7 days returns 7 samples":** this holds when the samples end on `to` (item 6).
+- **"Expose as HTTP endpoints or a local store":** reads go to Supabase over HTTP (PostgREST, `recovery_loads`), and the maths runs in the app. That's the local store of notes §8.
