@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,7 +11,6 @@ import { useUnits } from '@/api/profile';
 import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useThresholds } from '@/api/recovery';
 import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
-import { ReorderList } from '@/components/lift/ReorderList';
 import { RestBubble } from '@/components/lift/RestBubble';
 import { LivePbPanel } from '@/components/pbs/LivePbPanel';
 import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
@@ -22,6 +21,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { SortableList } from '@/components/ui/SortableList';
 import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
@@ -74,8 +74,10 @@ export default function ActiveWorkoutScreen() {
   const [scrolled, setScrolled] = useState(false);
   const [quick, setQuick] = useState(false);
   const [prompt, setPrompt] = useState(false);
-  const [reordering, setReordering] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // a drag near the top or bottom of the screen scrolls the workout under the finger
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollY = useRef(0);
 
   // every saved set's e1RM uses the user's thresholds and the workout's bodyweight snapshot (D5);
   // a workout started before bodyweight had loaded takes it as soon as it has
@@ -193,11 +195,13 @@ export default function ActiveWorkoutScreen() {
         ) : null}
 
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={{ padding: space.lg, paddingTop: 0, gap: space.md, paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
           scrollEnabled={!dragging}
           scrollEventThrottle={16}
           onScroll={(e) => {
+            scrollY.current = e.nativeEvent.contentOffset.y;
             // the session figure's bubble shows once the figure has scrolled away
             const past = figureBottom > 0 && e.nativeEvent.contentOffset.y > figureBottom - 16;
             if (past !== scrolled) setScrolled(past);
@@ -216,18 +220,20 @@ export default function ActiveWorkoutScreen() {
             </View>
           ) : null}
 
-          {reordering ? (
-            <ReorderList
-              items={workout.exercises.map((b) => ({ id: b.id, name: b.name, sets: b.sets.length }))}
-              onMove={(id, to) => useActiveWorkout.getState().moveExercise(id, to)}
-              onDragging={setDragging}
-              onDone={() => setReordering(false)}
-            />
-          ) : workout.exercises.map((block) => (
-            <ExerciseCard key={block.id} block={block} units={units} routineId={workout.routineId} onReorder={() => setReordering(true)} />
-          ))}
+          {/* hold an exercise's ≡ and drag it to move it */}
+          <SortableList
+            keys={workout.exercises.map((b) => b.id)}
+            itemLabel={(id) => workout.exercises.find((b) => b.id === id)?.name ?? 'exercise'}
+            onMove={(id, to) => useActiveWorkout.getState().moveExercise(id, to)}
+            onDragChange={setDragging}
+            scroll={{ ref: scrollRef, y: scrollY }}
+            renderItem={(id, { handle }) => {
+              const block = workout.exercises.find((b) => b.id === id);
+              return block ? <ExerciseCard block={block} units={units} routineId={workout.routineId} handle={handle} /> : null;
+            }}
+          />
 
-          {reordering ? null : <Button title="Add exercise" variant="secondary" onPress={() => router.push('/lift/picker?target=workout')} />}
+          <Button title="Add exercise" variant="secondary" onPress={() => router.push('/lift/picker?target=workout')} />
           {workout.exercises.length === 0 ? (
             <T tone="mut" align="center">Add an exercise to start logging. For a countdown between sets, turn on the rest timer (⏱) at the top.</T>
           ) : null}
@@ -248,7 +254,7 @@ export default function ActiveWorkoutScreen() {
   );
 }
 
-function ExerciseCard({ block, units, routineId, onReorder }: { block: ExerciseBlock; units: Units; routineId: string | null; onReorder: () => void }) {
+function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBlock; units: Units; routineId: string | null; handle: ReactNode }) {
   const { palette } = useTheme();
   const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote } = useActiveWorkout.getState();
   const routines = useRoutines();
@@ -316,15 +322,7 @@ function ExerciseCard({ block, units, routineId, onReorder }: { block: ExerciseB
   return (
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
-        <Pressable
-          onPress={onReorder}
-          accessibilityRole="button"
-          accessibilityLabel="Reorder exercises"
-          accessibilityHint="Shows the exercises as a list to drag into a new order"
-          hitSlop={8}
-          style={{ width: 28, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, backgroundColor: palette.surface2 }}>
-          <T tone="mut" weight="700">≡</T>
-        </Pressable>
+        {handle}
         <Pressable style={{ flex: 1 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
           <T variant="h3" tone="accent">{block.name}</T>
         </Pressable>

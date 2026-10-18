@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
-import { Pressable, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, View, type ScrollView } from 'react-native';
 
 import { useArchiveRoutine, useRoutine, useSaveRoutine } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { NumberInput } from '@/components/ui/NumberInput';
 import { Screen } from '@/components/ui/Screen';
+import { SortableList } from '@/components/ui/SortableList';
 import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
@@ -24,6 +25,10 @@ export default function RoutineEditor() {
   const save = useSaveRoutine();
   const archive = useArchiveRoutine();
   const draft = useRoutineDraft();
+  const [dragging, setDragging] = useState(false);
+  // a drag near the top or bottom of the screen scrolls the page under the finger
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollY = useRef(0);
 
   // Load the draft once per routine. "from=workout" means the active workout already filled it.
   useEffect(() => {
@@ -54,7 +59,7 @@ export default function RoutineEditor() {
   return (
     <>
       <Stack.Screen options={{ title: isNew ? 'New routine' : 'Edit routine' }} />
-      <Screen>
+      <Screen scrollEnabled={!dragging} scrollRef={scrollRef} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
         <Card>
           <View style={{ gap: space.md }}>
             <TextField label="Name" value={draft.name} onChangeText={draft.setName} placeholder="Lower A" />
@@ -62,15 +67,23 @@ export default function RoutineEditor() {
           </View>
         </Card>
 
-        {draft.exercises.map((e, idx) => (
+        {/* hold an exercise's ≡ and drag it to move it */}
+        <SortableList
+          keys={draft.exercises.map((x) => x.key)}
+          itemLabel={(k) => draft.exercises.find((x) => x.key === k)?.name ?? 'exercise'}
+          onMove={draft.moveTo}
+          onDragChange={setDragging}
+          scroll={{ ref: scrollRef, y: scrollY }}
+          renderItem={(k, { handle }) => {
+            const e = draft.exercises.find((x) => x.key === k);
+            if (!e) return null;
+            return (
           <Card
-            key={e.key}
             title={e.name}
             right={
-              <View style={{ flexDirection: 'row', gap: space.sm }}>
-                <Pressable onPress={() => draft.move(e.key, -1)} disabled={idx === 0} hitSlop={6}><T tone={idx === 0 ? 'mut' : 'ink'}>↑</T></Pressable>
-                <Pressable onPress={() => draft.move(e.key, 1)} disabled={idx === draft.exercises.length - 1} hitSlop={6}><T tone={idx === draft.exercises.length - 1 ? 'mut' : 'ink'}>↓</T></Pressable>
-                <Pressable onPress={() => draft.removeExercise(e.key)} hitSlop={6}><T tone="neg">✕</T></Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                {handle}
+                <Pressable onPress={() => draft.removeExercise(e.key)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${e.name}`}><T tone="neg">✕</T></Pressable>
               </View>
             }>
             <View style={{ flexDirection: 'row', gap: space.sm, paddingBottom: 4 }}>
@@ -105,7 +118,10 @@ export default function RoutineEditor() {
             ))}
             <Button title="Add set" variant="ghost" small onPress={() => draft.addSet(e.key)} style={{ alignSelf: 'flex-start' }} />
           </Card>
-        ))}
+        
+            );
+          }}
+        />
 
         <Button title="Add exercise" variant="secondary" onPress={() => router.push('/lift/picker?target=routine')} />
         <Button title={isNew ? 'Create routine' : 'Save changes'} loading={save.isPending} disabled={draft.name.trim().length < 1 || draft.exercises.length === 0} onPress={onSave} />
