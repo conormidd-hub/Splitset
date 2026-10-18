@@ -43,3 +43,10 @@ export function useTheme(): ThemeState {
   if (!ctx) throw new Error('useTheme must be used inside ThemeProvider');
   return ctx;
 }
+
+/** Its children see the given theme whatever the app's is: for previewing both, never persisted. */
+export function ThemeOverride({ name, children }: { name: ThemeName | null; children: ReactNode }) {
+  const ctx = useTheme();
+  const value = useMemo(() => (name ? { ...ctx, name, palette: palettes[name] } : ctx), [ctx, name]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}

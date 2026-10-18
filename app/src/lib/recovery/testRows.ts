@@ -10,6 +10,7 @@ import { setE1rm, exerciseDef, type ExerciseMuscleRow, type ExerciseRow } from '
 import type { PbHistoryRow } from './pbHistory.ts';
 import { parseConstants } from './thresholds.ts';
 import type { ExerciseDef, LiftSet } from './types.ts';
+import type { LoadWindow } from './read.ts';
 import {
   scoreFinishedWorkouts, type ScoringRows, type WorkoutExerciseRow, type WorkoutLoads, type WorkoutRow, type WorkoutSetRow,
 } from './workoutLoads.ts';
@@ -78,3 +79,20 @@ export function score(parts: ReturnType<typeof workoutRows>[], history: PbHistor
 }
 
 export const near = (got: number | undefined, want: number) => assert.ok(got != null && Math.abs(got - want) <= 0.01, `got ${got}, want ${want}`);
+
+const NAMES = new Map(LIBRARY.map((e) => [`id-${e.slug}`, e.name]));
+
+export type FixtureWorkout = { start: number; end: number; exercises: [string, LiftSet[]][] };
+
+/** What recovery_loads() would return for these fixture workouts, scored as phase 4 caches them. */
+export function loadWindow(workouts: FixtureWorkout[], pbs: Parameters<typeof historyRows>[0]): LoadWindow {
+  const parts = workouts.map((w, i) => workoutRows(`w${i}`, w));
+  const loads = score(parts, [...historyRows(pbs), ...parts.flatMap(setsHistory)]);
+  const finished = new Map(parts.map((p) => [p.workout.id, p.workout.finished_at!]));
+  return {
+    muscles: loads.flatMap((w) => w.muscles.map((m) => ({ ...m, workout_id: w.workout_id, finished_at: finished.get(w.workout_id)! }))),
+    exercises: loads.flatMap((w) => w.exercises.map((e) => ({
+      ...e, workout_id: w.workout_id, name: NAMES.get(e.exercise_id)!, finished_at: finished.get(w.workout_id)!,
+    }))),
+  };
+}

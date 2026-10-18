@@ -59,6 +59,9 @@ export default function LiftHome() {
         <Button title="Start empty workout" onPress={startEmpty} />
       )}
 
+      {/* temporary, development builds only (build phase 6): the body map before Phase 7 places it */}
+      {__DEV__ ? <Button title="Recovery map (dev preview)" variant="secondary" small onPress={() => router.push('/lift/recovery-dev')} /> : null}
+
       <Card title="Routines" right={<Button title="New" variant="ghost" small onPress={() => router.push('/lift/routines/new')} />}>
         {routines.isLoading ? <Loading /> : null}
         {routines.data?.length === 0 ? (

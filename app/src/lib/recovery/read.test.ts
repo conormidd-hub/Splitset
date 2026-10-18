@@ -12,9 +12,9 @@ import { MUSCLE_IDS, type MuscleId } from './library.ts';
 import { toPbHistory } from './pbHistory.ts';
 import {
   isoOfHours, readSpanHours, recoveryHistory, recoveryMapAt, sampleTimes, sessionMapFromLoads, sessionView,
-  type LoadWindow, type RecoveryMap,
+  type RecoveryMap,
 } from './read.ts';
-import { C, EXERCISES, fixture, historyRows, iso, LIBRARY, MUSCLES, near, score, setsHistory, T0, workoutRows } from './testRows.ts';
+import { C, EXERCISES, fixture, historyRows, iso, loadWindow, MUSCLES, near, score, T0, workoutRows, type FixtureWorkout } from './testRows.ts';
 import type { LiftSet, Model } from './types.ts';
 import { engineWorkout, libraryFromRows } from './workoutLoads.ts';
 
@@ -22,23 +22,6 @@ const { lib, keyOf } = libraryFromRows(EXERCISES, MUSCLES);
 const M: Model = { c: C, lib };
 const H0 = T0 / 3_600_000;           // fixture hour 0 in engine hours
 const at = (h: number) => H0 + h;
-const NAMES = new Map(LIBRARY.map((e) => [`id-${e.slug}`, e.name]));
-
-type FixtureWorkout = { start: number; end: number; exercises: [string, LiftSet[]][] };
-
-/** What recovery_loads() would return for these fixture workouts, scored as phase 4 caches them. */
-function loadWindow(workouts: FixtureWorkout[], pbs: Parameters<typeof historyRows>[0]): LoadWindow {
-  const parts = workouts.map((w, i) => workoutRows(`w${i}`, w));
-  const loads = score(parts, [...historyRows(pbs), ...parts.flatMap(setsHistory)]);
-  const finished = new Map(parts.map((p) => [p.workout.id, p.workout.finished_at!]));
-  return {
-    muscles: loads.flatMap((w) => w.muscles.map((m) => ({ ...m, workout_id: w.workout_id, finished_at: finished.get(w.workout_id)! }))),
-    exercises: loads.flatMap((w) => w.exercises.map((e) => ({
-      ...e, workout_id: w.workout_id, name: NAMES.get(e.exercise_id)!, finished_at: finished.get(w.workout_id)!,
-    }))),
-  };
-}
-
 const F26 = fixture('F26');
 const F26_WORKOUTS = F26.inputs.workouts as FixtureWorkout[];
 const F26_PBS = F26.inputs.history as Parameters<typeof historyRows>[0];

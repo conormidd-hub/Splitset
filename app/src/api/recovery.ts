@@ -7,6 +7,7 @@ import { fetchLibraryRows, fetchPbHistoryRows, fetchThresholds, loadKeys, recomp
 import { useNowHour, useNowMinute } from '@/lib/clock';
 import { buildLibrary, sessionMap } from '@/lib/recovery/engine';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
+import { muscleFallbackName } from '@/lib/recovery/figure';
 import { bests, hoursOf, pbHistoryItems, strengthReference, toPbHistory } from '@/lib/recovery/pbHistory';
 import {
   historyWindow, isoOfHours, readSpanHours, readWindow, recoveryHistory, recoveryMapAt, sessionMapFromLoads, sessionView,
@@ -215,6 +216,7 @@ export function useLiveSession() {
 
 const LIBRARY_STALE_MS = 10 * 60_000;
 const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
 const NO_LIBRARY = buildLibrary([]);
 
 /** Every exercise the user can see with its muscles by role, cached for ten minutes. */
@@ -277,7 +279,8 @@ export function useRecoveryMap(at?: string | number) {
   const c = useThresholds();
   const nowMs = useNowMinute();
   const library = useLibraryRows();
-  const atH = hoursOf(at ?? nowMs);
+  // "now" is the end of the current minute, so a workout finished seconds ago already counts
+  const atH = hoursOf(at ?? nowMs + MINUTE_MS);
   const span = readSpanHours({ c, lib: NO_LIBRARY });
   const from = isoOfHours(at == null ? Math.floor(nowMs / HOUR_MS) - span - 1 : atH - span);
   const to = at == null ? null : isoOfHours(atH);
@@ -312,4 +315,19 @@ export function useRecoveryHistory(from: string | number, to: string | number, s
   if (!library.data || !loads.data) return { isLoading: library.isLoading || loads.isLoading, error, data: null };
   const { lib, keyOf } = libraryFromRows(library.data.exercises, library.data.muscles);
   return { isLoading: false, error, data: recoveryHistory({ c, lib }, keyOf, loads.data, f, t, stepHours) };
+}
+
+/** The 17 muscles' display names (muscles table), e.g. "Traps & upper back". They never change
+ *  at runtime, so they are cached for the session. */
+export function useMuscleNames(): (id: string) => string {
+  const q = useQuery({
+    queryKey: ['muscles'],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('muscles').select('id, name');
+      if (error) throw error;
+      return new Map(data.map((m) => [m.id, m.name]));
+    },
+  });
+  return (id: string) => q.data?.get(id) ?? muscleFallbackName(id);
 }
