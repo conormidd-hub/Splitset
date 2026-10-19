@@ -24,12 +24,14 @@ type Props = {
   onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** Keep the title row above the scrolling content, so what sits in `right` stays in reach. */
   fixedHeader?: boolean;
+  /** A bar that stays above the scrolling page (Today's), drawn over its top edge. */
+  topBar?: ReactNode;
   style?: ViewStyle;
 };
 
 export function Screen({
   children, title, subtitle, right, scroll = true, padded = true,
-  edges, refreshing, onRefresh, scrollEnabled = true, scrollRef, onScroll, fixedHeader = false, style,
+  edges, refreshing, onRefresh, scrollEnabled = true, scrollRef, onScroll, fixedHeader = false, topBar, style,
 }: Props) {
   // a screen that draws its own title is a tab root with no navigation header above it, so it
   // keeps clear of the status bar itself; under a header, the header already does
@@ -54,6 +56,7 @@ export function Screen({
 
   return (
     <SafeAreaView edges={safeEdges} style={{ flex: 1, backgroundColor: palette.bg }}>
+      {topBar}
       {fixedHeader && header ? <View style={{ paddingHorizontal: space.lg, paddingTop: space.lg, zIndex: 1 }}>{header}</View> : null}
       {scroll ? (
         <ScrollView

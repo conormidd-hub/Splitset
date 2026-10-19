@@ -1,8 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, View, type ScrollView } from 'react-native';
+import { Animated, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
@@ -17,9 +16,8 @@ import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
 import { InFocusPair, type FocusContent, type FocusSlot } from '@/components/home/InFocusCard';
 import { PlanStrip } from '@/components/home/PlanStrip';
-import { StreakButton } from '@/components/home/StreakButton';
+import { TodayTopBar } from '@/components/home/TopBar';
 import { StreakHeat } from '@/components/home/StreakHeat';
-import { PbButton } from '@/components/pbs/PbButton';
 import { RecoveryHomeCard } from '@/components/recovery/RecoveryHomeCard';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
@@ -31,13 +29,11 @@ import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
-import { ICONS } from '@/lib/icons';
 import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
 import { sessionsFrom, sessionsLast7, weekStreak } from '@/lib/streaks';
 import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
-import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 function greeting(): string {
@@ -70,7 +66,8 @@ export default function Today() {
   const active = useActiveWorkout((s) => s.workout);
   const lastLift = workouts.data?.[0];
   const { layout, loaded, save, saving, error: saveError } = useHomeLayout();
-  const { palette } = useTheme();
+  // the top bar's wordmark fades as the page scrolls
+  const [topFade] = useState(() => new Animated.Value(0));
   const params = useLocalSearchParams<{ edit?: string }>();
 
   const inputs = useMemo<MetricInputs>(() => ({
@@ -183,29 +180,20 @@ export default function Today() {
 
   return (
     <Screen
-      title={name ? `${greeting()}, ${name}` : greeting()}
-      subtitle={longDate(new Date().toISOString())}
-      right={
-        <View style={{ alignItems: 'flex-end', gap: space.xs }}>
-          {/* Settings lives here now, off the tab bar; stacked so the greeting keeps its width */}
-          <Pressable
-            onPress={() => router.push('/settings')}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            hitSlop={6}
-            style={({ pressed }) => ({ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-              backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1 })}>
-            <SymbolView name={ICONS.settings} tintColor={palette.ink2} size={16} />
-          </Pressable>
-          <PbButton />
-          {training.isSuccess ? <StreakButton streak={streak} /> : null}
-        </View>
-      }
+      edges={['top', 'left', 'right']}
+      topBar={<TodayTopBar streak={training.isSuccess ? streak : null} scrollY={topFade} />}
       refreshing={refreshing}
       onRefresh={refresh}
       scrollEnabled={!dragging}
       scrollRef={scrollRef}
-      onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
+      onScroll={(e) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+        topFade.setValue(e.nativeEvent.contentOffset.y);
+      }}>
+      <View style={{ paddingTop: space.xs }}>
+        <T variant="label" tone="mut">{longDate(new Date().toISOString())}</T>
+        <T variant="display">{name ? `${greeting()}, ${name}` : greeting()}</T>
+      </View>
       {training.isSuccess ? <StreakHeat count={heatCount} style={{ marginTop: -space.sm }} /> : null}
       {/* today's plan, thin, straight under the streak */}
       <PlanStrip sessions={planToday} loaded={plan.isSuccess} units={units} />

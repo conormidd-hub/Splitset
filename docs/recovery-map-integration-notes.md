@@ -1882,3 +1882,29 @@ Follow-up · 2026-10-19, from Conor's request.
    - Reset restored the 11, and the saved layout kept the demo's Today choices;
    - the console was clean;
    - `npm test`: 277 tests; the type check and lint are clean.
+
+## 32. Today's top bar, Strava style
+
+Follow-up · 2026-10-19, from Conor's request.
+
+1. **Today's top row is a bar of round buttons** (`TodayTopBar`, 40 pt each):
+   - **Left:** Settings (a cog).
+   - **Centre:** the wordmark **SPLITSET**, one word in capitals. SPLIT is the theme's text colour (white at night), SET the accent green.
+   - **Right:** PBs (a trophy, opens the cabinet), then the week streak.
+     - **The streak:** a flame with the number inside it, in dark text on the flame.
+     - **Tapping it:** opens the Plan's month view, as before.
+     - **Its accessibility label:** "54 week streak".
+2. **The bar stays put while the page scrolls under it** (`Screen` gained a `topBar` slot, drawn above the scroll view).
+   - **The fade:** a 22 pt gradient from the background colour fades the page out as it slides up beneath the bar.
+   - **The wordmark** fades out over the first 48 pt of scrolling.
+   - **The buttons** stay.
+3. **The greeting moved into the page,** under the bar: the date, then "Good morning, Demo Athlete".
+4. **The old PBs and streak pills on Today are gone.** The Lift tab (PBs) and the Plan (streak) still use theirs.
+5. **Checked (375 pt):**
+   - the bar laid out with 16 pt margins: cog left, wordmark centred, trophy and flame right;
+   - the streak read "54 week streak", the number centred in the flame's lower half;
+   - scrolled 200 pt, the wordmark's opacity went from 1 to 0 and the bar stayed at the top;
+   - the console was clean;
+   - `npm test`: 277 tests; the type check and lint are clean.
+
+   The hidden browser pane cropped screenshots of the bar's right end, so the flame was checked in the page rather than by eye.
