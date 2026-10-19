@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+import { LaunchSplash } from '@/components/splash/LaunchSplash';
 import { queryClient, setupQueryFocus } from '@/lib/query';
 import { SessionProvider, useSession } from '@/lib/session';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
@@ -21,21 +22,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <ThemeProvider>
-            <SplashController />
             <RootNavigator />
+            {/* above the app until the session and the first screen's data have loaded */}
+            <LaunchSplash />
           </ThemeProvider>
         </SessionProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
-}
-
-function SplashController() {
-  const { isLoading } = useSession();
-  useEffect(() => {
-    if (!isLoading) SplashScreen.hideAsync().catch(() => {});
-  }, [isLoading]);
-  return null;
 }
 
 function RootNavigator() {
