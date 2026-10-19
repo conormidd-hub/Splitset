@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, type ScrollView } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
@@ -30,11 +31,13 @@ import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
+import { ICONS } from '@/lib/icons';
 import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
 import { sessionsFrom, sessionsLast7, weekStreak } from '@/lib/streaks';
 import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
+import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 function greeting(): string {
@@ -67,6 +70,7 @@ export default function Today() {
   const active = useActiveWorkout((s) => s.workout);
   const lastLift = workouts.data?.[0];
   const { layout, loaded, save, saving, error: saveError } = useHomeLayout();
+  const { palette } = useTheme();
   const params = useLocalSearchParams<{ edit?: string }>();
 
   const inputs = useMemo<MetricInputs>(() => ({
@@ -183,6 +187,16 @@ export default function Today() {
       subtitle={longDate(new Date().toISOString())}
       right={
         <View style={{ alignItems: 'flex-end', gap: space.xs }}>
+          {/* Settings lives here now, off the tab bar; stacked so the greeting keeps its width */}
+          <Pressable
+            onPress={() => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            hitSlop={6}
+            style={({ pressed }) => ({ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
+              backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1 })}>
+            <SymbolView name={ICONS.settings} tintColor={palette.ink2} size={16} />
+          </Pressable>
           <PbButton />
           {training.isSuccess ? <StreakButton streak={streak} /> : null}
         </View>

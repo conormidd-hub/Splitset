@@ -1,4 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
+import { Pressable } from 'react-native';
+
+import { T } from '@/components/ui/T';
 
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -16,7 +19,18 @@ export default function SettingsStack() {
         headerTitleStyle: { fontWeight: '700' },
         contentStyle: { backgroundColor: palette.bg },
       }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
+      {/* Settings opens from the gear on Today (it has no tab), so its first screen leads back there */}
+      <Stack.Screen
+        name="index"
+        options={{
+          title: 'Settings',
+          headerLeft: () => (
+            <Pressable onPress={() => router.navigate('/')} accessibilityRole="button" accessibilityLabel="Back to Today" hitSlop={10} style={{ paddingRight: 8 }}>
+              <T tone="accent" weight="600">‹ Today</T>
+            </Pressable>
+          ),
+        }}
+      />
       <Stack.Screen name="connect" options={{ title: 'intervals.icu' }} />
       <Stack.Screen name="recovery" options={{ title: 'Recovery map' }} />
     </Stack>

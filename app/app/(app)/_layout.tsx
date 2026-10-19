@@ -12,7 +12,6 @@ const icons = {
   lift: { ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' },
   run: { ios: 'figure.run', android: 'directions_run', web: 'directions_run' },
   trends: { ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' },
-  settings: { ios: 'gear', android: 'settings', web: 'settings' },
 } satisfies Record<string, IconName>;
 
 function TabIcon({ name, color }: { name: IconName; color: ColorValue }) {
@@ -41,7 +40,8 @@ export default function AppTabs() {
       <Tabs.Screen name="lift" options={{ title: 'Lift', tabBarIcon: tabIcon(icons.lift) }} />
       <Tabs.Screen name="run" options={{ title: 'Run', tabBarIcon: tabIcon(icons.run) }} />
       <Tabs.Screen name="trends" options={{ title: 'Trends', tabBarIcon: tabIcon(icons.trends) }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: tabIcon(icons.settings) }} />
+      {/* off the tab bar: the gear on Today opens it */}
+      <Tabs.Screen name="settings" options={{ title: 'Settings', href: null }} />
     </Tabs>
   );
 }

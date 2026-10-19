@@ -96,7 +96,8 @@ export default function Settings() {
   };
 
   return (
-    <Screen title="Settings" subtitle={session?.user.email ?? ''}>
+    <Screen>
+      {session?.user.email ? <T variant="small" tone="mut">Signed in as {session.user.email}</T> : null}
       <Card title="Data sources">
         {connected && conn ? (
           <ListRow

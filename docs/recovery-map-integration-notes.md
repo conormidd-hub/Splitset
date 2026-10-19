@@ -1850,3 +1850,35 @@ Follow-up · 2026-10-19, from Conor's request.
    - `npm test` passes all 276 tests, and the type check and lint are clean.
 
    The animations themselves couldn't be watched in the browser pane, which was hidden, so its animation frames were paused.
+
+## 31. Trends you can arrange, and Settings on Today
+
+Follow-up · 2026-10-19, from Conor's request.
+
+1. **The Trends screen is a list you arrange,** Home screen style.
+   - **Edit:**
+     - shows each chart's title with its ≡ handle (drag to reorder, `SortableList`) and ✕ (remove);
+     - **Add a trend** opens the metric sheet in a new `trend` mode;
+     - **Reset to default** brings back the built-in set in order.
+   - **The sheet lists:**
+     - the 11 built-in charts first (any already shown are marked Added);
+     - then "Any metric over time": every available Home metric except Latest activity and PBs, which are links.
+   - **A charted metric** draws `dailyWindow` values over the chosen range (up to two years): points with a 7-day mean, or weekly bars for weekly running, time, sessions and lifting volume. Its labels use the metric's own formatting.
+2. **Where the list is saved:** in `profiles.home_layout`, alongside the Today layout (`trends`; null means the built-in set), so every device shows the same and no migration was needed.
+   - **Ids:** a built-in chart's own id, or `m:` and the metric's id.
+   - **Unknown ids** are dropped on read (`src/lib/homeLayout.ts`, tested).
+   - **Saves on Today and on Trends** both carry the whole layout, so neither undoes the other.
+3. **Settings is off the tab bar** (`href: null`); the tabs are Today, Plan, Lift, Run and Trends.
+   - **The gear:** a 34 pt gear sits in Today's header, above PBs.
+     - **Why above:** stacked, the greeting keeps its two lines.
+     - **Why not beside PBs:** that widened the header's right column and pushed the greeting onto three lines.
+   - **Getting back:** Settings now has a header titled "Settings" with "‹ Today", since it has no tab to return by.
+   - **The signed-in address** moved to a line under that header.
+4. **Checked (375 pt, demo athlete):**
+   - five tabs, with Settings gone;
+   - the gear opened Settings and "‹ Today" came back;
+   - the greeting stays on two lines;
+   - in Trends, Edit listed all 11 charts, Add put Steps at the end (drawn daily with its 7-day mean), and ✕ removed Cadence;
+   - Reset restored the 11, and the saved layout kept the demo's Today choices;
+   - the console was clean;
+   - `npm test`: 277 tests; the type check and lint are clean.
