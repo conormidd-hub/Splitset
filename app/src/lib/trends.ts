@@ -5,8 +5,23 @@ import { isRun } from '@/api/activities';
 import type { WellnessDay } from '@/api/wellness';
 import type { Point } from '@/components/charts/LineChart';
 import { isoDate, todayIso, weekStartIso } from './dates';
+import type { MetricId } from './metrics';
 
 export const dayMs = (iso: string) => Date.parse(`${iso}T12:00:00`);
+
+/** The metrics that are weekly totals: charted one value per week rather than day by day. */
+export const WEEKLY_METRICS: ReadonlySet<MetricId> = new Set<MetricId>(['weekly_distance', 'weekly_time', 'sessions', 'lift_volume']);
+
+/** Daily values summed into weeks, one point per Monday, oldest first. */
+export function weeklyTotals(daily: readonly { date: string; value: number | null }[]): Point[] {
+  const weeks = new Map<string, number>();
+  for (const d of daily) {
+    if (d.value == null) continue;
+    const wk = weekStartIso(new Date(dayMs(d.date)));
+    weeks.set(wk, (weeks.get(wk) ?? 0) + d.value);
+  }
+  return [...weeks.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([wk, v]) => ({ x: dayMs(wk), y: v }));
+}
 
 /** Trailing mean over the previous `n` non-null values, aligned to each input point. */
 export function rolling(points: Point[], n: number): Point[] {

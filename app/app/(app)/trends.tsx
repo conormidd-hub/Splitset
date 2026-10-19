@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, View, type ScrollView } from 'react-native';
+import { Platform, Pressable, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useHomeLayout } from '@/api/home';
@@ -9,6 +9,7 @@ import { useProfile, useUnits } from '@/api/profile';
 import { useWellness } from '@/api/wellness';
 import { LineChart, type Point } from '@/components/charts/LineChart';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
+import { CompareBuilder, CompareChart, compareText } from '@/components/trends/CompareBuilder';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
@@ -18,19 +19,19 @@ import { T } from '@/components/ui/T';
 import { useNowHour } from '@/lib/clock';
 import { confirm } from '@/lib/confirm';
 import { todayIso, weekStartIso } from '@/lib/dates';
-import { BUILT_IN_TRENDS, DEFAULT_TRENDS, trendMetric, type BuiltInTrend } from '@/lib/homeLayout';
+import { BUILT_IN_TRENDS, comparedMetrics, DEFAULT_TRENDS, trendMetric, type BuiltInTrend } from '@/lib/homeLayout';
 import { dailyWindow, formatMetric, isMetricId, METRICS, type MetricId, type MetricInputs } from '@/lib/metrics';
-import { acwr, dayMs, rolling, runPoints, weeklyRunKm, weeklySum, wellnessSeries } from '@/lib/trends';
+import { acwr, dayMs, rolling, runPoints, WEEKLY_METRICS, weeklyRunKm, weeklySum, weeklyTotals, wellnessSeries } from '@/lib/trends';
 import { KM_PER_MILE, LB_PER_KG } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 const RANGES = [
-  { days: 30, label: '30d' },
-  { days: 90, label: '90d' },
-  { days: 182, label: '6m' },
-  { days: 365, label: '1y' },
-  { days: 3650, label: 'All' },
+  { days: 30, label: '30d', text: 'last 30 days' },
+  { days: 90, label: '90d', text: 'last 90 days' },
+  { days: 182, label: '6m', text: 'last 6 months' },
+  { days: 365, label: '1y', text: 'last year' },
+  { days: 3650, label: 'All', text: 'all time' },
 ];
 
 /** The built-in charts' names and one-line descriptions, for the cards and the Add sheet. */
@@ -51,13 +52,18 @@ const BUILT_IN_LIST = BUILT_IN_TRENDS.map((id) => ({ id, ...BUILT_IN_TEXT[id] })
 
 /** Metrics that make a chart: every available one with a value per day (not the links). */
 const chartable = (id: MetricId) => METRICS[id].available && id !== 'last_activity' && id !== 'pbs';
-const WEEKLY: ReadonlySet<MetricId> = new Set(['weekly_distance', 'weekly_time', 'sessions', 'lift_volume']);
+
+/** The two metrics a comparison charts, when both are still known. */
+function comparison(id: string): [MetricId, MetricId] | null {
+  const pair = comparedMetrics(id);
+  return pair && isMetricId(pair[0]) && isMetricId(pair[1]) ? [pair[0], pair[1]] : null;
+}
 
 /**
  * Trends: charts over a chosen range, laid out the way the owner likes, Home screen style. The
  * built-in charts come first by default; Edit removes or drags them into a new order, and Add
- * puts back a built-in chart or charts any Home metric over time. The list is saved with the
- * home layout, so every device shows the same.
+ * puts back a built-in chart, charts any Home metric over time, or compares two metrics on one
+ * chart (one per axis). The list is saved with the home layout, so every device shows the same.
  */
 export default function Trends() {
   const { palette } = useTheme();
@@ -73,6 +79,7 @@ export default function Trends() {
   const trends = layout.trends ?? DEFAULT_TRENDS;
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [comparing, setComparing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const scrollY = useRef(0);
@@ -178,11 +185,8 @@ export default function Trends() {
   const metricChart = (id: MetricId): ReactNode => {
     const daily = dailyWindow(id, inputs, Math.min(days, 730));
     const fmt = (v: number) => formatMetric(id, v, units).text;
-    if (WEEKLY.has(id)) {
-      const weeks = new Map<string, number>();
-      for (const d of daily) if (d.value != null) weeks.set(weekStartIso(new Date(dayMs(d.date))), (weeks.get(weekStartIso(new Date(dayMs(d.date)))) ?? 0) + d.value);
-      const points: Point[] = [...weeks.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([wk, v]) => ({ x: dayMs(wk), y: v }));
-      return <LineChart height={170} series={[{ name: METRICS[id].short, color: palette.accent, points, kind: 'bars' }]} yFormat={fmt} showLegend={false} />;
+    if (WEEKLY_METRICS.has(id)) {
+      return <LineChart height={170} series={[{ name: METRICS[id].short, color: palette.accent, points: weeklyTotals(daily), kind: 'bars' }]} yFormat={fmt} showLegend={false} />;
     }
     const points: Point[] = daily.map((d) => ({ x: dayMs(d.date), y: d.value }));
     return <LineChart height={170} series={[
@@ -192,10 +196,12 @@ export default function Trends() {
   };
 
   const textOf = (id: string): { label: string; subtitle: string } => {
+    const pair = comparison(id);
+    if (pair) return compareText(pair[0], pair[1]);
     const metric = trendMetric(id);
     if (metric && isMetricId(metric)) {
       const def = METRICS[metric];
-      return { label: def.label, subtitle: WEEKLY.has(metric) ? 'Per week' : 'Daily, with a 7-day mean' };
+      return { label: def.label, subtitle: WEEKLY_METRICS.has(metric) ? 'Per week' : 'Daily, with a 7-day mean' };
     }
     const t = BUILT_IN_TEXT[id as BuiltInTrend];
     if (!t) return { label: id, subtitle: '' };
@@ -215,10 +221,27 @@ export default function Trends() {
   const reset = async () => {
     if (await confirm('Reset Trends?', 'The charts go back to the built-in set, in order.', 'Reset', true)) save({ ...layout, trends: null });
   };
+  const openCompare = () => {
+    setAdding(false);
+    // iOS will not present one sheet while another is still sliding away
+    setTimeout(() => setComparing(true), Platform.OS === 'ios' ? 400 : 0);
+  };
+  const addComparison = (id: string) => {
+    if (!trends.includes(id)) setTrends([...trends, id]);
+    // a new chart lands at the end of the list: bring it into view
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+  };
+
+  /** A card's chart: a comparison, a metric over time, or a built-in chart. */
+  const chartOf = (id: string): ReactNode => {
+    const pair = comparison(id);
+    if (pair) return <CompareChart a={pair[0]} b={pair[1]} inputs={inputs} days={days} />;
+    const metric = trendMetric(id);
+    return metric && isMetricId(metric) ? metricChart(metric) : builtIn(id as BuiltInTrend);
+  };
 
   const card = (id: string, handle: ReactNode) => {
     const { label, subtitle } = textOf(id);
-    const metric = trendMetric(id);
     return (
       <Card
         title={label}
@@ -231,7 +254,7 @@ export default function Trends() {
             </Pressable>
           </View>
         ) : undefined}>
-        {editing ? null : metric && isMetricId(metric) ? metricChart(metric) : builtIn(id as BuiltInTrend)}
+        {editing ? null : chartOf(id)}
       </Card>
     );
   };
@@ -247,7 +270,7 @@ export default function Trends() {
       refreshing={wellness.isFetching || activities.isFetching}
       onRefresh={() => { wellness.refetch(); activities.refetch(); workouts.refetch(); }}>
       {editing ? (
-        <T variant="small" tone="mut">Drag a chart by its handle to move it, ✕ removes it, and Add a trend puts back a chart or charts any metric over time.</T>
+        <T variant="small" tone="mut">Drag a chart by its handle to move it, ✕ removes it, and Add a trend puts back a chart, charts any metric over time or compares two.</T>
       ) : (
         <ChipRow>
           {RANGES.map((r) => <Chip key={r.days} label={r.label} selected={days === r.days} onPress={() => setDays(r.days)} />)}
@@ -276,7 +299,10 @@ export default function Trends() {
           <Button title="Reset to default" variant="ghost" small onPress={() => { void reset(); }} />
         </View>
       ) : (
-        <Button title="Add a trend" variant="ghost" small onPress={() => { setEditing(true); setAdding(true); }} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm }}>
+          <Button title="Add a trend" variant="ghost" small onPress={() => { setEditing(true); setAdding(true); }} />
+          <Button title="Compare two metrics" variant="ghost" small onPress={() => setComparing(true)} />
+        </View>
       )}
 
       <AddMetricSheet
@@ -287,9 +313,21 @@ export default function Trends() {
         builtInTrends={BUILT_IN_LIST}
         chartable={chartable}
         onAddTrend={(id) => { if (!trends.includes(id)) setTrends([...trends, id]); }}
+        onCompare={openCompare}
         onClose={() => setAdding(false)}
         onAdd={() => undefined}
         onPick={() => undefined}
+      />
+      <CompareBuilder
+        visible={comparing}
+        onClose={() => setComparing(false)}
+        onAdd={addComparison}
+        existing={trends}
+        chartable={chartable}
+        inputs={inputs}
+        days={days}
+        // the charts stop at two years whatever the chip says
+        rangeText={days > 730 ? 'last 2 years' : RANGES.find((r) => r.days === days)?.text ?? `last ${days} days`}
       />
     </Screen>
   );

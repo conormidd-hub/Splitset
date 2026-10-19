@@ -29,9 +29,13 @@ type Props = {
   builtInTrends?: readonly { id: string; label: string; subtitle: string }[];
   chartable?: (id: MetricId) => boolean;
   onAddTrend?: (id: string) => void;
+  /** For `trend`: opens the comparison builder (the sheet closes first). */
+  onCompare?: () => void;
 };
 
 const WIDE = 640;
+/** A search the Compare entry answers to. */
+const COMPARE_WORDS = 'compare two metrics versus vs against';
 
 /** "The lowest sustained heart rate your watch saw, usually while you slept." and no more. */
 function firstSentence(text: string): string {
@@ -44,7 +48,7 @@ function firstSentence(text: string): string {
  * reach intervals.icu greyed out and explained rather than hidden. A bottom sheet on a phone, a
  * centred card on a wide screen.
  */
-export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, onAdd, onPick, trends = [], builtInTrends = [], chartable, onAddTrend }: Props) {
+export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, onAdd, onPick, trends = [], builtInTrends = [], chartable, onAddTrend, onCompare }: Props) {
   const { palette, name } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -70,6 +74,8 @@ export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, 
     const q = query.trim().toLowerCase();
     return mode === 'trend' ? builtInTrends.filter((b) => !q || `${b.label} ${b.subtitle}`.toLowerCase().includes(q)) : [];
   }, [query, mode, builtInTrends]);
+  const search = query.trim().toLowerCase();
+  const compareShown = mode === 'trend' && !!onCompare && (!search || COMPARE_WORDS.includes(search));
 
   const close = () => {
     setQuery('');
@@ -137,6 +143,25 @@ export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, 
               />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.lg }}>
+              {compareShown ? (
+                <View style={{ marginTop: space.sm }}>
+                  <T variant="label" tone="mut" style={{ paddingVertical: space.sm }}>Compare</T>
+                  <Pressable
+                    onPress={() => { close(); onCompare?.(); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Compare two metrics"
+                    accessibilityHint="Opens a chart builder with one metric on each axis"
+                    style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, backgroundColor: palette.surface,
+                      borderRadius: radius.md, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1 })}>
+                    <SymbolView name={ICONS.compare} tintColor={palette.accent} size={20} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <T variant="h3">Compare two metrics</T>
+                      <T variant="small" tone="mut" numberOfLines={2}>Any two on one chart, one on each axis: HRV against sleep, or weekly running against resting heart rate.</T>
+                    </View>
+                    <SymbolView name={ICONS.chevron} tintColor={palette.mut} size={16} />
+                  </Pressable>
+                </View>
+              ) : null}
               {builtInsShown.length ? (
                 <View style={{ marginTop: space.sm }}>
                   <T variant="label" tone="mut" style={{ paddingVertical: space.sm }}>Charts</T>
@@ -209,7 +234,7 @@ export function AddMetricSheet({ visible, mode, slot = 'left', layout, onClose, 
                     ))}
                   </View>
                 </View>
-              )) : (
+              )) : compareShown ? null : (
                 <T tone="mut" align="center" style={{ paddingVertical: space.xl }}>Nothing matches “{query.trim()}”.</T>
               )}
             </ScrollView>

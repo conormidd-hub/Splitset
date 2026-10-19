@@ -1,22 +1,44 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Animated, Easing, Platform, Pressable, SectionList, View, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { Animated, View, useWindowDimensions, type ScrollView } from 'react-native';
 
 import { useActivities, useRunRoutes, type ActivityListRow } from '@/api/activities';
 import { useUnits } from '@/api/profile';
+import { useMuscleNames, useRecoveryMap } from '@/api/recovery';
+import { runTrendKeys, useRunDates } from '@/api/runTrends';
 import { HeatLayer, HeatLegend } from '@/components/map/HeatLayer';
 import { TileMap, type Projector } from '@/components/map/TileMap';
 import { QuickView } from '@/components/recovery/FigureBubble';
+import { FigurePair } from '@/components/recovery/FigurePair';
+import { RouteShape } from '@/components/run/RouteShape';
+import { RunMaps } from '@/components/run/RunMaps';
 import { RunRow, type RunSummary } from '@/components/run/RunRow';
+import { RunTrends } from '@/components/run/RunTrends';
+import { Bubble, ScreenTopBar } from '@/components/ui/BarButtons';
 import { Button } from '@/components/ui/Button';
+import { DateFinder, type DatedItem } from '@/components/ui/DateFinder';
 import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
+import { TabbedScreen, type TabDef } from '@/components/ui/TabbedScreen';
+import { shortTime } from '@/lib/dates';
 import { clusterByLocation, unionBbox, type MapView, type Pt } from '@/lib/geo';
 import { decodeRuns, focusBounds, nearestRoute, newestFirst, weightRoutesWithGroups, type DecodedRun } from '@/lib/heat';
-import { formatDistance, formatDuration } from '@/lib/units';
+import { ICONS } from '@/lib/icons';
+import { mostTired } from '@/lib/recovery/screens';
+import { useUserId } from '@/lib/session';
+import { formatDistance, formatDuration, type Units } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
+
+type Tab = 'history' | 'trends' | 'maps';
+
+const TABS: readonly TabDef<Tab>[] = [
+  { key: 'history', label: 'History', icon: 'history' },
+  { key: 'trends', label: 'Trends', icon: 'chart' },
+  { key: 'maps', label: 'Maps', icon: 'map' },
+];
 
 type Section = { title: string; data: RunSummary[] };
 
@@ -45,30 +67,45 @@ const fromRoute = (r: DecodedRun): RunSummary => ({
   moving_time_s: r.moving_time_s, avg_hr: r.avg_hr, elev_gain_m: r.elev_gain_m,
 });
 
+const runsWord = (n: number) => (n === 1 ? 'run' : 'runs');
+
 /**
- * The Run tab. The map of where this user runs most sits on top, every route coloured by how
- * often it is run; the run history scrolls beneath it, newest first, in month sections. Tapping a
- * route on the map narrows the history to that route and shows its numbers; tapping a run expands
- * its headline stats, eases the map to it, and offers the full stats screen. Runs only.
+ * The Run tab, laid out like Strava's You screen: a bar of round buttons (plan a route, all
+ * activity, find a run by date, recovery), the map of where this user runs most as the hero, every
+ * route coloured by how often it is run, then History, Trends and Maps tabs that stick under the
+ * bar as the map scrolls away under the faded top. Tapping a route on the map narrows the history
+ * to that route; tapping a run expands its headline stats, eases the map to it, and offers the full
+ * stats screen. (The old mini map that followed the page is gone, by Conor's choice: the bar's
+ * buttons took its place.)
  */
 export default function RunHome() {
   const { palette } = useTheme();
   const units = useUnits();
+  const uid = useUserId();
+  const qc = useQueryClient();
   const { height: windowH } = useWindowDimensions();
+  const [tab, setTab] = useState<Tab>('history');
   /** The run tapped on the map; its route group is derived, so a refetch that re-keys groups cannot strand the selection. */
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [view, setView] = useState<MapView | null>(null);
-  // scrolled past the map: it waits top-right as a mini map, and opens larger when tapped
-  const [mapBottom, setMapBottom] = useState(0);
-  const [scrolled, setScrolled] = useState(false);
-  const [large, setLarge] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [peeking, setPeeking] = useState(false);
+  // a chart lifted in Trends' edit mode holds the page still
+  const [dragging, setDragging] = useState(false);
+  // the bar's title fades as the page scrolls; the offset also lets a dragged chart scroll the page
+  const [scrollFade] = useState(() => new Animated.Value(0));
+  const titleOpacity = useMemo(() => scrollFade.interpolate({ inputRange: [0, 48], outputRange: [1, 0], extrapolate: 'clamp' }), [scrollFade]);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollY = useRef(0);
   const history = useActivities('runs');
   const routesQ = useRunRoutes();
+  const dates = useRunDates();
 
   const decoded = useMemo(() => decodeRuns(routesQ.data), [routesQ.data]);
   const { routes: heat, groups } = useMemo(() => weightRoutesWithGroups(decoded), [decoded]);
-  const traced = useMemo(() => new Set(heat.map((r) => r.activity_id)), [heat]);
+  // each run's trace by id, for the shapes in the history and its "On the map" badge
+  const tracks = useMemo(() => new Map(decoded.map((r) => [r.activity_id, r])), [decoded]);
   // the biggest cluster of runs is "home"; clusterByLocation sorts by size
   const home = useMemo(() => clusterByLocation(decoded, (r) => r.box)[0] ?? null, [decoded]);
 
@@ -90,196 +127,207 @@ export default function RunHome() {
     () => (expanded ? [expanded.pts] : routeRuns.length ? routeRuns.map((r) => r.pts) : null),
     [expanded, routeRuns],
   );
-  const mapHeight = Math.round(Math.min(240, Math.max(170, windowH * 0.26)));
+  const mapHeight = Math.round(Math.min(260, Math.max(180, windowH * 0.3)));
+
+  const calendar = useMemo<DatedItem[]>(() => (dates.data ?? []).map((r) => ({
+    id: r.id,
+    date: r.start_time_local.slice(0, 10),
+    title: r.name ?? 'Run',
+    subtitle: r.moving_time_s != null ? `${shortTime(r.start_time_local)} · ${formatDuration(r.moving_time_s)}` : shortTime(r.start_time_local),
+    value: formatDistance(r.distance_m, units),
+  })), [dates.data, units]);
 
   const onMapPress = (pt: Pt, project: Projector, cam: MapView) => {
     const hit = nearestRoute(heat, project, cam, pt);
     const nextKey = hit?.group ?? null;
     setExpandedId(null);
     setPickedId(hit?.activity_id ?? null);
+    // a picked route narrows the history, so show it
+    if (hit) setTab('history');
     // a missed tap keeps the view the user zoomed to; a changed selection reframes
     if (nextKey !== routeKey) setView(null);
   };
-  const toggleRun = (id: string) => {
+  // stable, so the memoised rows only redraw when their own run changes
+  const toggleRun = useCallback((id: string) => {
     setExpandedId((cur) => (cur === id ? null : id));
     setView(null);
-  };
+  }, []);
+  const openRun = useCallback((id: string) => router.push(`/run/${id}`), []);
   const clearRoute = () => {
     setPickedId(null);
     setExpandedId(null);
     setView(null);
   };
 
-  const runsWord = (n: number) => (n === 1 ? 'run' : 'runs');
   const loadingHistory = routeKey ? routesQ.isLoading : history.isLoading;
   const historyError = routeKey ? routesQ.error : history.error;
 
-  return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
-      <View style={{ paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.sm }}>
-        {/* as tall as the mini map, so the row holds still when it appears */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: space.md, minHeight: 64 }}>
-          <View>
-            <T variant="label" tone="mut">{route ? 'This route' : 'Where you run'}</T>
-            <T variant="display">Run</T>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.sm }}>
-            {scrolled && bounds ? (
-              <FlyIn>
-              <Pressable
-                onPress={() => setLarge(true)}
-                accessibilityRole="button"
-                accessibilityLabel={expanded ? 'Map of this run, larger' : route ? 'Map of this route, larger' : 'Map of your runs, larger'}
-                style={({ pressed }) => ({ width: 96, height: 64, borderRadius: radius.md, overflow: 'hidden', borderWidth: 1.5,
-                  borderColor: palette.accent, opacity: pressed ? 0.85 : 1 })}>
-                <View pointerEvents="none">
-                  <TileMap bounds={bounds} height={64} padding={6} compact>
-                    {(project, size, cam) => (
-                      <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
-                    )}
-                  </TileMap>
-                </View>
-              </Pressable>
-              </FlyIn>
-            ) : null}
-            <Button title="Maps" variant="secondary" small onPress={() => router.push('/run/heatmap')} />
-          </View>
+  const topBar = (
+    <ScreenTopBar
+      centreOpacity={titleOpacity}
+      centre={<T variant="h2" weight="800">Run</T>}
+      left={
+        <>
+          <Bubble label="Plan a route" hint="Opens the route planner" onPress={() => router.push('/run/routes/new')}>
+            <SymbolView name={ICONS.plus} tintColor={palette.ink2} size={21} />
+          </Bubble>
+          {/* the all-activity screen */}
+          <Bubble label="All activity" hint="Every activity, newest first" onPress={() => router.push('/history')}>
+            <SymbolView name={ICONS.history} tintColor={palette.ink2} size={21} />
+          </Bubble>
+        </>
+      }
+      right={
+        <>
+          <Bubble label="Find a run by date" hint="Opens a calendar of your runs" onPress={() => setFinding(true)}>
+            <SymbolView name={ICONS.calendar} tintColor={palette.ink2} size={21} />
+          </Bubble>
+          <Bubble label="Recovery, quick view" onPress={() => setPeeking(true)}>
+            <SymbolView name={ICONS.body} tintColor={palette.accent} size={21} />
+          </Bubble>
+        </>
+      }
+    />
+  );
+
+  const hero = (
+    <View style={{ gap: space.sm }}>
+      {routesQ.isLoading ? (
+        <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
+          <Loading label="Loading your routes" />
         </View>
-
-      </View>
-
-      <SectionList
-        sections={sections}
-        keyExtractor={(r) => r.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, paddingBottom: space.xxl }}
-        stickySectionHeadersEnabled={false}
-        extraData={expandedId}
-        renderSectionHeader={({ section }) => (
-          <View style={{ marginTop: space.sm }}>
-            <T variant="label" tone="mut" style={{ marginBottom: space.sm }}>{section.title}</T>
-            <View style={{ height: radius.lg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: palette.surface, marginBottom: -radius.lg }} />
-          </View>
-        )}
-        renderSectionFooter={() => (
-          <View style={{ height: radius.lg, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, backgroundColor: palette.surface }} />
-        )}
-        renderItem={({ item, index }) => (
-          <RunRow
-            run={item}
-            units={units}
-            first={index === 0}
-            expanded={item.id === expandedId}
-            onMap={traced.has(item.id)}
-            onToggle={() => toggleRun(item.id)}
-            onOpen={() => router.push(`/run/${item.id}`)}
-          />
-        )}
-        onScroll={(e) => {
-          const past = mapBottom > 0 && e.nativeEvent.contentOffset.y > mapBottom - 24;
-          if (past !== scrolled) setScrolled(past);
-          if (!past && large) setLarge(false);
-        }}
-        scrollEventThrottle={16}
-        ListHeaderComponent={
-          <View style={{ gap: space.sm }}>
-            <View style={{ gap: space.sm }} onLayout={(e) => setMapBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-          {routesQ.isLoading ? (
-            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
-              <Loading label="Loading your routes" />
-            </View>
-          ) : routesQ.error ? (
-            <ErrorBanner message={errorMessage(routesQ.error)} />
-          ) : bounds ? (
-            <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
-              {(project, size, cam) => (
-                <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
-              )}
-            </TileMap>
-          ) : (
-            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
-              <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
-            </View>
+      ) : routesQ.error ? (
+        <ErrorBanner message={errorMessage(routesQ.error)} />
+      ) : bounds ? (
+        <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
+          {(project, size, cam) => (
+            <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
           )}
+        </TileMap>
+      ) : (
+        <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
+          <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
+        </View>
+      )}
 
-          {bounds ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 28 }}>
-              {route ? (
-                <>
-                  <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-                    {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
-                    {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
-                  </T>
-                  <Button title="All runs" variant="ghost" small onPress={clearRoute} />
-                </>
-              ) : (
-                <>
-                  <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
-                    {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
-                  </T>
-                  <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
-                </>
-              )}
-            </View>
-          ) : null}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md }}>
-              <T variant="h3">{route ? 'Runs on this route' : 'Your runs'}</T>
-              <T variant="tiny" tone="mut">{route ? 'Tap a run for its stats' : 'Tap a route on the map, or a run'}</T>
-            </View>
+      {bounds ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 28 }}>
+          {route ? (
+            <>
+              <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+                {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
+                {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
+              </T>
+              <Button title="All runs" variant="ghost" small onPress={clearRoute} />
+            </>
+          ) : (
+            <>
+              <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+                {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
+              </T>
+              <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
+            </>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <TabbedScreen
+      topBar={topBar}
+      hero={hero}
+      tabs={TABS}
+      tab={tab}
+      onTab={setTab}
+      scrollEnabled={!dragging}
+      scrollRef={scrollRef}
+      onScroll={(e) => {
+        const y = e.nativeEvent.contentOffset.y;
+        scrollY.current = y;
+        scrollFade.setValue(y);
+      }}
+      onEndReached={() => {
+        if (tab === 'history' && !routeKey && history.hasNextPage && !history.isFetchingNextPage) history.fetchNextPage();
+      }}
+      refreshing={history.isRefetching || routesQ.isRefetching}
+      onRefresh={() => {
+        history.refetch();
+        routesQ.refetch();
+        dates.refetch();
+        qc.invalidateQueries({ queryKey: runTrendKeys.allRows(uid) });
+      }}
+      overlay={
+        <>
+          <DateFinder visible={finding} onClose={() => setFinding(false)} title="Find a run" items={calendar} onOpen={openRun}
+            empty={dates.isLoading ? 'Loading your runs' : 'No runs yet'} />
+          {/* mounted only while open, so the Run tab never loads the recovery model unasked */}
+          {peeking ? <RecoveryPeek onClose={() => setPeeking(false)} /> : null}
+        </>
+      }>
+      {tab === 'history' ? (
+        <>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, minHeight: 32 }}>
+            <T variant="h3">{route ? 'Runs on this route' : 'Your runs'}</T>
+            {route ? <Button title="All runs" variant="ghost" small onPress={clearRoute} />
+              : <T variant="tiny" tone="mut">Tap a route on the map, or a run</T>}
           </View>
-        }
-        ListFooterComponent={!routeKey && history.isFetchingNextPage ? <Loading /> : null}
-        ListEmptyComponent={
-          loadingHistory ? <Loading label="Loading runs" /> : historyError ? <ErrorBanner message={errorMessage(historyError)} /> : (
+          {sections.length ? sections.map((s) => (
+            <View key={s.title} style={{ gap: space.sm }}>
+              <T variant="label" tone="mut">{s.title}</T>
+              <View style={{ borderRadius: radius.lg, overflow: 'hidden', borderWidth: 1, borderColor: palette.hair, backgroundColor: palette.surface }}>
+                {s.data.map((r, i) => (
+                  <HistoryRow key={r.id} run={r} track={tracks.get(r.id) ?? null} units={units} first={i === 0}
+                    expanded={r.id === expandedId} onToggle={toggleRun} onOpen={openRun} />
+                ))}
+              </View>
+            </View>
+          )) : loadingHistory ? <Loading label="Loading runs" /> : historyError ? <ErrorBanner message={errorMessage(historyError)} /> : (
             <EmptyState title="No runs yet" body="Runs appear after the first sync from intervals.icu." />
-          )
-        }
-        onEndReached={() => {
-          if (!routeKey && history.hasNextPage && !history.isFetchingNextPage) history.fetchNextPage();
-        }}
-        onEndReachedThreshold={0.5}
-        refreshing={history.isRefetching || routesQ.isRefetching}
-        onRefresh={() => {
-          history.refetch();
-          routesQ.refetch();
-        }}
-      />
-
-      {/* the mini map, opened larger: the same map, interactive; a tap outside shrinks it back */}
-      <QuickView visible={large && !!bounds} onClose={() => setLarge(false)} title="Map">
-        {bounds ? (
-          <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={Math.round(Math.min(320, windowH * 0.4))} onPress={onMapPress}>
-            {(project, size, cam) => (
-              <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
-            )}
-          </TileMap>
-        ) : null}
-        <T variant="small" tone="mut" numberOfLines={1}>
-          {expanded ? expanded.name ?? 'This run' : route ? `${route.count} ${runsWord(route.count)} on this route` : 'Every route, coloured by how often you run it'}
-        </T>
-      </QuickView>
-    </SafeAreaView>
+          )}
+          {!routeKey && history.isFetchingNextPage ? <Loading /> : null}
+        </>
+      ) : tab === 'trends' ? (
+        <RunTrends scroll={{ ref: scrollRef, y: scrollY }} onDragChange={setDragging} />
+      ) : (
+        <RunMaps decoded={decoded} weighted={heat} groups={groups} />
+      )}
+    </TabbedScreen>
   );
 }
 
-/** The mini map arriving: it flies up from where the full map sat and shrinks into its window. */
-function FlyIn({ children }: { children: ReactNode }) {
-  const [t] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: 340, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }).start();
-  }, [t]);
+/** One run in the history with its route shape; memoised, so expanding one run redraws only it. */
+const HistoryRow = memo(function HistoryRow({ run, track, units, first, expanded, onToggle, onOpen }: {
+  run: RunSummary; track: DecodedRun | null; units: Units; first: boolean; expanded: boolean;
+  onToggle: (id: string) => void; onOpen: (id: string) => void;
+}) {
   return (
-    <Animated.View
-      style={{
-        opacity: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0.85, 1] }),
-        transform: [
-          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-110, 0] }) },
-          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [150, 0] }) },
-          { scale: t.interpolate({ inputRange: [0, 1], outputRange: [3.4, 1] }) },
-        ],
-      }}>
-      {children}
-    </Animated.View>
+    <RunRow
+      run={run}
+      units={units}
+      first={first}
+      expanded={expanded}
+      onMap={!!track}
+      onToggle={() => onToggle(run.id)}
+      onOpen={() => onOpen(run.id)}
+      leading={<RouteShape track={track} />}
+    />
+  );
+});
+
+/** The Recovery button's quick view: the recovery figure, the most tired muscles, and the way to the full screen. */
+function RecoveryPeek({ onClose }: { onClose: () => void }) {
+  const map = useRecoveryMap();
+  const names = useMuscleNames();
+  const tired = map.data ? mostTired(map.data, 2) : [];
+  const tiredText = tired.length ? tired.map((id) => `${names(id)} (${map.data![id].label.toLowerCase()})`).join(', ') : 'Every muscle is ready';
+  return (
+    <QuickView visible onClose={onClose} title="Recovery">
+      <T variant="h3">Recovery</T>
+      {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels />
+        : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <Loading label="Loading your recovery" />}
+      {map.data ? <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T> : null}
+      <Button title="Open Recovery" small variant="secondary" onPress={() => { onClose(); router.push('/lift/recovery'); }} />
+    </QuickView>
   );
 }

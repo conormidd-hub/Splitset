@@ -5,7 +5,9 @@ import { Animated, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
+import { useLatestActivities } from '@/api/history';
 import { DEFAULT_LAYOUT, RECOVERY, useHomeLayout, type FocusId } from '@/api/home';
+import { resetHome } from '@/lib/homeLayout';
 import { useWorkouts } from '@/api/lifting';
 import { useLiftPbs, useRunPbs } from '@/api/pbs';
 import { usePlanRange } from '@/api/plan';
@@ -15,6 +17,7 @@ import { useWellness } from '@/api/wellness';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
 import { InFocusPair, type FocusContent, type FocusSlot } from '@/components/home/InFocusCard';
+import { LatestActivities } from '@/components/home/LatestActivities';
 import { PlanStrip } from '@/components/home/PlanStrip';
 import { TodayTopBar } from '@/components/home/TopBar';
 import { StreakDashes } from '@/components/home/StreakDashes';
@@ -23,16 +26,13 @@ import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Chip';
-import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
-import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
+import { longDate, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
 import { daysTrainedLast7, sessionsFrom, weekStreak } from '@/lib/streaks';
-import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { space } from '@/theme/tokens';
 
@@ -64,7 +64,7 @@ export default function Today() {
   const today = todayIso();
   const plan = usePlanRange(today, today);
   const active = useActiveWorkout((s) => s.workout);
-  const lastLift = workouts.data?.[0];
+  const latest = useLatestActivities(3);
   const { layout, loaded, save, saving, error: saveError } = useHomeLayout();
   // the top bar's wordmark fades as the page scrolls
   const [topFade] = useState(() => new Animated.Value(0));
@@ -94,6 +94,7 @@ export default function Today() {
     recent.refetch();
     wellness.refetch();
     workouts.refetch();
+    latest.refetch();
     training.refetch();
     qc.invalidateQueries({ queryKey: ['pbs'] });
     syncRuns.refetch();
@@ -160,7 +161,7 @@ export default function Today() {
   const removeGlance = (id: MetricId) => save({ ...layout, glance: layout.glance.filter((g) => g !== id) });
   const reorderGlance = (glance: MetricId[]) => save({ ...layout, glance });
   const resetLayout = async () => {
-    if (await confirm('Reset the home screen?', 'In focus and At a glance go back to the defaults.', 'Reset', true)) save(DEFAULT_LAYOUT);
+    if (await confirm('Reset the home screen?', 'In focus and At a glance go back to the defaults.', 'Reset', true)) save(resetHome(layout, DEFAULT_LAYOUT));
   };
 
   const focusLeft = useMemo<FocusContent>(() => (layout.focus ? { kind: 'metric', snapshot: snapshot(layout.focus, inputs) } : null), [layout.focus, inputs]);
@@ -173,7 +174,6 @@ export default function Today() {
     sessions: snapshot('sessions', inputs),
     time: snapshot('weekly_time', inputs),
   }), [inputs]);
-  const last = recent.data?.length ? recent.data[recent.data.length - 1] : null;
 
   const conn = connection.data;
   const name = profile.data?.display_name ?? '';
@@ -250,45 +250,8 @@ export default function Today() {
         </Grid>
       </Card>
 
-      {last ? (
-        <Card title="Latest activity">
-          <ListRow
-            first
-            title={last.name ?? last.type}
-            subtitle={`${relativeDay(last.start_time_local)} · ${shortTime(last.start_time_local)}`}
-            badge={<Badge label={last.type} />}
-            value={last.distance_m ? formatDistance(last.distance_m, units) : formatDuration(last.moving_time_s)}
-            valueSub={last.distance_m ? formatPace(secPerKm(last.distance_m, last.moving_time_s), units) : undefined}
-            onPress={() => router.push(`/run/${last.id}`)}
-          />
-        </Card>
-      ) : null}
-
-      <Card title="Lifting" right={<Button title="Lift" variant="ghost" small onPress={() => router.push('/lift')} />}>
-        {active ? (
-          <ListRow
-            first
-            title="Workout in progress"
-            subtitle={`${active.name} · started ${shortTime(active.startedAt)} · ${active.exercises.length} exercise${active.exercises.length === 1 ? '' : 's'}`}
-            badge={<Badge label="live" tone="accent" />}
-            onPress={() => router.push('/lift/workout')}
-          />
-        ) : lastLift ? (
-          <ListRow
-            first
-            title={lastLift.name ?? 'Workout'}
-            subtitle={`${relativeDay(lastLift.started_at)} · ${formatDurationShort(lastLift.duration_s)} · ${lastLift.sets_completed ?? 0} sets`}
-            value={lastLift.volume_kg ? formatWeight(lastLift.volume_kg, units, 0) : undefined}
-            valueSub={lastLift.volume_kg ? 'volume' : undefined}
-            onPress={() => router.push(`/lift/history/${lastLift.id}`)}
-          />
-        ) : (
-          <View style={{ gap: 12 }}>
-            <T tone="mut">No workouts logged yet. Routines, sets, the rest timer and records live in the Lift tab.</T>
-            <Button title="Start a workout" variant="secondary" small onPress={() => router.push('/lift')} />
-          </View>
-        )}
-      </Card>
+      {/* the newest few runs, rides and gym workouts (a live workout first), dropping open to the last three */}
+      <LatestActivities items={latest.data ?? []} active={active} units={units} loading={latest.isLoading} failed={latest.isError} />
 
       {/* the recovery figure is already up top when it's the right In focus tile */}
       {layout.focus2 === RECOVERY ? null : <RecoveryHomeCard />}

@@ -2,12 +2,12 @@ import { Tabs } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ColorValue } from 'react-native';
 
+import { SplitsetMark } from '@/components/ui/SplitsetMark';
 import { useTheme } from '@/theme/ThemeProvider';
 
 type IconName = SymbolViewProps['name'];
 
 const icons = {
-  today: { ios: 'house.fill', android: 'home', web: 'home' },
   plan: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
   lift: { ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' },
   run: { ios: 'figure.run', android: 'directions_run', web: 'directions_run' },
@@ -24,6 +24,11 @@ function tabIcon(name: IconName) {
   return Icon;
 }
 
+/** Today wears the Splitset mark's two dashes rather than a house, tinted like the other tabs. */
+function TodayIcon({ color }: { color: ColorValue }) {
+  return <SplitsetMark size={24} color={color} />;
+}
+
 export default function AppTabs() {
   const { palette } = useTheme();
   return (
@@ -35,7 +40,7 @@ export default function AppTabs() {
         tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.hair },
         sceneStyle: { backgroundColor: palette.bg },
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: tabIcon(icons.today) }} />
+      <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: TodayIcon }} />
       <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: tabIcon(icons.plan) }} />
       <Tabs.Screen name="lift" options={{ title: 'Lift', tabBarIcon: tabIcon(icons.lift) }} />
       <Tabs.Screen name="run" options={{ title: 'Run', tabBarIcon: tabIcon(icons.run) }} />

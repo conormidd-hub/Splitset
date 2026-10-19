@@ -1949,3 +1949,79 @@ Follow-up · 2026-10-19, from Conor's wordmark image.
    - The tint is the Image's `tintColor` prop (the web warns that `style.tintColor` is deprecated).
 3. **Size:** the source's proportions, up to 16 pt tall, shrinking to fit the space between the button pairs.
 4. **Checked (375 pt, dark):** both halves render with the right colours, the wordmark's opacity reaches 0 after a scroll, and no new console warnings appeared. `npm test` passes 277 tests, and the type check and lint are clean.
+
+## 35. Lift and Run in the Strava "You" layout, an all-activity History, and comparisons on Trends
+
+Follow-up · 2026-10-19, from Conor's list of changes. His choices:
+
+- History is reachable from Today and from a History button on Lift and Run;
+- Run's bar has + route, Calendar and Recovery;
+- a comparison is two metrics on two axes;
+- the old ✕ (tuck the figure away) and Run's mini map are dropped.
+
+1. **Shared pieces** (each screen is built from these):
+   - **`ScreenTopBar` and `Bubble`** (`components/ui/BarButtons.tsx`): Today's round see-through buttons, now one component. The fade under the bar gets a unique SVG id per bar, since Today, Lift and Run all stay mounted on the web.
+   - **`TabbedScreen`:** one scroll view holding the hero (the figure or map), a row of icon tabs and the open tab.
+     - **Scrolling:** the hero scrolls up under the faded bar, and the tab row sticks under the bar (`stickyHeaderIndices`) on a strip of page colour, with the page fading again beneath it.
+     - **Switching tabs:** the new tab slides in from the side it was picked on, and the underline follows.
+     - **Always sticks:** each tab's content is at least a screen tall, so the row can always reach the bar.
+     - **Keyboard:** it handles the keyboard the way `Screen` does.
+   - **`DateFinder`:** a Monday-first month calendar with a dot on each logged day. One activity on a day opens it; several are listed.
+   - **`PickSheet`:** a searchable bottom sheet of choices.
+   - **`EditableCharts`:** the Home-style Edit, drag, ✕, Add and Reset list of chart cards.
+2. **The saved layout** (`home_layout` on the profile, no migration) adds:
+   - **`liftTrends`:** `x:<exercise id>:<e1rm|heaviest|volume|reps>`;
+   - **`runTrends`:** from `RUN_TRENDS`;
+   - **comparisons:** `c:<metric>,<metric>` in `trends`.
+
+   Null means the defaults. Today's "Reset to default" now resets only In focus and At a glance (`resetHome`); it used to wipe the chart lists too.
+3. **Today:**
+   - **Tab icon:** the Splitset mark, drawn as two slanted dashes (`SplitsetMark`).
+   - **Streak flame:** drawn as a solid SVG flame, with the count in dark ink across its body. It barely grows with the system text size.
+   - **Lifting card:** removed.
+   - **Latest activity:** shows the newest item; its chevron drops open the last three and a More row to History. A workout in progress sits on top, marked live, and whether the card was left open is remembered on the device (`layoutPrefs.latestExpanded`, which replaces the old `liftFigureCollapsed`).
+4. **History (`app/history.tsx`):** every synced activity and every app workout, newest first, in month cards, with chips for All, Runs, Lifts, Rides and Other.
+   - **Paging:** a cursor over both lists (`cutPage`), so the merge never leaves gaps.
+   - **Strength sessions recorded twice:** when the watch recorded a strength session the app also logged (linked by the sync, or within 45 minutes), it shows once, as the app workout.
+   - **Failures:** a failed older page shows an error with a Try again button.
+5. **Lift:**
+   - **Bar:** + (New routine, New routine group, New exercise) and History on the left; a Recovery button (a tiny body figure) and the workout calendar on the right.
+   - **Hero:** the recovery figure.
+   - **Tabs:**
+     - **Routines** is as before, with an Exercise library link.
+     - **History** is the workouts by month, 30 at a time.
+     - **Trends** follows the Strong pattern: one point per finished workout per lift, measured as best e1RM (the stored set e1RM, as the PBs use), heaviest, volume or reps. Warm-ups don't count. It defaults to the barbell squat, bench, deadlift and overhead press where logged.
+     - **PBs** uses the same component as the /pbs screen.
+6. **Run:**
+   - **Bar:** + (route planner) and History on the left; Calendar and Recovery on the right.
+   - **Hero:** the interactive heat map, which works as before. Picking a route also switches to History.
+   - **Tabs:**
+     - **History:** each run has a small green outline of its GPS route (`RouteShape`; a dimmed run icon without GPS).
+     - **Trends:** 13 editable charts. The defaults are weekly distance, weekly time, heart-rate zones (stacked hours per week), heart rate per run, cadence and pace. Weekly charts start on a whole week.
+     - **Maps:** the heat map hub (range chips, frequent routes, links to Planned routes, Segments and the full-screen map), shared with `/run/heatmap`.
+7. **Trends:** keeps its defaults and its editing. The new **Compare two metrics** builder picks a left and a right metric, previews them and adds a card.
+   - **What it draws:** each metric's 7-day mean, or weekly totals from a whole first week, on its own axis. `LineChart` gained an optional right axis; charts without one draw as before.
+   - **Limit:** "All" is capped at two years, as the single-metric charts are.
+8. **Checked** (375 pt, dark, demo account):
+   - every screen and tab rendered;
+   - the tab row sticks and the hero fades under the bar on Lift and Run;
+   - the drop-down opens to three plus More;
+   - History pages back through September;
+   - the calendar marks the workout days;
+   - the comparison preview draws two axes, closed without saving;
+   - the console was clean;
+   - `npm test`: 314 tests; the type check and lint are clean.
+
+   A review pass (one reviewer per area, then fixers) found and fixed these:
+   - Today's reset wiping the chart lists;
+   - folded drop-down rows still reachable by Tab on the web;
+   - History's square card tops;
+   - a refetch being cancelled by paging;
+   - the keyboard covering Lift's "Find a lift";
+   - shared SVG gradient ids;
+   - part-week first bars in Run Trends;
+   - a placeholder range charted over the wrong span.
+
+   One fixer brought back Run's mini map; I took it out again, per Conor's choice.
+
+   Not checked: the light theme, and anything on a device. Sync wasn't pressed.

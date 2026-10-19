@@ -75,6 +75,8 @@ function RootNavigator() {
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
           {/* above the tabs: reached from Today, Lift and the workout sheet alike */}
           <Stack.Screen name="pbs" options={{ headerShown: true, title: 'Personal bests', ...header }} />
+          {/* every activity and gym workout: from Today's Latest activity card and the Lift and Run tabs */}
+          <Stack.Screen name="history" options={{ headerShown: true, title: 'History', ...header }} />
           {/* one metric, opened from an In focus or At a glance tile; the page sets its own title */}
           <Stack.Screen name="metric/[id]" options={{ headerShown: true, title: '', ...header }} />
         </Stack.Protected>
