@@ -43,6 +43,7 @@ export const ICONS = {
   edit:      { ios: 'pencil',                    android: 'edit',                  web: 'edit' },
   tune:      { ios: 'slider.horizontal.3',       android: 'tune',                  web: 'tune' },
   settings:  { ios: 'gear',                      android: 'settings',              web: 'settings' },
+  sync:      { ios: 'arrow.triangle.2.circlepath', android: 'sync',                web: 'sync' },
 } as const satisfies Record<string, IconName>;
 
 export type IconKey = keyof typeof ICONS;

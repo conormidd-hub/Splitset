@@ -17,7 +17,7 @@ import { GlanceGrid } from '@/components/home/GlanceGrid';
 import { InFocusPair, type FocusContent, type FocusSlot } from '@/components/home/InFocusCard';
 import { PlanStrip } from '@/components/home/PlanStrip';
 import { TodayTopBar } from '@/components/home/TopBar';
-import { StreakHeat } from '@/components/home/StreakHeat';
+import { StreakDashes } from '@/components/home/StreakDashes';
 import { RecoveryHomeCard } from '@/components/recovery/RecoveryHomeCard';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
@@ -31,7 +31,7 @@ import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
 import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
-import { sessionsFrom, sessionsLast7, weekStreak } from '@/lib/streaks';
+import { daysTrainedLast7, sessionsFrom, weekStreak } from '@/lib/streaks';
 import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { space } from '@/theme/tokens';
@@ -86,7 +86,7 @@ export default function Today() {
     () => sessionsFrom(training.data?.activities ?? [], training.data?.workouts ?? [], units),
     [training.data, units],
   );
-  const heatCount = sessionsLast7(sessions, today);
+  const daysTrained = daysTrainedLast7(sessions, today);
   const streak = weekStreak(sessions, today, training.data?.oldest);
 
   const refreshing = recent.isFetching || wellness.isFetching;
@@ -190,11 +190,14 @@ export default function Today() {
         scrollY.current = e.nativeEvent.contentOffset.y;
         topFade.setValue(e.nativeEvent.contentOffset.y);
       }}>
-      <View style={{ paddingTop: space.xs }}>
-        <T variant="label" tone="mut">{longDate(new Date().toISOString())}</T>
-        <T variant="display">{name ? `${greeting()}, ${name}` : greeting()}</T>
+      {/* the greeting, with the last seven days as dashes beside it: compact, so the page starts higher */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.md, paddingTop: space.xs }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="label" tone="mut">{longDate(new Date().toISOString())}</T>
+          <T variant="h1" numberOfLines={2}>{name ? `${greeting()}, ${name}` : greeting()}</T>
+        </View>
+        {training.isSuccess ? <StreakDashes days={daysTrained} /> : null}
       </View>
-      {training.isSuccess ? <StreakHeat count={heatCount} style={{ marginTop: -space.sm }} /> : null}
       {/* today's plan, thin, straight under the streak */}
       <PlanStrip sessions={planToday} loaded={plan.isSuccess} units={units} />
       {connection.isSuccess && !conn ? (

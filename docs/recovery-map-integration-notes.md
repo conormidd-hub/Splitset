@@ -1908,3 +1908,31 @@ Follow-up · 2026-10-19, from Conor's request.
    - `npm test`: 277 tests; the type check and lint are clean.
 
    The hidden browser pane cropped screenshots of the bar's right end, so the flame was checked in the page rather than by eye.
+
+## 33. Streak dashes beside the greeting, a Sync button, and roomier top-bar buttons
+
+Follow-up · 2026-10-19, from Conor's mock-up.
+
+1. **The greeting row saves space.**
+   - **Left:** the date and the greeting, which wraps to two lines at most.
+   - **Right:** seven slanted dashes (`StreakDashes`) with "6/7 streak heat" under them.
+   - **What lights a dash:** a day trained in the last seven, however many sessions it held (`daysTrainedLast7`). Lit dashes take the accent green, left to right; when the screen opens they ignite one after another (70 ms apart).
+   - **What goes:** the flickering flame line under the greeting (`StreakHeat`) is removed.
+2. **The top-bar buttons are 44 pt** (were 40), with a see-through fill (the surface colour at 55%; `withAlpha` in tokens). Their icons went up to 21 pt.
+3. **The streak count sits in the middle of the flame's body,** centred left to right and 4 pt below the middle.
+   - **Colour:** the theme's text colour.
+   - **Why:** the web's flame icon has a hollow core, and a dark number vanished into it; the text colour reads there and on the iPhone's solid flame.
+   - **Size:** 12 pt, or 10 pt for three characters ("52+").
+4. **Sync, beside the Settings cog.**
+   - **What it runs:** the same sync as "Sync now" at the bottom of Today (`useSyncNow`).
+   - **While it runs:** it spins.
+   - **If it fails:** its icon turns red.
+   - **The wordmark stays centred:** two buttons on each side.
+5. **Checked (375 pt, dark):**
+   - the buttons sit at 16, 68, 263 and 315 pt, at 44 pt each;
+   - "54" is white and readable inside the flame;
+   - the dashes read 6 of 7;
+   - the console was clean;
+   - `npm test`: 277 tests; the type check and lint are clean.
+
+   Sync wasn't pressed in testing, since it starts a real run.
