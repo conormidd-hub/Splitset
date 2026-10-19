@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Image, View } from 'react-native';
 
 import { useTheme } from '@/theme/ThemeProvider';
-import { palettes } from '@/theme/tokens';
 
 // Conor's SPLITSET wordmark (assets/images/wordmark.png), cut by colour into two masks so each
 // half takes the theme's colour: SPLIT and SET, at the source's own proportions.
@@ -16,13 +15,10 @@ const CREAM = '#fdf6e9';
 /**
  * The SPLITSET wordmark, as wide as the space it is given allows, up to `maxHeight` tall. SPLIT is
  * cream on a dark theme and the text colour on a light one (cream would vanish there); SET is the
- * accent green. `onDark` keeps the dark theme's colours whatever the theme (the launch screen is
- * always black).
+ * accent green.
  */
-export function Wordmark({ maxHeight = 16, onDark = false }: { maxHeight?: number; onDark?: boolean }) {
-  const theme = useTheme();
-  const name = onDark ? 'night' : theme.name;
-  const palette = onDark ? palettes.night : theme.palette;
+export function Wordmark({ maxHeight = 16 }: { maxHeight?: number }) {
+  const { palette, name } = useTheme();
   const [width, setWidth] = useState(0);
   const h = width ? Math.min(maxHeight, width / ASPECT) : 0;
   const k = h / SRC.height;
