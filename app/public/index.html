@@ -44,6 +44,21 @@
         height: 100%;
         flex: 1;
       }
+      /* the launch screen's first frame, drawn while the app's script downloads: the logo on
+         black, sized and placed as src/components/splash/LaunchSplash.tsx draws it; React
+         replaces it when it mounts */
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #000000;
+      }
+      #boot img {
+        width: min(80vw, 340px);
+        height: min(80vw, 340px);
+      }
     </style>
   </head>
 
@@ -51,6 +66,6 @@
     <noscript>
       You need to enable JavaScript to run this app.
     </noscript>
-    <div id="root"></div>
+    <div id="root"><div id="boot"><img src="/splash-logo.png" alt="" /></div></div>
   </body>
 </html>
