@@ -42,6 +42,20 @@ export const ICONS = {
   close:     { ios: 'xmark',                     android: 'close',                 web: 'close' },
   edit:      { ios: 'pencil',                    android: 'edit',                  web: 'edit' },
   tune:      { ios: 'slider.horizontal.3',       android: 'tune',                  web: 'tune' },
+  settings:  { ios: 'gear',                      android: 'settings',              web: 'settings' },
+  sync:      { ios: 'arrow.triangle.2.circlepath', android: 'sync',                web: 'sync' },
+  calendar:  { ios: 'calendar',                  android: 'calendar_month',        web: 'calendar_month' },
+  history:   { ios: 'clock.arrow.circlepath',    android: 'history',               web: 'history' },
+  map:       { ios: 'map.fill',                  android: 'map',                   web: 'map' },
+  routines:  { ios: 'list.bullet.rectangle.fill', android: 'list_alt',             web: 'list_alt' },
+  chart:     { ios: 'chart.xyaxis.line',         android: 'show_chart',            web: 'show_chart' },
+  compare:   { ios: 'chart.line.uptrend.xyaxis', android: 'stacked_line_chart',    web: 'stacked_line_chart' },
+  body:      { ios: 'figure.arms.open',          android: 'accessibility_new',     web: 'accessibility_new' },
+  route:     { ios: 'point.topleft.down.to.point.bottomright.curvepath', android: 'route', web: 'route' },
+  expand:    { ios: 'chevron.down',              android: 'expand_more',           web: 'expand_more' },
+  collapse:  { ios: 'chevron.up',                android: 'expand_less',           web: 'expand_less' },
+  chevron:   { ios: 'chevron.right',             android: 'chevron_right',         web: 'chevron_right' },
+  back:      { ios: 'chevron.left',              android: 'chevron_left',          web: 'chevron_left' },
 } as const satisfies Record<string, IconName>;
 
 export type IconKey = keyof typeof ICONS;

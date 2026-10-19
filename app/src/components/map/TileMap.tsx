@@ -27,6 +27,8 @@ type Props = {
   /** Drag to pan and show the zoom buttons. Keep off inside a ScrollView. */
   interactive?: boolean;
   padding?: number;
+  /** A thumbnail (the Run tab's mini map): the attribution shrinks to its © mark. */
+  compact?: boolean;
   style?: ViewStyle;
   /** A tap in map-local pixels, with the projector and camera it was measured against. A drag never fires it. */
   onPress?: (pt: Pt, project: Projector, view: MapView) => void;
@@ -178,7 +180,7 @@ class CameraAnim {
  * runs the same on iOS, Android, web and in Expo Go; the trade-off is that it is a still picture
  * you pan and zoom, not a full map view.
  */
-export function TileMap({ bounds, view, onViewChange, height, interactive = false, padding = 24, style, onPress, children }: Props) {
+export function TileMap({ bounds, view, onViewChange, height, interactive = false, padding = 24, compact = false, style, onPress, children }: Props) {
   const { name, palette } = useTheme();
   const tileStyle: TileStyle = name === 'night' ? 'dark' : 'light';
   const [size, setSize] = useState<Size>({ width: 0, height: height ?? 0 });
@@ -303,8 +305,8 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
         </Pressable>
       ) : null}
 
-      <View style={{ position: 'absolute', left: 6, bottom: 4, pointerEvents: 'none', backgroundColor: palette.surface, opacity: 0.8, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 }}>
-        <T variant="tiny" tone="mut">{TILE_ATTRIBUTION}</T>
+      <View style={{ position: 'absolute', left: compact ? 2 : 6, bottom: compact ? 1 : 4, pointerEvents: 'none', backgroundColor: palette.surface, opacity: 0.8, borderRadius: radius.sm, paddingHorizontal: compact ? 2 : 6, paddingVertical: compact ? 0 : 1 }}>
+        <T variant="tiny" tone="mut" accessibilityLabel={compact ? TILE_ATTRIBUTION : undefined}>{compact ? '©' : TILE_ATTRIBUTION}</T>
       </View>
 
       {interactive && onViewChange ? (

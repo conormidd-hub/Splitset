@@ -8,7 +8,11 @@ import type { Tables, TablesUpdate } from '@/types/database';
 
 export type Profile = Tables<'profiles'>;
 /** The columns a signed-in user may change (profiles grants update on exactly these). */
-export type ProfilePatch = Pick<TablesUpdate<'profiles'>, 'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout'>;
+export type ProfilePatch = Pick<
+  TablesUpdate<'profiles'>,
+  'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout' | 'bodyweight_kg' | 'bodyweight_updated_at'
+  | 'rest_timer_on' | 'rest_seconds'
+>;
 
 export function useProfile() {
   const uid = useUserId();
@@ -27,6 +31,13 @@ export function useProfile() {
 export function useUnits(): Units {
   const { data } = useProfile();
   return data?.units === 'imperial' ? 'imperial' : 'metric';
+}
+
+/** The rest timer's settings: whether a new workout starts with it on, and its default length.
+ *  Off and 90 s until the profile has loaded (or before the columns exist). */
+export function useRestSettings(): { on: boolean; seconds: number } {
+  const { data } = useProfile();
+  return { on: data?.rest_timer_on ?? false, seconds: data?.rest_seconds ?? 90 };
 }
 
 export function useUpdateProfile() {

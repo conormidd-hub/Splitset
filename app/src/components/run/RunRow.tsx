@@ -1,3 +1,4 @@
+import { memo, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { Badge } from '@/components/ui/Chip';
@@ -29,10 +30,12 @@ type Props = {
   onMap: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  /** Drawn before the name: the run's route shape. */
+  leading?: ReactNode;
 };
 
 /** One run in the history: a compact line that expands to its headline stats when tapped. */
-export function RunRow({ run, units, first, expanded, onMap, onToggle, onOpen }: Props) {
+export const RunRow = memo(function RunRow({ run, units, first, expanded, onMap, onToggle, onOpen, leading }: Props) {
   const { palette } = useTheme();
   const pace = secPerKm(run.distance_m, run.moving_time_s);
   const name = run.name ?? 'Run';
@@ -45,19 +48,19 @@ export function RunRow({ run, units, first, expanded, onMap, onToggle, onOpen }:
   ].filter(Boolean);
 
   return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      accessibilityLabel={`${name}, ${when}, ${formatDistance(run.distance_m, units)}`}
-      accessibilityHint={expanded ? 'Hides the key stats' : 'Shows the key stats'}
-      style={({ pressed }) => ({
-        paddingHorizontal: space.lg,
-        backgroundColor: expanded ? palette.accentSoft : palette.surface,
-        opacity: pressed ? 0.8 : 1,
-      })}>
-      <View style={{ paddingVertical: space.md, borderTopWidth: first ? 0 : 1, borderTopColor: palette.hair, gap: space.sm }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+    <View style={{ paddingHorizontal: space.lg, backgroundColor: expanded ? palette.accentSoft : palette.surface }}>
+      <View style={{ borderTopWidth: first ? 0 : 1, borderTopColor: palette.hair }}>
+        <Pressable
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${name}, ${when}, ${formatDistance(run.distance_m, units)}`}
+          accessibilityHint={expanded ? 'Hides the key stats' : 'Shows the key stats'}
+          style={({ pressed }) => ({
+            flexDirection: 'row', alignItems: 'center', gap: space.md,
+            paddingTop: space.md, paddingBottom: expanded ? space.sm : space.md, opacity: pressed ? 0.8 : 1,
+          })}>
+          {leading}
           <View style={{ flex: 1, gap: 2 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
               <T variant="h3" numberOfLines={1} style={{ flexShrink: 1 }}>{name}</T>
@@ -70,14 +73,15 @@ export function RunRow({ run, units, first, expanded, onMap, onToggle, onOpen }:
             {pace ? <T variant="small" tone="mut">{formatPace(pace, units)}</T> : null}
           </View>
           <T tone="mut" accessible={false} importantForAccessibility="no" style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}>›</T>
-        </View>
+        </Pressable>
+        {/* beside the row's button, not inside it: a button can't hold another */}
         {expanded ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, paddingBottom: space.md }}>
             <T variant="small" tone="ink2" numberOfLines={1} style={{ flex: 1, fontVariant: ['tabular-nums'] }}>{stats.join(' · ')}</T>
             <Button title="Full stats" small onPress={onOpen} />
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
-}
+});

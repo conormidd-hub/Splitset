@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { queryClient } from './query';
 import { supabase } from './supabase';
 
 type SessionState = {
@@ -28,7 +29,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (mounted) setLoading(false);
       });
+    // the query cache holds the last account's data (some of it keyed without a user), so a
+    // sign-out, or a different account signing in, starts from an empty one
+    let userId: string | undefined;
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      const nextId = next?.user.id;
+      if (userId !== undefined && nextId !== userId) queryClient.clear();
+      userId = nextId;
       setSession(next);
       setLoading(false);
     });

@@ -22,7 +22,11 @@ export default function LiftStack() {
       <Stack.Screen name="history/[id]" options={{ title: 'Workout' }} />
       <Stack.Screen name="exercises/index" options={{ title: 'Exercises' }} />
       <Stack.Screen name="exercises/[id]" options={{ title: '' }} />
+      <Stack.Screen name="exercises/new" options={{ title: 'New exercise' }} />
       <Stack.Screen name="routines/[id]" options={{ title: 'Routine' }} />
+      <Stack.Screen name="recovery" options={{ title: 'Recovery' }} />
+      {/* development builds only, opened from Settings → Developer */}
+      <Stack.Screen name="recovery-dev" options={{ title: 'Recovery map (dev)' }} />
     </Stack>
   );
 }

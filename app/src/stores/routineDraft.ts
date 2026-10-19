@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 
 import type { RoutineDraft, RoutineWithStructure } from '@/api/lifting';
+import { pairedSets } from '../lib/lifting/template.ts';
 import type { ActiveWorkout } from './activeWorkout';
 
 export type DraftExercise = RoutineDraft['exercises'][number] & { key: string; name: string; measure: string };
@@ -21,6 +22,8 @@ type State = {
   addExercise: (ex: { id: string; name: string; measure: string }) => void;
   removeExercise: (key: string) => void;
   move: (key: string, dir: -1 | 1) => void;
+  /** Move an exercise to another place (a drag). */
+  moveTo: (key: string, toIndex: number) => void;
   setRest: (key: string, seconds: number | null) => void;
   addSet: (key: string) => void;
   updateSet: (key: string, index: number, patch: Partial<DraftExercise['sets'][number]>) => void;
@@ -73,7 +76,7 @@ export const useRoutineDraft = create<State>()((set, get) => ({
         restSeconds: b.restSeconds,
         supersetGroup: b.supersetGroup,
         notes: b.notes,
-        sets: b.sets.map((s) => ({
+        sets: pairedSets(b.sets).map((s) => ({
           setType: s.setType, targetReps: s.reps, targetWeightKg: s.weightKg, targetSeconds: s.seconds, targetRpe: s.rpe,
         })),
       })),
@@ -100,6 +103,16 @@ export const useRoutineDraft = create<State>()((set, get) => ({
       if (i < 0 || j < 0 || j >= s.exercises.length) return {};
       const next = [...s.exercises];
       [next[i], next[j]] = [next[j], next[i]];
+      return { exercises: next };
+    }),
+
+  moveTo: (k, toIndex) =>
+    set((s) => {
+      const i = s.exercises.findIndex((e) => e.key === k);
+      if (i < 0) return {};
+      const next = [...s.exercises];
+      const [e] = next.splice(i, 1);
+      next.splice(Math.max(0, Math.min(toIndex, next.length)), 0, e);
       return { exercises: next };
     }),
 

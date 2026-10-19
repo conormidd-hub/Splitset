@@ -1,0 +1,114 @@
+name: db-tests
+
+# Database tests for the recovery map (supabase/tests). The runner starts its own throwaway
+# Supabase database with every migration applied. The tests seed the exercise library into it
+# twice and check the result (counts, roles, PB-estimate chains, "seed twice changes nothing",
+# custom exercises left alone, RLS), then save sets the way the app does and check their e1RMs,
+# manual PBs, pb_history, the e1RM backfill and the access rules (build phase 3). Never a hosted
+# project: SPLITSET_TEST_DB_URL is the runner's local database, and the tests refuse anything
+# that is not local.
+#
+# A second job checks that new migrations sort after the ones already in the repo.
+#
+# Runs on push to any branch, so work branches without a pull request are covered too. The sync/
+# entries are the tests' Python, their packages (psycopg, pytest) and the pytest settings.
+
+on:
+  push:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "app/src/lib/recovery/**"
+      - "app/src/lib/lifting/**"
+      - "app/scripts/recovery-cli.ts"
+      - "sync/pyproject.toml"
+      - "sync/uv.lock"
+      - "sync/.python-version"
+      - ".github/workflows/db-tests.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "app/src/lib/recovery/**"
+      - "app/src/lib/lifting/**"
+      - "app/scripts/recovery-cli.ts"
+      - "sync/pyproject.toml"
+      - "sync/uv.lock"
+      - "sync/.python-version"
+      - ".github/workflows/db-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  seed-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+      - name: Start a local database and apply every migration
+        run: supabase db start
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - run: uv sync --frozen
+        working-directory: sync
+      # the phase 3 tests get every number from the app's engine (app/scripts/recovery-cli.ts),
+      # which plain Node runs by stripping types
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Database tests against the local database
+        working-directory: sync
+        env:
+          SPLITSET_TEST_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: uv run pytest ../supabase/tests -v -rs
+
+  # `supabase db push` (migrate.yml, or a push by hand) refuses a pending migration that sorts at
+  # or below the newest one the database has already applied, unless it is given --include-all.
+  # The job above can't see that, since a fresh database applies every file in order, so a badly
+  # numbered migration would only fail after merge. A migration added here must sort after every
+  # migration already in the repo: after 20261019000100 (applied on 2026-10-18) comes
+  # 20261019000200, never a 20261018 number.
+  migration-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the commits this push or pull request builds on, and origin/main
+      - name: New migrations sort after the existing ones
+        env:
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          export LC_ALL=C
+          if [ -n "$BASE" ]; then
+            # a pull request: what it adds since it left its base, against the base as it is now
+            ref=$BASE
+            added=$(git diff --no-renames --diff-filter=A --name-only "$BASE...$HEAD_SHA" -- 'supabase/migrations/*.sql')
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            # a push: what the branch's own commits add. A merge brings in migrations pushed from
+            # another branch, which that branch's own run checked, so merges are left out
+            ref=$BEFORE
+            added=$(git log --first-parent --no-merges --no-renames --diff-filter=A --name-only --format= "$BEFORE..HEAD" -- 'supabase/migrations/*.sql')
+          else
+            # a new branch, a force push or a manual run: what the branch adds since it left main
+            ref=origin/main
+            added=$(git diff --no-renames --diff-filter=A --name-only "$ref...HEAD" -- 'supabase/migrations/*.sql')
+          fi
+          newest=$(git ls-tree --name-only "$ref" supabase/migrations/ | sed -n 's#^supabase/migrations/\([0-9]*\)_.*\.sql$#\1#p' | sort | tail -n 1)
+          echo "newest migration in $ref: ${newest:-none}"
+          bad=0
+          for f in $(printf '%s\n' $added | sort -u); do
+            git cat-file -e "${HEAD_SHA:-HEAD}:$f" 2>/dev/null || continue   # added, then renamed or removed later in the same push
+            v=${f##*/}; v=${v%%_*}
+            if [[ ! "$v" > "$newest" ]]; then
+              echo "::error file=$f::version $v must sort after $newest, the newest migration already in the repo, or supabase db push refuses it"
+              bad=1
+            fi
+          done
+          exit $bad

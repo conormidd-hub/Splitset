@@ -164,6 +164,28 @@ def upsert_activities(conn: psycopg.Connection[Any], rows: list[dict[str, Any]])
     return len(rows)
 
 
+def activity_ids_in_window(conn: psycopg.Connection[Any], user_id: UUID, oldest: str, newest: str) -> list[str]:
+    """Stored activities whose local start date is in [oldest, newest): the days a sync has just
+    fetched. The newest day is left out, since intervals.icu reads it in the athlete's time zone."""
+    rows = conn.execute(
+        """
+        select id from public.activities
+         where user_id = %s and start_time_local::date >= %s::date and start_time_local::date < %s::date
+        """,
+        (user_id, oldest, newest),
+    ).fetchall()
+    return [r["id"] for r in rows]
+
+
+def delete_activities(conn: psycopg.Connection[Any], user_id: UUID, ids: list[str]) -> int:
+    """Deletes these activities of the user; their details, efforts and recovery-map loads go with
+    them (on delete cascade), and workouts and planned sessions linked to them are unlinked."""
+    if not ids:
+        return 0
+    cur = conn.execute("delete from public.activities where user_id = %s and id = any(%s)", (user_id, ids))
+    return cur.rowcount
+
+
 def activities_needing_details(conn: psycopg.Connection[Any], user_id: UUID,
                                limit: int) -> list[tuple[str, str | None]]:
     """(id, type) of activities with no detail row yet, newest first. The type decides the cadence unit."""

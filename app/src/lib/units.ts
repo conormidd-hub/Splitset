@@ -62,6 +62,23 @@ export function displayToKg(value: number, units: Units): number {
   return units === 'imperial' ? value / LB_PER_KG : value;
 }
 
+/**
+ * Whether two weights (kg) read the same in a weight field: compared in display units, so a
+ * 0.1 lb step is a change and a value that round-trips through the field is not. Null equals
+ * only null.
+ */
+export function sameWeightShown(a: number | null, b: number | null, units: Units): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return Math.abs(kgToDisplay(a, units) - kgToDisplay(b, units)) < 1e-6;
+}
+
+/** A range checked in kg, in display units: whole pounds rounded inward, so both ends pass the check. */
+export function weightRangeShown(minKg: number, maxKg: number, units: Units): { min: number; max: number; unit: 'kg' | 'lb' } {
+  return units === 'imperial'
+    ? { min: Math.ceil(minKg * LB_PER_KG), max: Math.floor(maxKg * LB_PER_KG), unit: 'lb' }
+    : { min: minKg, max: maxKg, unit: 'kg' };
+}
+
 export function formatElevation(metres: number | null | undefined, units: Units): string {
   if (!isNum(metres)) return '–';
   return units === 'imperial' ? `${Math.round(metres * 3.28084)} ft` : `${Math.round(metres)} m`;

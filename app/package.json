@@ -40,6 +40,7 @@
     "@types/d3-scale": "^4.0.9",
     "@types/d3-shape": "^3.2.0",
     "@types/mapbox__polyline": "^1.0.5",
+    "@types/node": "~26.6.2",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
@@ -50,7 +51,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "gen:body-figure": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-body-figure.ts",
+    "gen:library-order": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/gen-library-order.ts",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
   },
   "private": true
 }

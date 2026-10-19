@@ -1,14 +1,19 @@
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import { T } from './T';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
+/** A pill button. With `selected` it is one of a set and says whether it is on, screen readers too
+ *  (on the web as a toggle button, since browsers drop aria-selected from a button). */
 export function Chip({ label, selected, onPress }: { label: string; selected?: boolean; onPress?: () => void }) {
   const { palette } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      aria-selected={selected}
+      {...(Platform.OS === 'web' && selected !== undefined ? { 'aria-pressed': selected } : null)}
       style={({ pressed }) => ({
         backgroundColor: selected ? palette.accent : palette.surface2,
         borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6,
@@ -23,19 +28,28 @@ export function ChipRow({ children }: { children: React.ReactNode }) {
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>{children}</View>;
 }
 
-/** A pill-shaped, two-to-four-way selector for settings. */
+/**
+ * A pill-shaped, two-to-four-way selector for settings. Screen readers get a radio group; `label`
+ * names what it sets, so an option reads e.g. "Count runs, rides, swims, hikes and rows: On".
+ */
 export function Segmented<T extends string>({
-  options, value, onChange,
-}: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  options, value, onChange, label,
+}: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; label?: string }) {
   const { palette } = useTheme();
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: palette.surface2, borderRadius: radius.md, padding: 3 }}>
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={{ flexDirection: 'row', backgroundColor: palette.surface2, borderRadius: radius.md, padding: 3 }}>
       {options.map((o) => {
         const on = o.value === value;
         return (
           <Pressable
             key={o.value}
             onPress={() => onChange(o.value)}
+            accessibilityRole="radio"
+            aria-checked={on}
+            accessibilityLabel={label ? `${label}: ${o.label}` : undefined}
             style={{
               flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.sm,
               backgroundColor: on ? palette.surface : 'transparent',

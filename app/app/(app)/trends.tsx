@@ -1,28 +1,70 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform, Pressable, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
+import { useHomeLayout } from '@/api/home';
 import { useWorkouts } from '@/api/lifting';
-import { useUnits } from '@/api/profile';
+import { useLiftPbs, useRunPbs } from '@/api/pbs';
+import { useProfile, useUnits } from '@/api/profile';
 import { useWellness } from '@/api/wellness';
-import { LineChart } from '@/components/charts/LineChart';
+import { LineChart, type Point } from '@/components/charts/LineChart';
+import { AddMetricSheet } from '@/components/home/AddMetricSheet';
+import { CompareBuilder, CompareChart, compareText } from '@/components/trends/CompareBuilder';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
 import { Screen } from '@/components/ui/Screen';
+import { SortableList } from '@/components/ui/SortableList';
 import { T } from '@/components/ui/T';
 import { useNowHour } from '@/lib/clock';
-import { weekStartIso } from '@/lib/dates';
-import { acwr, dayMs, rolling, runPoints, weeklyRunKm, weeklySum, wellnessSeries } from '@/lib/trends';
+import { confirm } from '@/lib/confirm';
+import { todayIso, weekStartIso } from '@/lib/dates';
+import { BUILT_IN_TRENDS, comparedMetrics, DEFAULT_TRENDS, trendMetric, type BuiltInTrend } from '@/lib/homeLayout';
+import { dailyWindow, formatMetric, isMetricId, METRICS, type MetricId, type MetricInputs } from '@/lib/metrics';
+import { acwr, dayMs, rolling, runPoints, WEEKLY_METRICS, weeklyRunKm, weeklySum, weeklyTotals, wellnessSeries } from '@/lib/trends';
 import { KM_PER_MILE, LB_PER_KG } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
+import { space } from '@/theme/tokens';
 
 const RANGES = [
-  { days: 30, label: '30d' },
-  { days: 90, label: '90d' },
-  { days: 182, label: '6m' },
-  { days: 365, label: '1y' },
-  { days: 3650, label: 'All' },
+  { days: 30, label: '30d', text: 'last 30 days' },
+  { days: 90, label: '90d', text: 'last 90 days' },
+  { days: 182, label: '6m', text: 'last 6 months' },
+  { days: 365, label: '1y', text: 'last year' },
+  { days: 3650, label: 'All', text: 'all time' },
 ];
 
+/** The built-in charts' names and one-line descriptions, for the cards and the Add sheet. */
+const BUILT_IN_TEXT: Record<BuiltInTrend, { label: string; subtitle: string }> = {
+  weekly_running: { label: 'Weekly running', subtitle: 'Distance per week, Monday to Sunday' },
+  training_load: { label: 'Training load', subtitle: '7-day mean against 28-day mean' },
+  acwr: { label: 'Acute:chronic ratio', subtitle: '0.8 to 1.3 is the usual comfort band. A ramp gauge, not an injury score.' },
+  fitness_fatigue: { label: 'Fitness and fatigue', subtitle: 'CTL, ATL and form from intervals.icu' },
+  resting_hr: { label: 'Resting heart rate', subtitle: 'Nightly with 7-day and 30-day means' },
+  hrv: { label: 'HRV', subtitle: 'Act on the rolling mean leaving its usual range, not on one low morning' },
+  sleep: { label: 'Sleep', subtitle: 'Hours with a 7-day mean' },
+  weight: { label: 'Weight', subtitle: 'Weigh-ins only' },
+  cadence: { label: 'Cadence', subtitle: 'Runs of 4 km or more, steps per minute' },
+  hr_per_run: { label: 'Average heart rate per run', subtitle: 'Runs of 4 km or more; the same pace costing fewer beats is fitness' },
+  lift_volume: { label: 'Weekly lifting volume', subtitle: 'Weight moved per week across finished workouts' },
+};
+const BUILT_IN_LIST = BUILT_IN_TRENDS.map((id) => ({ id, ...BUILT_IN_TEXT[id] }));
+
+/** Metrics that make a chart: every available one with a value per day (not the links). */
+const chartable = (id: MetricId) => METRICS[id].available && id !== 'last_activity' && id !== 'pbs';
+
+/** The two metrics a comparison charts, when both are still known. */
+function comparison(id: string): [MetricId, MetricId] | null {
+  const pair = comparedMetrics(id);
+  return pair && isMetricId(pair[0]) && isMetricId(pair[1]) ? [pair[0], pair[1]] : null;
+}
+
+/**
+ * Trends: charts over a chosen range, laid out the way the owner likes, Home screen style. The
+ * built-in charts come first by default; Edit removes or drags them into a new order, and Add
+ * puts back a built-in chart, charts any Home metric over time, or compares two metrics on one
+ * chart (one per axis). The list is saved with the home layout, so every device shows the same.
+ */
 export default function Trends() {
   const { palette } = useTheme();
   const units = useUnits();
@@ -30,11 +72,27 @@ export default function Trends() {
   const wellness = useWellness(days);
   const activities = useRecentActivities(days);
   const workouts = useWorkouts(400);
+  const runPbs = useRunPbs();
+  const liftPbs = useLiftPbs();
+  const profile = useProfile();
+  const { layout, save } = useHomeLayout();
+  const trends = layout.trends ?? DEFAULT_TRENDS;
+  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollY = useRef(0);
   // hour-granular "now" so the memo below is pure and the screen re-renders at most hourly
   const nowHour = useNowHour();
 
   const distUnit = units === 'imperial' ? 'mi' : 'km';
   const massUnit = units === 'imperial' ? 'lb' : 'kg';
+  const today = todayIso();
+  const inputs = useMemo<MetricInputs>(() => ({
+    wellness: wellness.data ?? [], activities: activities.data ?? [], workouts: workouts.data ?? [],
+    runPbs: runPbs.data, liftPbs: liftPbs.data, profile: profile.data ?? null, units, today,
+  }), [wellness.data, activities.data, workouts.data, runPbs.data, liftPbs.data, profile.data, units, today]);
 
   const charts = useMemo(() => {
     const w = wellness.data ?? [];
@@ -72,77 +130,205 @@ export default function Trends() {
 
   const loading = wellness.isLoading || activities.isLoading;
 
-  return (
-    <Screen title="Trends" subtitle="Over time" refreshing={wellness.isFetching || activities.isFetching} onRefresh={() => { wellness.refetch(); activities.refetch(); workouts.refetch(); }}>
-      <ChipRow>
-        {RANGES.map((r) => <Chip key={r.days} label={r.label} selected={days === r.days} onPress={() => setDays(r.days)} />)}
-      </ChipRow>
-      {loading ? <T tone="mut">Loading…</T> : null}
-
-      <Card title="Weekly running" subtitle={`${distUnit} per week, Monday to Sunday`}>
-        <LineChart height={190} series={[{ name: distUnit, color: palette.accent, points: charts.weeklyKm, kind: 'bars' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />
-      </Card>
-
-      <Card title="Training load" subtitle="7-day mean against 28-day mean">
-        <LineChart height={190} series={[
-          { name: 'weekly load', color: palette.blue, points: charts.weeklyLoad, kind: 'bars', opacity: 0.35 },
-        ]} showLegend={false} />
-        <LineChart height={170} series={[
-          { name: '7-day', color: palette.orange, points: charts.acute },
-          { name: '28-day', color: palette.aqua, points: charts.chronic, dashed: true },
-        ]} yMin={0} />
-      </Card>
-
-      <Card title="Acute:chronic ratio" subtitle="0.8 to 1.3 is the usual comfort band. A ramp gauge, not an injury score.">
-        <LineChart height={170} series={[{ name: 'ACWR', color: palette.ink2, points: charts.ratio }]} yMin={0} yMax={2} band={{ from: 0.8, to: 1.3, color: palette.aqua }} yFormat={(v) => v.toFixed(1)} showLegend={false} />
-      </Card>
-
-      <Card title="Fitness and fatigue" subtitle="CTL, ATL and form from intervals.icu">
-        <LineChart height={190} series={[
+  /** A built-in chart's body. */
+  const builtIn = (id: BuiltInTrend): ReactNode => {
+    switch (id) {
+      case 'weekly_running':
+        return <LineChart height={190} series={[{ name: distUnit, color: palette.accent, points: charts.weeklyKm, kind: 'bars' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />;
+      case 'training_load':
+        return (
+          <>
+            <LineChart height={190} series={[{ name: 'weekly load', color: palette.blue, points: charts.weeklyLoad, kind: 'bars', opacity: 0.35 }]} showLegend={false} />
+            <LineChart height={170} series={[
+              { name: '7-day', color: palette.orange, points: charts.acute },
+              { name: '28-day', color: palette.aqua, points: charts.chronic, dashed: true },
+            ]} yMin={0} />
+          </>
+        );
+      case 'acwr':
+        return <LineChart height={170} series={[{ name: 'ACWR', color: palette.ink2, points: charts.ratio }]} yMin={0} yMax={2} band={{ from: 0.8, to: 1.3, color: palette.aqua }} yFormat={(v) => v.toFixed(1)} showLegend={false} />;
+      case 'fitness_fatigue':
+        return <LineChart height={190} series={[
           { name: 'Fitness', color: palette.blue, points: charts.ctl, kind: 'area' },
           { name: 'Fatigue', color: palette.orange, points: charts.atl },
           { name: 'Form', color: palette.aqua, points: charts.tsb, dashed: true },
-        ]} yFormat={(v) => `${Math.round(v)}`} />
-      </Card>
-
-      <Card title="Resting heart rate" subtitle="Nightly with 7-day and 30-day means">
-        <LineChart height={190} series={[
+        ]} yFormat={(v) => `${Math.round(v)}`} />;
+      case 'resting_hr':
+        return <LineChart height={190} series={[
           { name: 'nightly', color: palette.mut, points: charts.rhr, kind: 'points', opacity: 0.6 },
           { name: '7-day', color: palette.accent, points: charts.rhr7 },
           { name: '30-day', color: palette.ink2, points: charts.rhr30, dashed: true },
-        ]} yFormat={(v) => `${Math.round(v)}`} />
-      </Card>
-
-      <Card title="HRV" subtitle="Act on the rolling mean leaving its usual range, not on one low morning">
-        <LineChart height={190} series={[
+        ]} yFormat={(v) => `${Math.round(v)}`} />;
+      case 'hrv':
+        return <LineChart height={190} series={[
           { name: 'nightly', color: palette.mut, points: charts.hrv, kind: 'points', opacity: 0.6 },
           { name: '7-day', color: palette.accent, points: charts.hrv7 },
           { name: '60-day', color: palette.ink2, points: charts.hrv60, dashed: true },
-        ]} yFormat={(v) => `${Math.round(v)}`} />
-      </Card>
-
-      <Card title="Sleep" subtitle="Hours with a 7-day mean">
-        <LineChart height={170} series={[
+        ]} yFormat={(v) => `${Math.round(v)}`} />;
+      case 'sleep':
+        return <LineChart height={170} series={[
           { name: 'hours', color: palette.blue, points: charts.sleep, kind: 'bars', opacity: 0.45 },
           { name: '7-day', color: palette.accent, points: charts.sleep7 },
-        ]} yMin={0} yFormat={(v) => v.toFixed(1)} />
-      </Card>
+        ]} yMin={0} yFormat={(v) => v.toFixed(1)} />;
+      case 'weight':
+        return <LineChart height={170} series={[{ name: massUnit, color: palette.accent, points: charts.weight, kind: 'line' }]} yFormat={(v) => v.toFixed(1)} showLegend={false} emptyText="No weigh-ins in this range" />;
+      case 'cadence':
+        return <LineChart height={170} series={[{ name: 'spm', color: palette.orange, points: charts.cadence, kind: 'points' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />;
+      case 'hr_per_run':
+        return <LineChart height={170} series={[{ name: 'bpm', color: palette.neg, points: charts.hrAtPace, kind: 'points' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />;
+      case 'lift_volume':
+        return <LineChart height={170} series={[{ name: massUnit, color: palette.aqua2, points: charts.liftVolume, kind: 'bars' }]} yFormat={(v) => `${Math.round(v / 1000)}k`} showLegend={false} emptyText="Finish a workout to see volume here" />;
+    }
+  };
 
-      <Card title="Weight" subtitle={`Weigh-ins only, ${massUnit}`}>
-        <LineChart height={170} series={[{ name: massUnit, color: palette.accent, points: charts.weight, kind: 'line' }]} yFormat={(v) => v.toFixed(1)} showLegend={false} emptyText="No weigh-ins in this range" />
-      </Card>
+  /** A metric over the range: points and a 7-day mean, or weekly bars for the weekly totals. */
+  const metricChart = (id: MetricId): ReactNode => {
+    const daily = dailyWindow(id, inputs, Math.min(days, 730));
+    const fmt = (v: number) => formatMetric(id, v, units).text;
+    if (WEEKLY_METRICS.has(id)) {
+      return <LineChart height={170} series={[{ name: METRICS[id].short, color: palette.accent, points: weeklyTotals(daily), kind: 'bars' }]} yFormat={fmt} showLegend={false} />;
+    }
+    const points: Point[] = daily.map((d) => ({ x: dayMs(d.date), y: d.value }));
+    return <LineChart height={170} series={[
+      { name: 'daily', color: palette.mut, points, kind: 'points', opacity: 0.6 },
+      { name: '7-day', color: palette.accent, points: rolling(points, 7) },
+    ]} yFormat={fmt} emptyText="No readings in this range" />;
+  };
 
-      <Card title="Cadence" subtitle="Runs of 4 km or more, steps per minute">
-        <LineChart height={170} series={[{ name: 'spm', color: palette.orange, points: charts.cadence, kind: 'points' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />
-      </Card>
+  const textOf = (id: string): { label: string; subtitle: string } => {
+    const pair = comparison(id);
+    if (pair) return compareText(pair[0], pair[1]);
+    const metric = trendMetric(id);
+    if (metric && isMetricId(metric)) {
+      const def = METRICS[metric];
+      return { label: def.label, subtitle: WEEKLY_METRICS.has(metric) ? 'Per week' : 'Daily, with a 7-day mean' };
+    }
+    const t = BUILT_IN_TEXT[id as BuiltInTrend];
+    if (!t) return { label: id, subtitle: '' };
+    if (id === 'weekly_running') return { ...t, subtitle: `${distUnit} per week, Monday to Sunday` };
+    if (id === 'weight') return { ...t, subtitle: `Weigh-ins only, ${massUnit}` };
+    if (id === 'lift_volume') return { ...t, subtitle: `${massUnit} moved per week across finished workouts` };
+    return t;
+  };
 
-      <Card title="Average heart rate per run" subtitle="Runs of 4 km or more; the same pace costing fewer beats is fitness">
-        <LineChart height={170} series={[{ name: 'bpm', color: palette.neg, points: charts.hrAtPace, kind: 'points' }]} yFormat={(v) => `${Math.round(v)}`} showLegend={false} />
-      </Card>
+  const setTrends = (next: string[]) => save({ ...layout, trends: next });
+  const remove = (id: string) => setTrends(trends.filter((t) => t !== id));
+  const move = (id: string, to: number) => {
+    const next = trends.filter((t) => t !== id);
+    next.splice(to, 0, id);
+    setTrends(next);
+  };
+  const reset = async () => {
+    if (await confirm('Reset Trends?', 'The charts go back to the built-in set, in order.', 'Reset', true)) save({ ...layout, trends: null });
+  };
+  const openCompare = () => {
+    setAdding(false);
+    // iOS will not present one sheet while another is still sliding away
+    setTimeout(() => setComparing(true), Platform.OS === 'ios' ? 400 : 0);
+  };
+  const addComparison = (id: string) => {
+    if (!trends.includes(id)) setTrends([...trends, id]);
+    // a new chart lands at the end of the list: bring it into view
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+  };
 
-      <Card title="Weekly lifting volume" subtitle={`${massUnit} moved per week across finished workouts`}>
-        <LineChart height={170} series={[{ name: massUnit, color: palette.aqua2, points: charts.liftVolume, kind: 'bars' }]} yFormat={(v) => `${Math.round(v / 1000)}k`} showLegend={false} emptyText="Finish a workout to see volume here" />
+  /** A card's chart: a comparison, a metric over time, or a built-in chart. */
+  const chartOf = (id: string): ReactNode => {
+    const pair = comparison(id);
+    if (pair) return <CompareChart a={pair[0]} b={pair[1]} inputs={inputs} days={days} />;
+    const metric = trendMetric(id);
+    return metric && isMetricId(metric) ? metricChart(metric) : builtIn(id as BuiltInTrend);
+  };
+
+  const card = (id: string, handle: ReactNode) => {
+    const { label, subtitle } = textOf(id);
+    return (
+      <Card
+        title={label}
+        subtitle={subtitle}
+        right={editing ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+            {handle}
+            <Pressable onPress={() => remove(id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${label}`}>
+              <T tone="neg" weight="700">✕</T>
+            </Pressable>
+          </View>
+        ) : undefined}>
+        {editing ? null : chartOf(id)}
       </Card>
+    );
+  };
+
+  return (
+    <Screen
+      title="Trends"
+      subtitle="Over time"
+      right={<Button title={editing ? 'Done' : 'Edit'} variant="ghost" small onPress={() => setEditing((e) => !e)} />}
+      scrollEnabled={!dragging}
+      scrollRef={scrollRef}
+      onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+      refreshing={wellness.isFetching || activities.isFetching}
+      onRefresh={() => { wellness.refetch(); activities.refetch(); workouts.refetch(); }}>
+      {editing ? (
+        <T variant="small" tone="mut">Drag a chart by its handle to move it, ✕ removes it, and Add a trend puts back a chart, charts any metric over time or compares two.</T>
+      ) : (
+        <ChipRow>
+          {RANGES.map((r) => <Chip key={r.days} label={r.label} selected={days === r.days} onPress={() => setDays(r.days)} />)}
+        </ChipRow>
+      )}
+      {loading && !editing ? <T tone="mut">Loading…</T> : null}
+
+      {editing ? (
+        // collapsed to their titles while editing, so a long list is easy to rearrange
+        <SortableList
+          keys={trends}
+          itemLabel={(id) => textOf(id).label}
+          onMove={move}
+          onDragChange={setDragging}
+          scroll={{ ref: scrollRef, y: scrollY }}
+          renderItem={(id, { handle }) => card(id, handle)}
+        />
+      ) : (
+        trends.map((id) => <View key={id}>{card(id, null)}</View>)
+      )}
+      {!trends.length && !editing ? <T tone="mut" align="center">No charts. Tap Edit, then Add a trend.</T> : null}
+
+      {editing ? (
+        <View style={{ gap: space.sm }}>
+          <Button title="Add a trend" variant="secondary" onPress={() => setAdding(true)} />
+          <Button title="Reset to default" variant="ghost" small onPress={() => { void reset(); }} />
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm }}>
+          <Button title="Add a trend" variant="ghost" small onPress={() => { setEditing(true); setAdding(true); }} />
+          <Button title="Compare two metrics" variant="ghost" small onPress={() => setComparing(true)} />
+        </View>
+      )}
+
+      <AddMetricSheet
+        visible={adding}
+        mode="trend"
+        layout={layout}
+        trends={trends}
+        builtInTrends={BUILT_IN_LIST}
+        chartable={chartable}
+        onAddTrend={(id) => { if (!trends.includes(id)) setTrends([...trends, id]); }}
+        onCompare={openCompare}
+        onClose={() => setAdding(false)}
+        onAdd={() => undefined}
+        onPick={() => undefined}
+      />
+      <CompareBuilder
+        visible={comparing}
+        onClose={() => setComparing(false)}
+        onAdd={addComparison}
+        existing={trends}
+        chartable={chartable}
+        inputs={inputs}
+        days={days}
+        // the charts stop at two years whatever the chip says
+        rangeText={days > 730 ? 'last 2 years' : RANGES.find((r) => r.days === days)?.text ?? `last ${days} days`}
+      />
     </Screen>
   );
 }

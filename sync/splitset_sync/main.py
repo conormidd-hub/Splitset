@@ -31,6 +31,7 @@ from typing import Any
 
 from . import db
 from .config import Settings, env
+from .deletions import looks_truncated, vanished
 from .intervals_client import IntervalsAuthError, IntervalsClient, IntervalsError, normalise_athlete_id
 from .garmin_export import backfill, find_root, parse_export
 from .linking import link_plan_sessions, link_workouts
@@ -75,7 +76,7 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
     uid = connection["user_id"]
     ulog = UserLog(log, {"user": connection.get("email") or str(uid)})
     dry = args.dry_run
-    counts: dict[str, int] = {k: 0 for k in ("activities_fetched", "activities_upserted", "streams_fetched",
+    counts: dict[str, int] = {k: 0 for k in ("activities_fetched", "activities_upserted", "activities_removed", "streams_fetched",
                                              "streams_pending", "wellness_days", "plan_links", "plan_pushed")}
 
     if not connection.get("api_key"):
@@ -111,6 +112,19 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
             if rows and not dry:
                 counts["activities_upserted"] = db.upsert_activities(conn, rows)
                 conn.commit()
+            # activities deleted on intervals.icu go here too (never on an empty response)
+            if payloads:
+                stored = db.activity_ids_in_window(conn, uid, oldest, newest)
+                gone = vanished(stored, (str(p["id"]) for p in payloads if p.get("id") not in (None, "")))
+                if gone and looks_truncated(len(stored), len(gone)):
+                    ulog.warning("activities: %d of %d stored in the window are missing upstream; that looks like a "
+                                 "partial response, so none were removed", len(gone), len(stored))
+                elif gone and dry:
+                    ulog.info("activities: would remove %d deleted on intervals.icu (%s)", len(gone), ", ".join(gone))
+                elif gone:
+                    counts["activities_removed"] = db.delete_activities(conn, uid, gone)
+                    conn.commit()
+                    ulog.info("activities: removed %d deleted on intervals.icu (%s)", len(gone), ", ".join(gone))
 
             # ---- wellness
             wrecs = client.fetch_wellness(oldest, newest)
@@ -167,8 +181,9 @@ def run_user(conn: Any, connection: dict[str, Any], args: argparse.Namespace, se
             db.record_success(conn, uid)
             db.finish_sync_run(conn, run_id, "ok", counts)
             conn.commit()
-        ulog.info("done: activities %d/%d, wellness %d days, streams %d fetched/%d pending, links %d, plan pushed %d",
-                  counts["activities_upserted"], counts["activities_fetched"], counts["wellness_days"],
+        ulog.info("done: activities %d/%d (%d removed), wellness %d days, streams %d fetched/%d pending, links %d, "
+                  "plan pushed %d",
+                  counts["activities_upserted"], counts["activities_fetched"], counts["activities_removed"], counts["wellness_days"],
                   counts["streams_fetched"], counts["streams_pending"], counts["plan_links"], counts["plan_pushed"])
         return True
 

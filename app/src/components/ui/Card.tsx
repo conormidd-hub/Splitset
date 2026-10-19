@@ -11,11 +11,14 @@ type Props = {
   right?: ReactNode;
   children?: ReactNode;
   onPress?: () => void;
+  /** With onPress: what screen readers say for the card as a whole, instead of every text in it. */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
   tone?: 'surface' | 'accent' | 'neg';
   style?: ViewStyle;
 };
 
-export function Card({ title, subtitle, right, children, onPress, tone = 'surface', style }: Props) {
+export function Card({ title, subtitle, right, children, onPress, accessibilityLabel, accessibilityHint, tone = 'surface', style }: Props) {
   const { palette } = useTheme();
   const bg = tone === 'accent' ? palette.accentSoft : tone === 'neg' ? palette.negSoft : palette.surface;
   const border = tone === 'accent' ? palette.accentLine : tone === 'neg' ? palette.neg : palette.hair;
@@ -42,7 +45,12 @@ export function Card({ title, subtitle, right, children, onPress, tone = 'surfac
   };
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}>
         {body}
       </Pressable>
     );

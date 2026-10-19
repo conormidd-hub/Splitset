@@ -5,11 +5,17 @@ name: migrate
 # that the project's history table hasn't recorded yet, so a run with nothing new does nothing.
 #
 # It uses the same SUPABASE_DB_URL secret as the sync job (the Session pooler URI).
+#
+# After the push it seeds the exercise library (supabase/seed_library.py), so a migration or a
+# library change reaches the database in one step, and then rescores every finished workout
+# (supabase/rescore_workouts.py), since a change to an exercise's muscles or fatigue class
+# changes the cached loads of every workout that used it (spec §14). Both write only what
+# differs, so a run with nothing new changes nothing.
 
 on:
   push:
     branches: [main]
-    paths: ["supabase/migrations/**", ".github/workflows/migrate.yml"]
+    paths: ["supabase/migrations/**", "supabase/seed_library.py", "supabase/rescore_workouts.py", "data/exercise_library.json", ".github/workflows/migrate.yml"]
   workflow_dispatch:
 
 # never two pushes at once; a newer one waits for the one running
@@ -34,3 +40,19 @@ jobs:
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
       - name: Apply them
         run: supabase db push --db-url "$SUPABASE_DB_URL"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sync/uv.lock"
+      - name: Seed the exercise library
+        working-directory: sync
+        run: |
+          uv sync --frozen
+          uv run python ../supabase/seed_library.py
+      # the rescore gets its numbers from the app's engine (app/scripts/recovery-cli.ts)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Rescore every finished workout
+        working-directory: sync
+        run: uv run python ../supabase/rescore_workouts.py

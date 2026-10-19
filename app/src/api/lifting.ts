@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
+import { recomputeInBackground } from '@/api/workoutLoads';
+import { volumeKg } from '@/lib/lifting/sideCounts';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
-import type { Tables, TablesInsert, Views } from '@/types/database';
+import type { Tables, Views } from '@/types/database';
 
 export type Exercise = Tables<'exercises'>;
 export type Routine = Tables<'routines'>;
 export type RoutineExercise = Tables<'routine_exercises'>;
 export type RoutineSet = Tables<'routine_sets'>;
+export type RoutineGroup = Tables<'routine_groups'>;
 export type Workout = Tables<'workouts'>;
 export type WorkoutExercise = Tables<'workout_exercises'>;
 export type WorkoutSet = Tables<'workout_sets'>;
@@ -17,6 +20,8 @@ export type ExerciseRecord = Views<'exercise_records'>;
 export const liftKeys = {
   exercises: (uid: string) => ['exercises', uid] as const,
   routines: (uid: string) => ['routines', uid] as const,
+  routineGroups: (uid: string) => ['routineGroups', uid] as const,
+  exerciseNotes: (uid: string) => ['exerciseNotes', uid] as const,
   routine: (id: string) => ['routine', id] as const,
   workouts: (uid: string) => ['workouts', uid] as const,
   workout: (id: string) => ['workout', id] as const,
@@ -41,30 +46,17 @@ export function useExercises() {
   });
 }
 
-export function useCreateExercise() {
-  const uid = useUserId();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: Pick<TablesInsert<'exercises'>, 'name' | 'muscle_group' | 'equipment' | 'measure' | 'is_bodyweight' | 'is_unilateral'>) => {
-      const { data, error } = await supabase
-        .from('exercises')
-        .insert({ ...input, owner_id: uid, name: input.name.trim() })
-        .select('*')
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: liftKeys.exercises(uid) }),
-  });
-}
-
 // ---------------------------------------------------------------- routines
 
 export type RoutineWithStructure = Routine & {
-  routine_exercises: (RoutineExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure' | 'muscle_group'> | null; routine_sets: RoutineSet[] })[];
+  routine_exercises: (RoutineExercise & { exercise: RoutineExerciseFacts | null; routine_sets: RoutineSet[] })[];
 };
 
-const ROUTINE_SELECT = '*, routine_exercises(*, exercise:exercises(id, name, measure, muscle_group), routine_sets(*))';
+/** What a routine carries about each exercise: enough to start a workout that weighs its sets. */
+export type RoutineExerciseFacts = Pick<Exercise, 'id' | 'name' | 'measure' | 'muscle_group' | 'slug' | 'load_mode' | 'bw_factor' | 'is_unilateral' | 'is_bodyweight'>;
+
+const ROUTINE_SELECT =
+  '*, routine_exercises(*, exercise:exercises(id, name, measure, muscle_group, slug, load_mode, bw_factor, is_unilateral, is_bodyweight), routine_sets(*))';
 
 function sortRoutine(r: RoutineWithStructure): RoutineWithStructure {
   r.routine_exercises.sort((a, b) => a.position - b.position);
@@ -107,6 +99,8 @@ export function useRoutine(id: string | undefined) {
 export type RoutineDraft = {
   id?: string;
   name: string;
+  /** A new routine's group (null or left out: My routines). */
+  groupId?: string | null;
   notes?: string | null;
   exercises: {
     exerciseId: string;
@@ -136,7 +130,7 @@ export function useSaveRoutine() {
       } else {
         const { data, error } = await supabase
           .from('routines')
-          .insert({ user_id: uid, name: draft.name.trim(), notes: draft.notes ?? null })
+          .insert({ user_id: uid, name: draft.name.trim(), notes: draft.notes ?? null, ...(draft.groupId ? { group_id: draft.groupId } : {}), position: Date.now() % 1_000_000_000 })
           .select('id')
           .single();
         if (error) throw error;
@@ -184,6 +178,123 @@ export function useArchiveRoutine() {
   });
 }
 
+// ---------------------------------------------------------------- routine groups and notes
+
+/** The user's routine groups ("PPL", "Upper/Lower"), in order. */
+export function useRoutineGroups() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: liftKeys.routineGroups(uid),
+    enabled: !!uid,
+    queryFn: async (): Promise<RoutineGroup[]> => {
+      const { data, error } = await supabase.from('routine_groups').select('*').eq('user_id', uid).order('position').order('created_at');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** Create a group (no id) at the end, or rename one. */
+export function useSaveRoutineGroup() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (g: { id?: string; name: string; position?: number }) => {
+      const updated_at = new Date().toISOString();
+      const { error } = g.id
+        ? await supabase.from('routine_groups').update({ name: g.name.trim(), updated_at }).eq('id', g.id)
+        : await supabase.from('routine_groups').insert({ user_id: uid, name: g.name.trim(), position: g.position ?? 0 });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: liftKeys.routineGroups(uid) }),
+  });
+}
+
+/** Delete a group; its routines move to "My routines" (on delete set null). */
+export function useDeleteRoutineGroup() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('routine_groups').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: liftKeys.routineGroups(uid) });
+      qc.invalidateQueries({ queryKey: liftKeys.routines(uid) });
+    },
+  });
+}
+
+/** Apply moveRoutine()'s writes. The routines list updates at once and is refetched after. */
+export function useMoveRoutines() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (moves: { id: string; group_id: string | null; position: number }[]) => {
+      const updated_at = new Date().toISOString();
+      for (const m of moves) {
+        const { error } = await supabase.from('routines').update({ group_id: m.group_id, position: m.position, updated_at }).eq('id', m.id);
+        if (error) throw error;
+      }
+    },
+    onMutate: (moves) => {
+      qc.setQueryData<RoutineWithStructure[]>(liftKeys.routines(uid), (cur) => cur?.map((r) => {
+        const m = moves.find((x) => x.id === r.id);
+        return m ? { ...r, group_id: m.group_id, position: m.position } : r;
+      }));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: liftKeys.routines(uid) }),
+  });
+}
+
+/** Notes that show in every workout with the exercise, by exercise id. */
+export function useExerciseNotes() {
+  const uid = useUserId();
+  return useQuery({
+    queryKey: liftKeys.exerciseNotes(uid),
+    enabled: !!uid,
+    queryFn: async (): Promise<Map<string, string>> => {
+      const { data, error } = await supabase.from('exercise_notes').select('exercise_id, note').eq('user_id', uid);
+      if (error) throw error;
+      return new Map(data.map((n) => [n.exercise_id, n.note]));
+    },
+  });
+}
+
+/**
+ * Save a note at one of its places: every workout with the exercise (exercise_notes), the
+ * template's exercise (routine_exercises.notes), or nowhere else (the workout's own note is kept
+ * by the workout store). An empty note removes it.
+ */
+export function useSaveExerciseNote() {
+  const uid = useUserId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (n: { scope: 'exercise' | 'template'; exerciseId: string; routineId?: string | null; note: string }) => {
+      const note = n.note.trim();
+      if (n.scope === 'exercise') {
+        const { error } = note
+          ? await supabase.from('exercise_notes').upsert({ user_id: uid, exercise_id: n.exerciseId, note, updated_at: new Date().toISOString() }, { onConflict: 'user_id,exercise_id' })
+          : await supabase.from('exercise_notes').delete().eq('user_id', uid).eq('exercise_id', n.exerciseId);
+        if (error) throw error;
+      } else if (n.routineId) {
+        const { error } = await supabase.from('routine_exercises')
+          .update({ notes: note || null, updated_at: new Date().toISOString() })
+          .eq('routine_id', n.routineId).eq('exercise_id', n.exerciseId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_d, n) => {
+      if (n.scope === 'exercise') qc.invalidateQueries({ queryKey: liftKeys.exerciseNotes(uid) });
+      else {
+        qc.invalidateQueries({ queryKey: liftKeys.routines(uid) });
+        if (n.routineId) qc.invalidateQueries({ queryKey: liftKeys.routine(n.routineId) });
+      }
+    },
+  });
+}
+
 // ---------------------------------------------------------------- workouts
 
 export function useWorkouts(limit = 30) {
@@ -206,7 +317,7 @@ export function useWorkouts(limit = 30) {
 }
 
 export type WorkoutWithStructure = Workout & {
-  workout_exercises: (WorkoutExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure'> | null; workout_sets: WorkoutSet[] })[];
+  workout_exercises: (WorkoutExercise & { exercise: Pick<Exercise, 'id' | 'name' | 'measure' | 'load_mode'> | null; workout_sets: WorkoutSet[] })[];
 };
 
 export function useWorkout(id: string | undefined) {
@@ -216,7 +327,7 @@ export function useWorkout(id: string | undefined) {
     queryFn: async (): Promise<WorkoutWithStructure> => {
       const { data, error } = await supabase
         .from('workouts')
-        .select('*, workout_exercises(*, exercise:exercises(id, name, measure), workout_sets(*))')
+        .select('*, workout_exercises(*, exercise:exercises(id, name, measure, load_mode), workout_sets(*))')
         .eq('id', id!)
         .single();
       if (error) throw error;
@@ -236,6 +347,8 @@ export function invalidateWorkoutData(qc: QueryClient, uid: string) {
   qc.invalidateQueries({ queryKey: ['plan'] });
   qc.invalidateQueries({ queryKey: ['planSession'] });
   qc.invalidateQueries({ queryKey: ['pbs'] });
+  qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+  qc.invalidateQueries({ queryKey: ['workoutLoads', uid] });
 }
 
 export function useDeleteWorkout() {
@@ -243,10 +356,15 @@ export function useDeleteWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('workouts').delete().eq('id', id);
+      const { data, error } = await supabase.from('workouts').delete().eq('id', id).select('started_at, finished_at');
       if (error) throw error;
+      return data[0] ?? null;
     },
-    onSuccess: () => invalidateWorkoutData(qc, uid),
+    onSuccess: (deleted) => {
+      invalidateWorkoutData(qc, uid);
+      // spec §14: later workouts may have taken their PB reference from this one
+      if (deleted?.finished_at) recomputeInBackground(uid, deleted.started_at);
+    },
   });
 }
 
@@ -265,7 +383,7 @@ export function useRecords() {
   });
 }
 
-export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'completed_at'>;
+export type HistorySet = Pick<WorkoutSet, 'id' | 'workout_id' | 'position' | 'set_type' | 'weight_kg' | 'reps' | 'rpe' | 'seconds' | 'e1rm' | 'side' | 'completed_at'>;
 export type HistoryWorkout = { workoutId: string; name: string; startedAt: string; sets: HistorySet[]; bestWeight: number | null; volume: number };
 
 /** Completed sets of one exercise, grouped by workout, newest first. */
@@ -277,7 +395,7 @@ export function useExerciseHistory(exerciseId: string | undefined, workouts = 30
     queryFn: async (): Promise<HistoryWorkout[]> => {
       const { data, error } = await supabase
         .from('workout_sets')
-        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, completed_at, workout:workouts!inner(name, started_at, finished_at)')
+        .select('id, workout_id, position, set_type, weight_kg, reps, rpe, seconds, e1rm, side, completed_at, workout:workouts!inner(name, started_at, finished_at)')
         .eq('user_id', uid)
         .eq('exercise_id', exerciseId!)
         .eq('completed', true)
@@ -295,7 +413,7 @@ export function useExerciseHistory(exerciseId: string | undefined, workouts = 30
         g.sets.push(row);
         if (row.set_type !== 'warmup') {
           if (row.weight_kg != null && (g.bestWeight == null || row.weight_kg > g.bestWeight)) g.bestWeight = row.weight_kg;
-          g.volume += (row.weight_kg ?? 0) * (row.reps ?? 0);
+          g.volume += volumeKg([row]);
         }
       }
       const out = [...groups.values()].slice(0, workouts);
@@ -311,9 +429,3 @@ export function usePreviousSets(exerciseId: string | undefined) {
   return { ...history, data: history.data?.[0]?.sets ?? [] };
 }
 
-export function epley(weightKg: number | null | undefined, reps: number | null | undefined): number | null {
-  if (weightKg == null || reps == null || reps <= 0) return null;
-  if (reps === 1) return weightKg;
-  if (reps > 12) return null;
-  return weightKg * (1 + reps / 30);
-}

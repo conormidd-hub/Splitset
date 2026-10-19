@@ -8,6 +8,7 @@ export const keys = {
   recentActivities: (uid: string, days: number) => ['recentActivities', uid, days] as const,
   runRoutes: (uid: string) => ['runRoutes', uid] as const,
   wellness: (uid: string, days: number) => ['wellness', uid, days] as const,
+  latestWeighIn: (uid: string) => ['latestWeighIn', uid] as const,
   segments: (uid: string) => ['segments', uid] as const,
   segment: (id: string) => ['segment', id] as const,
   segmentEfforts: (segmentId: string) => ['segmentEfforts', segmentId] as const,

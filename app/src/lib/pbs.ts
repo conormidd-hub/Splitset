@@ -1,9 +1,9 @@
 import { startOfMonth } from 'date-fns';
 
-import { epley } from '@/api/lifting';
 import type { LiftPb, Period, PbPeriods, RunPb } from '@/api/pbs';
 import type { SetRow } from '@/stores/activeWorkout';
-import { formatDistance, formatDuration, formatPace, LB_PER_KG, type Units } from './units';
+// relative .ts import (the rest are types or packages), so Node can load this file in tests
+import { formatDistance, formatDuration, formatPace, kgToDisplay, LB_PER_KG, type Units } from './units.ts';
 
 export const PERIODS: { value: Period; label: string }[] = [
   { value: 'month', label: 'Month' },
@@ -33,6 +33,45 @@ export const LIFT_METRICS = [
 ] as const;
 export type LiftMetric = (typeof LIFT_METRICS)[number]['key'];
 
+/** True when the logged weight is relative to bodyweight: the load added to it (bodyweight) or
+ *  the assistance taken off it (assisted). The 1RM of such a lift includes bodyweight (D4). */
+export function bodyweightRelative(loadMode: string | null | undefined): boolean {
+  return loadMode === 'bodyweight' || loadMode === 'assisted';
+}
+
+/** Whether a metric is a best at all for the exercise. An assisted lift's weight is the
+ *  assistance, so its heaviest (3RM, Heaviest) is its weakest set. */
+export function liftMetricApplies(metric: string, loadMode: string | null | undefined): boolean {
+  return loadMode !== 'assisted' || (metric !== '3rm' && metric !== 'weight');
+}
+
+/** Lifting metrics in the order to headline them. For a bodyweight or assisted lift most reps
+ *  comes before the 3RM, which is added load beside a 1RM that includes bodyweight. */
+export function liftMetricOrder(loadMode: string | null | undefined): LiftMetric[] {
+  const keys = LIFT_METRICS.map((m) => m.key);
+  if (!bodyweightRelative(loadMode)) return keys;
+  return (['1rm', 'reps', ...keys.filter((k) => k !== '1rm' && k !== 'reps')] as LiftMetric[]).filter((k) => liftMetricApplies(k, loadMode));
+}
+
+/** A metric's short label, saying when a 1RM includes bodyweight. */
+export function liftMetricShort(metric: LiftMetric, loadMode: string | null | undefined): string {
+  const short = LIFT_METRICS.find((m) => m.key === metric)?.short ?? metric;
+  return metric === '1rm' && bodyweightRelative(loadMode) ? `${short} incl. BW` : short;
+}
+
+/** Which metrics an exercise can have PBs in, by how it is measured, headline first: a bodyweight
+ *  lift puts most reps before its 3RM (added load), an assisted lift has only its 1RM. */
+export function metricsFor(measure: string, bodyweight: boolean, loadMode?: string | null): LiftMetric[] {
+  if (measure === 'weight_reps') {
+    if (loadMode === 'assisted') return ['1rm'];
+    return bodyweight ? ['1rm', 'reps', '3rm'] : ['1rm', '3rm'];
+  }
+  if (measure === 'reps') return ['reps'];
+  if (measure === 'duration') return ['time'];
+  if (measure === 'weight_duration') return ['weight'];
+  return [];
+}
+
 /** Quick loads in the workout, as a share of the 1RM. */
 export const LOAD_PERCENTS = [50, 60, 70, 80, 90];
 
@@ -47,6 +86,31 @@ export function formatLoad(kg: number | null | undefined, units: Units): string 
 export function plateRound(kg: number, units: Units): number {
   if (units === 'imperial') return (Math.round((kg * LB_PER_KG) / 5) * 5) / LB_PER_KG;
   return Math.round(kg / 2.5) * 2.5;
+}
+
+/**
+ * A quick load (a total in kg, as a share of the 1RM) as the value the set's weight field takes,
+ * rounded to the plates. A bodyweight or assisted lift's 1RM includes bodyweight × bw_factor, so
+ * its field gets the load added to that or the assistance taken off it. Null when the total can't
+ * be lifted that way (under bodyweight alone, or above it when assisted) or the facts are missing.
+ */
+export function quickLoad(
+  totalKg: number, units: Units, loadMode?: string | null, bwFactor?: number | null, bodyweightKg?: number | null,
+): number | null {
+  if (!bodyweightRelative(loadMode)) return plateRound(totalKg, units);
+  if (bwFactor == null || !bodyweightKg) return null;
+  const own = bodyweightKg * bwFactor;
+  const kg = plateRound(loadMode === 'bodyweight' ? totalKg - own : own - totalKg, units);
+  return kg < 0 ? null : kg || 0;   // no -0
+}
+
+/** A set's logged weight with what it means: "+20 kg" on top of bodyweight ("BW" alone), "30 kg
+ *  assist" off it ("no assist"), else the weight. Display units, one decimal in lb. */
+export function loggedWeight(kg: number, units: Units, loadMode: string | null | undefined): string {
+  const v = `${kgToDisplay(kg, units)} ${units === 'imperial' ? 'lb' : 'kg'}`;
+  if (loadMode === 'assisted') return kg ? `${v} assist` : 'no assist';
+  if (loadMode === 'bodyweight') return kg ? `+${v}` : 'BW';
+  return v;
 }
 
 export function formatLiftPb(metric: string, value: number | null | undefined, units: Units): string {
@@ -79,22 +143,24 @@ export type SessionBest = { value: number; setId: string };
 
 /**
  * Bests from sets ticked in the workout on screen, by the same rules as the lift_pbs view, so
- * they can be merged with the stored PBs while the workout is still going.
+ * they can be merged with the stored PBs while the workout is still going. The 1RM is the e1RM
+ * each set stores (`e1rmOf`, the engine's, as the view reads it). An assisted lift offers no
+ * metric that is its heaviest assistance (`liftMetricApplies`).
  */
-export function sessionBests(sets: SetRow[], measure: string, bodyweight: boolean): Partial<Record<LiftMetric, SessionBest>> {
+export function sessionBests(
+  sets: SetRow[], measure: string, bodyweight: boolean, e1rmOf: (s: SetRow) => number | null, loadMode?: string | null,
+): Partial<Record<LiftMetric, SessionBest>> {
   const out: Partial<Record<LiftMetric, SessionBest>> = {};
   const offer = (metric: LiftMetric, value: number | null, setId: string) => {
-    if (value == null || !Number.isFinite(value) || value <= 0) return;
+    if (value == null || !Number.isFinite(value) || value <= 0 || !liftMetricApplies(metric, loadMode)) return;
     if (!out[metric] || value > out[metric]!.value) out[metric] = { value, setId };
   };
   for (const s of sets) {
     if (!s.completed || s.setType === 'warmup') continue;
     const w = s.weightKg ?? 0;
     const r = s.reps ?? 0;
-    if (measure === 'weight_reps' && w > 0) {
-      offer('1rm', epley(w, r), s.id);
-      if (r >= 3) offer('3rm', w, s.id);
-    }
+    if (measure === 'weight_reps') offer('1rm', e1rmOf(s), s.id);
+    if (measure === 'weight_reps' && w > 0 && r >= 3) offer('3rm', w, s.id);
     if ((measure === 'reps' || (measure === 'weight_reps' && bodyweight && w === 0)) && r > 0) offer('reps', r, s.id);
     if (measure === 'duration') offer('time', s.seconds, s.id);
     if (measure === 'weight_duration') offer('weight', s.weightKg, s.id);
@@ -102,12 +168,20 @@ export function sessionBests(sets: SetRow[], measure: string, bodyweight: boolea
   return out;
 }
 
-/** Stored PBs for one metric with this session's best folded in: the session is this month and year. */
-export function mergeSession(stored: PbPeriods<LiftPb> | undefined, session: SessionBest | undefined) {
+/** lift_pbs keeps its bests to 0.1 (round(value, 1)), so a session is compared at that precision. */
+const tenth = (x: number) => Math.round(x * 10) / 10;
+
+/**
+ * Stored PBs for one metric with this session's best folded in: the session is this month and
+ * year. `manualAll` is the user's best manual entry, which also counts as the all-time best to
+ * beat (the "new PB" moment, spec §3.6). Beating it means beating it at the stored precision, so
+ * repeating the stored set (113.33 against 113.3) is not a new PB.
+ */
+export function mergeSession(stored: PbPeriods<LiftPb> | undefined, session: SessionBest | undefined, manualAll?: number | null) {
   const s = session?.value;
   const month = bestOf(stored?.month?.value, s);
   const year = bestOf(stored?.year?.value, s);
-  const all = bestOf(stored?.all?.value, s);
-  const prevAll = stored?.all?.value ?? null;
-  return { month, year, all, beatsAllTime: s != null && prevAll != null && s > prevAll };
+  const prevAll = bestOf(stored?.all?.value, manualAll);
+  const all = bestOf(prevAll, s);
+  return { month, year, all, beatsAllTime: s != null && prevAll != null && tenth(s) > tenth(prevAll) };
 }

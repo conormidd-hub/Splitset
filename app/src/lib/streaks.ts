@@ -90,6 +90,13 @@ export function sessionsLast7(sessions: readonly Session[], today: string): numb
   return sessions.filter((s) => s.date >= from && s.date <= today).length;
 }
 
+/** Days with at least one session in the last seven (today included): the greeting's seven dashes
+ *  light one per day trained, however many sessions a day held. */
+export function daysTrainedLast7(sessions: readonly Session[], today: string): number {
+  const from = isoDate(addDays(parseISO(today), -6));
+  return new Set(sessions.filter((s) => s.date >= from && s.date <= today).map((s) => s.date)).size;
+}
+
 export type Streak = {
   /** Consecutive weeks with at least one session, counting back from this week (or last week if this one is still empty). */
   weeks: number;

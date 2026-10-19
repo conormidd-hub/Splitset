@@ -47,3 +47,13 @@ const getHourSnapshot = () => Math.floor(nowSeconds / 3600) * 3600 * 1000;
 export function useNowHour(): number {
   return useSyncExternalStore(subscribe, getHourSnapshot, getHourSnapshot);
 }
+
+const getMinuteSnapshot = () => Math.floor(nowSeconds / 60) * 60 * 1000;
+
+/**
+ * The current minute as epoch milliseconds, re-rendering the caller only when the minute changes.
+ * For the recovery map at "now", whose fatigue falls continuously but is costly to recompute.
+ */
+export function useNowMinute(): number {
+  return useSyncExternalStore(subscribe, getMinuteSnapshot, getMinuteSnapshot);
+}

@@ -38,9 +38,23 @@ export function ErrorBanner({ message }: { message: string | null | undefined })
   );
 }
 
+/** The database's own refusals in words, by Postgres error code and, where one is known, the
+ *  constraint the message names; anything else keeps its own message. */
+const REFUSALS: { code: string; constraint?: string; words: string }[] = [
+  { code: '23505', constraint: 'exercises_owner_name_uidx', words: 'You already have an exercise with that name.' },
+  { code: '23514', constraint: 'manual_pbs_reps_check', words: 'A known best can be at most 100 reps.' },
+  { code: '23514', words: 'One of the values is out of range.' },
+];
+
 export function errorMessage(e: unknown): string {
   if (!e) return '';
   if (typeof e === 'string') return e;
+  if (typeof e === 'object' && 'code' in e && typeof (e as { code: unknown }).code === 'string') {
+    const { code, message } = e as { code: string; message?: unknown };
+    const text = typeof message === 'string' ? message : '';
+    const refusal = REFUSALS.find((r) => r.code === code && (!r.constraint || text.includes(r.constraint)));
+    if (refusal) return refusal.words;
+  }
   if (e instanceof Error) return e.message;
   if (typeof e === 'object' && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
     return (e as { message: string }).message;

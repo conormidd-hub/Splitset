@@ -1,37 +1,38 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, type ScrollView } from 'react-native';
+import { Animated, View, type ScrollView } from 'react-native';
 
 import { useRecentActivities } from '@/api/activities';
 import { useConnection, useSyncRuns } from '@/api/connections';
-import { DEFAULT_LAYOUT, useHomeLayout } from '@/api/home';
+import { useLatestActivities } from '@/api/history';
+import { DEFAULT_LAYOUT, RECOVERY, useHomeLayout, type FocusId } from '@/api/home';
+import { resetHome } from '@/lib/homeLayout';
 import { useWorkouts } from '@/api/lifting';
-import { useRunPbs } from '@/api/pbs';
-import { planTypeLabel, usePlanRange } from '@/api/plan';
+import { useLiftPbs, useRunPbs } from '@/api/pbs';
+import { usePlanRange } from '@/api/plan';
 import { useProfile, useUnits } from '@/api/profile';
 import { useTrainingSessions } from '@/api/streaks';
 import { useWellness } from '@/api/wellness';
 import { AddMetricSheet } from '@/components/home/AddMetricSheet';
 import { GlanceGrid } from '@/components/home/GlanceGrid';
-import { InFocusCard } from '@/components/home/InFocusCard';
-import { StreakButton } from '@/components/home/StreakButton';
-import { StreakHeat } from '@/components/home/StreakHeat';
-import { PbButton } from '@/components/pbs/PbButton';
+import { InFocusPair, type FocusContent, type FocusSlot } from '@/components/home/InFocusCard';
+import { LatestActivities } from '@/components/home/LatestActivities';
+import { PlanStrip } from '@/components/home/PlanStrip';
+import { TodayTopBar } from '@/components/home/TopBar';
+import { StreakDashes } from '@/components/home/StreakDashes';
+import { RecoveryHomeCard } from '@/components/recovery/RecoveryHomeCard';
 import { TrophyCabinet } from '@/components/pbs/TrophyCabinet';
 import { SyncNowBar } from '@/components/sync/SyncNowBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Chip';
-import { ListRow } from '@/components/ui/ListRow';
 import { Screen } from '@/components/ui/Screen';
 import { Grid, StatTile } from '@/components/ui/StatTile';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
-import { longDate, relativeDay, shortTime, todayIso } from '@/lib/dates';
+import { longDate, todayIso } from '@/lib/dates';
 import { snapshot, type MetricId, type MetricInputs, type Snapshot } from '@/lib/metrics';
-import { sessionsFrom, sessionsLast7, weekStreak } from '@/lib/streaks';
-import { formatDistance, formatDuration, formatDurationShort, formatPace, formatWeight, secPerKm } from '@/lib/units';
+import { daysTrainedLast7, sessionsFrom, weekStreak } from '@/lib/streaks';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { space } from '@/theme/tokens';
 
@@ -58,12 +59,15 @@ export default function Today() {
   const wellness = useWellness(90);
   const workouts = useWorkouts(60);
   const runPbs = useRunPbs();
+  const liftPbs = useLiftPbs();
   const training = useTrainingSessions();
   const today = todayIso();
   const plan = usePlanRange(today, today);
   const active = useActiveWorkout((s) => s.workout);
-  const lastLift = workouts.data?.[0];
+  const latest = useLatestActivities(3);
   const { layout, loaded, save, saving, error: saveError } = useHomeLayout();
+  // the top bar's wordmark fades as the page scrolls
+  const [topFade] = useState(() => new Animated.Value(0));
   const params = useLocalSearchParams<{ edit?: string }>();
 
   const inputs = useMemo<MetricInputs>(() => ({
@@ -71,17 +75,18 @@ export default function Today() {
     activities: recent.data ?? [],
     workouts: workouts.data ?? [],
     runPbs: runPbs.data,
+    liftPbs: liftPbs.data,
     profile: profile.data ?? null,
     units,
     today,
-  }), [wellness.data, recent.data, workouts.data, runPbs.data, profile.data, units, today]);
+  }), [wellness.data, recent.data, workouts.data, runPbs.data, liftPbs.data, profile.data, units, today]);
 
   // the streak and the heat line read two years of workouts, lightly
   const sessions = useMemo(
     () => sessionsFrom(training.data?.activities ?? [], training.data?.workouts ?? [], units),
     [training.data, units],
   );
-  const heatCount = sessionsLast7(sessions, today);
+  const daysTrained = daysTrainedLast7(sessions, today);
   const streak = weekStreak(sessions, today, training.data?.oldest);
 
   const refreshing = recent.isFetching || wellness.isFetching;
@@ -89,6 +94,7 @@ export default function Today() {
     recent.refetch();
     wellness.refetch();
     workouts.refetch();
+    latest.refetch();
     training.refetch();
     qc.invalidateQueries({ queryKey: ['pbs'] });
     syncRuns.refetch();
@@ -114,8 +120,8 @@ export default function Today() {
   const [editing, setEditing] = useState(params.edit === '1');
   const [dragging, setDragging] = useState(false);
   // the sheet's mode outlives its visibility, so the title holds still while it slides away
-  const [sheet, setSheet] = useState<{ open: boolean; mode: 'add' | 'pick' }>({ open: false, mode: 'add' });
-  const openSheet = (mode: 'add' | 'pick') => setSheet({ open: true, mode });
+  const [sheet, setSheet] = useState<{ open: boolean; mode: 'add' | 'pick'; slot: FocusSlot }>({ open: false, mode: 'add', slot: 'left' });
+  const openSheet = (mode: 'add' | 'pick', slot: FocusSlot = 'left') => setSheet({ open: true, mode, slot });
   const closeSheet = () => setSheet((s) => ({ ...s, open: false }));
   // a drag near the top or bottom of the screen scrolls the page under the finger
   const scrollRef = useRef<ScrollView | null>(null);
@@ -147,41 +153,53 @@ export default function Today() {
   }, [saved]);
   const note = saving ? 'Saving…' : saveError ? 'Not saved' : saved ? 'Saved' : null;
 
-  const setFocus = (id: MetricId) => { if (layout.focus !== id) save({ ...layout, focus: id }); };
+  const setFocus = (id: FocusId) => {
+    if (sheet.slot === 'right') { if (layout.focus2 !== id) save({ ...layout, focus2: id }); }
+    else if (id !== RECOVERY && layout.focus !== id) save({ ...layout, focus: id });
+  };
   const addGlance = (id: MetricId) => { if (!layout.glance.includes(id)) save({ ...layout, glance: [...layout.glance, id] }); };
   const removeGlance = (id: MetricId) => save({ ...layout, glance: layout.glance.filter((g) => g !== id) });
   const reorderGlance = (glance: MetricId[]) => save({ ...layout, glance });
   const resetLayout = async () => {
-    if (await confirm('Reset the home screen?', 'In focus and At a glance go back to the defaults.', 'Reset', true)) save(DEFAULT_LAYOUT);
+    if (await confirm('Reset the home screen?', 'In focus and At a glance go back to the defaults.', 'Reset', true)) save(resetHome(layout, DEFAULT_LAYOUT));
   };
 
-  const focusSnap = useMemo(() => (layout.focus ? snapshot(layout.focus, inputs) : null), [layout.focus, inputs]);
+  const focusLeft = useMemo<FocusContent>(() => (layout.focus ? { kind: 'metric', snapshot: snapshot(layout.focus, inputs) } : null), [layout.focus, inputs]);
+  const focusRight = useMemo<FocusContent>(() => (
+    layout.focus2 === RECOVERY ? { kind: 'recovery' } : layout.focus2 ? { kind: 'metric', snapshot: snapshot(layout.focus2, inputs) } : null
+  ), [layout.focus2, inputs]);
+  const planToday = plan.data ?? [];
   const week = useMemo(() => ({
     distance: snapshot('weekly_distance', inputs),
     sessions: snapshot('sessions', inputs),
     time: snapshot('weekly_time', inputs),
   }), [inputs]);
-  const last = recent.data?.length ? recent.data[recent.data.length - 1] : null;
 
   const conn = connection.data;
   const name = profile.data?.display_name ?? '';
 
   return (
     <Screen
-      title={name ? `${greeting()}, ${name}` : greeting()}
-      subtitle={longDate(new Date().toISOString())}
-      right={
-        <View style={{ alignItems: 'flex-end', gap: space.xs }}>
-          <PbButton />
-          {training.isSuccess ? <StreakButton streak={streak} /> : null}
-        </View>
-      }
+      edges={['top', 'left', 'right']}
+      topBar={<TodayTopBar streak={training.isSuccess ? streak : null} scrollY={topFade} />}
       refreshing={refreshing}
       onRefresh={refresh}
       scrollEnabled={!dragging}
       scrollRef={scrollRef}
-      onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}>
-      {training.isSuccess ? <StreakHeat count={heatCount} style={{ marginTop: -space.sm }} /> : null}
+      onScroll={(e) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+        topFade.setValue(e.nativeEvent.contentOffset.y);
+      }}>
+      {/* the greeting, with the last seven days as dashes beside it: compact, so the page starts higher */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.md, paddingTop: space.xs }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="label" tone="mut">{longDate(new Date().toISOString())}</T>
+          <T variant="h1" numberOfLines={2}>{name ? `${greeting()}, ${name}` : greeting()}</T>
+        </View>
+        {training.isSuccess ? <StreakDashes days={daysTrained} /> : null}
+      </View>
+      {/* today's plan, thin, straight under the streak */}
+      <PlanStrip sessions={planToday} loaded={plan.isSuccess} units={units} />
       {connection.isSuccess && !conn ? (
         <Card tone="accent" title="Connect your watch" subtitle="Two minutes: an intervals.icu account, your Garmin, and one key." onPress={() => router.push('/settings/connect')}>
           <Button title="Connect" small onPress={() => router.push('/settings/connect')} />
@@ -195,7 +213,7 @@ export default function Today() {
         <>
           <View style={{ gap: space.sm }}>
             <T variant="label" tone="mut">In focus</T>
-            <InFocusCard snapshot={focusSnap} onChange={() => openSheet('pick')} />
+            <InFocusPair left={focusLeft} right={focusRight} onChange={(slot) => openSheet('pick', slot)} />
           </View>
 
           <View style={{ gap: space.sm }}>
@@ -224,23 +242,6 @@ export default function Today() {
         </>
       ) : null}
 
-      <Card title="Today's plan" right={<Button title="Plan" variant="ghost" small onPress={() => router.push('/plan')} />}>
-        {plan.data?.length ? (
-          plan.data.map((s, i) => (
-            <ListRow
-              key={s.id}
-              first={i === 0}
-              title={s.title}
-              subtitle={[planTypeLabel(s.type), s.subtype, s.target_distance_m ? formatDistance(s.target_distance_m, units, 1) : null].filter(Boolean).join(' · ')}
-              badge={<Badge label={s.status} tone={s.status === 'done' ? 'pos' : s.status === 'skipped' ? 'neg' : 'mut'} />}
-              onPress={() => router.push(`/plan/${s.id}`)}
-            />
-          ))
-        ) : (
-          <T tone="mut">Nothing planned today.{plan.isSuccess ? ' Rest day, or add a session from the Plan tab.' : ''}</T>
-        )}
-      </Card>
-
       <Card title="This week" subtitle="Monday to today">
         <Grid>
           <StatTile label="Running" value={withUnit(week.distance)} sub={week.distance.sub} subTone={week.distance.subTone} />
@@ -249,45 +250,11 @@ export default function Today() {
         </Grid>
       </Card>
 
-      {last ? (
-        <Card title="Latest activity">
-          <ListRow
-            first
-            title={last.name ?? last.type}
-            subtitle={`${relativeDay(last.start_time_local)} · ${shortTime(last.start_time_local)}`}
-            badge={<Badge label={last.type} />}
-            value={last.distance_m ? formatDistance(last.distance_m, units) : formatDuration(last.moving_time_s)}
-            valueSub={last.distance_m ? formatPace(secPerKm(last.distance_m, last.moving_time_s), units) : undefined}
-            onPress={() => router.push(`/run/${last.id}`)}
-          />
-        </Card>
-      ) : null}
+      {/* the newest few runs, rides and gym workouts (a live workout first), dropping open to the last three */}
+      <LatestActivities items={latest.data ?? []} active={active} units={units} loading={latest.isLoading} failed={latest.isError} />
 
-      <Card title="Lifting" right={<Button title="Lift" variant="ghost" small onPress={() => router.push('/lift')} />}>
-        {active ? (
-          <ListRow
-            first
-            title="Workout in progress"
-            subtitle={`${active.name} · started ${shortTime(active.startedAt)} · ${active.exercises.length} exercise${active.exercises.length === 1 ? '' : 's'}`}
-            badge={<Badge label="live" tone="accent" />}
-            onPress={() => router.push('/lift/workout')}
-          />
-        ) : lastLift ? (
-          <ListRow
-            first
-            title={lastLift.name ?? 'Workout'}
-            subtitle={`${relativeDay(lastLift.started_at)} · ${formatDurationShort(lastLift.duration_s)} · ${lastLift.sets_completed ?? 0} sets`}
-            value={lastLift.volume_kg ? formatWeight(lastLift.volume_kg, units, 0) : undefined}
-            valueSub={lastLift.volume_kg ? 'volume' : undefined}
-            onPress={() => router.push(`/lift/history/${lastLift.id}`)}
-          />
-        ) : (
-          <View style={{ gap: 12 }}>
-            <T tone="mut">No workouts logged yet. Routines, sets, the rest timer and records live in the Lift tab.</T>
-            <Button title="Start a workout" variant="secondary" small onPress={() => router.push('/lift')} />
-          </View>
-        )}
-      </Card>
+      {/* the recovery figure is already up top when it's the right In focus tile */}
+      {layout.focus2 === RECOVERY ? null : <RecoveryHomeCard />}
 
       <TrophyCabinet units={units} />
 
@@ -296,6 +263,7 @@ export default function Today() {
       <AddMetricSheet
         visible={sheet.open}
         mode={sheet.mode}
+        slot={sheet.slot}
         layout={layout}
         onClose={closeSheet}
         onAdd={addGlance}

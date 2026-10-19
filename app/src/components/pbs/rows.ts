@@ -1,6 +1,10 @@
 import type { LiftPb, PbPeriods, RunPb } from '@/api/pbs';
-import { formatLiftPb, formatLoad, formatRunPb, isNewThisMonth, LIFT_METRICS, mergeSession, RUN_PBS, type LiftMetric, type SessionBest } from '@/lib/pbs';
 import type { Units } from '@/lib/units';
+// relative .ts import (the rest are types), so Node can load this file in tests
+import {
+  bodyweightRelative, formatLiftPb, formatLoad, formatRunPb, isNewThisMonth, LIFT_METRICS, liftMetricApplies, mergeSession, RUN_PBS,
+  type LiftMetric, type SessionBest,
+} from '../../lib/pbs.ts';
 
 import type { PbCell, PbRow } from './PbTable';
 
@@ -19,37 +23,55 @@ export function runRows(index: Map<string, PbPeriods<RunPb>> | undefined, units:
   });
 }
 
-/** How a 1RM was arrived at: "tested" for a real single, otherwise the set it was estimated from ("132.5×5"). */
-function oneRmNote(r: LiftPb | undefined, units: Units): string | undefined {
-  if (!r?.reps || r.weight_kg == null) return undefined;
-  return r.reps === 1 ? 'tested' : `${formatLoad(r.weight_kg, units).split(' ')[0]}×${r.reps}`;
+/** How a 1RM was arrived at: "tested" for a single that is its own e1RM (no reps in reserve),
+ *  otherwise the set it was estimated from ("132.5×5"). A bodyweight or assisted lift's 1RM
+ *  includes bodyweight (D4), so its set reads "BW+20×5", "BW×8" or "BW−30×8". */
+export function oneRmNote(r: LiftPb | undefined, units: Units, loadMode?: string | null): string | undefined {
+  if (!r?.reps) return undefined;
+  const num = (kg: number) => formatLoad(kg, units).split(' ')[0];
+  if (bodyweightRelative(loadMode)) {
+    return `BW${r.weight_kg ? `${loadMode === 'assisted' ? '−' : '+'}${num(r.weight_kg)}` : ''}×${r.reps}`;
+  }
+  if (r.weight_kg == null) return undefined;
+  const tested = r.reps === 1 && r.value != null && Math.abs(r.value - r.weight_kg) < 0.05;
+  return tested ? 'tested' : `${num(r.weight_kg)}×${r.reps}`;
 }
 
 /**
  * One row per metric an exercise has, Month / Year / All time. With `session`, sets ticked in the
- * workout on screen are folded in, so the numbers move as the lifter beats them.
+ * workout on screen are folded in, so the numbers move as the lifter beats them. `manualAll` is
+ * the best manual entry per metric, which counts as the all-time best (the workout passes the
+ * 1RM's; the trophy cabinet leaves manual PBs out, notes 17.4). `loadMode` words the 1RM's set
+ * and drops what an assisted lift has no best in.
  */
 export function liftRows(
   byMetric: Map<string, PbPeriods<LiftPb>> | undefined,
   units: Units,
-  opts: { session?: Partial<Record<LiftMetric, SessionBest>>; highlight?: LiftMetric | null; only?: LiftMetric[] } = {},
+  opts: {
+    session?: Partial<Record<LiftMetric, SessionBest>>; highlight?: LiftMetric | null; only?: LiftMetric[];
+    manualAll?: Partial<Record<LiftMetric, number | null>>; loadMode?: string | null;
+  } = {},
 ): PbRow[] {
   return LIFT_METRICS.flatMap(({ key, label }) => {
     if (opts.only && !opts.only.includes(key)) return [];
+    if (!liftMetricApplies(key, opts.loadMode)) return [];
     const stored = byMetric?.get(key);
     const session = opts.session?.[key];
-    if (!stored && !session && !opts.only) return [];
-    const m = mergeSession(stored, session);
+    const manual = opts.manualAll?.[key] ?? null;
+    if (!stored && !session && manual == null && !opts.only) return [];
+    const m = mergeSession(stored, session, manual);
+    // a manual entry above every logged set is the all-time best, so the logged one is neither its note nor new
+    const manualWins = manual != null && !(stored?.all?.value != null && stored.all.value >= manual);
     const fmt = (v: number | null): string => formatLiftPb(key, v, units);
-    const note = key === '1rm' ? (r: LiftPb | undefined) => oneRmNote(r, units) : () => undefined;
+    const note = key === '1rm' ? (r: LiftPb | undefined) => oneRmNote(r, units, opts.loadMode) : () => undefined;
     return [{
       key, label,
       cells: [
         { value: fmt(m.month), sub: note(stored?.month) },
         { value: fmt(m.year), sub: note(stored?.year) },
-        { value: fmt(m.all), sub: m.beatsAllTime ? 'this session' : note(stored?.all) },
+        { value: fmt(m.all), sub: m.beatsAllTime ? 'this session' : manualWins ? 'manual' : note(stored?.all) },
       ],
-      isNew: m.beatsAllTime || isNewThisMonth(stored?.all?.achieved_at),
+      isNew: m.beatsAllTime || (!manualWins && isNewThisMonth(stored?.all?.achieved_at)),
       highlight: opts.highlight === key,
     }];
   });
