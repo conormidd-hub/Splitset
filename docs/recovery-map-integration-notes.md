@@ -1936,3 +1936,16 @@ Follow-up · 2026-10-19, from Conor's mock-up.
    - `npm test`: 277 tests; the type check and lint are clean.
 
    Sync wasn't pressed in testing, since it starts a real run.
+
+## 34. The SPLITSET wordmark in the top bar
+
+Follow-up · 2026-10-19, from Conor's wordmark image.
+
+1. **The image replaces the text.** Conor's wordmark sits in the top bar's centre (`Wordmark` in `components/ui`), in place of the typed "SPLITSET". It still fades out as the page scrolls.
+2. **Two masks, so each half takes the theme's colour.**
+   - **How it was cut:** the source (`assets/images/wordmark.png`) was split by colour rather than at a gap between letters, since the widest gap fell inside SPLIT. Its reddish (cream) pixels became `wordmark-split.png`, its green ones `wordmark-set.png`. Both are white on transparent, cropped to the same 131 px height.
+   - **SPLIT:** the logo's cream on the dark theme; the text colour on a light theme, where cream would vanish.
+   - **SET:** the accent green.
+   - The tint is the Image's `tintColor` prop (the web warns that `style.tintColor` is deprecated).
+3. **Size:** the source's proportions, up to 16 pt tall, shrinking to fit the space between the button pairs.
+4. **Checked (375 pt, dark):** both halves render with the right colours, the wordmark's opacity reaches 0 after a scroll, and no new console warnings appeared. `npm test` passes 277 tests, and the type check and lint are clean.

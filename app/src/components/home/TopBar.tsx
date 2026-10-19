@@ -6,6 +6,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useSyncNow } from '@/api/sync';
 import { T } from '@/components/ui/T';
+import { Wordmark } from '@/components/ui/Wordmark';
 import { ICONS } from '@/lib/icons';
 import type { Streak } from '@/lib/streaks';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -44,11 +45,8 @@ export function TodayTopBar({ streak, scrollY }: { streak: Streak | null; scroll
         </Bubble>
       </View>
 
-      <Animated.View pointerEvents="none" style={{ flex: 1, alignItems: 'center', opacity: wordmark }}>
-        <T accessibilityRole="header" accessibilityLabel="SplitSet" style={{ fontSize: 21, fontWeight: '900', letterSpacing: 2 }}>
-          <T style={{ fontSize: 21, fontWeight: '900', letterSpacing: 2, color: palette.ink }}>SPLIT</T>
-          <T style={{ fontSize: 21, fontWeight: '900', letterSpacing: 2, color: palette.accent }}>SET</T>
-        </T>
+      <Animated.View pointerEvents="none" style={{ flex: 1, alignItems: 'center', paddingHorizontal: space.sm, opacity: wordmark }}>
+        <Wordmark maxHeight={16} />
       </Animated.View>
 
       <View style={{ flexDirection: 'row', gap: space.sm }}>
