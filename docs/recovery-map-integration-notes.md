@@ -2048,7 +2048,7 @@ Follow-up · 2026-10-19, from Conor's list of changes. His choices:
 
 ### 36.3 Checked
 
-6. **Web preview, demo athlete, Albert Park:** three taps routed a 2.56 km course along Queens Rd and St Kilda Rd; dragging the middle point re-routed it (3.34 km); a tap on the line inserted a point and Undo took it back; Back to start closed the loop (5.01 km) and hid the finish marker; Save reached Supabase and failed only on the missing column. Export GPX was not pressed (it is a browser download); `toGpx` is covered by tests.
+6. **Web preview, demo athlete, Albert Park:** three taps routed a 2.56 km course along Queens Rd and St Kilda Rd; dragging the middle point re-routed it (3.34 km); a tap on the line inserted a point and Undo took it back; Back to start closed the loop (5.01 km) and hid the finish marker. Before the migration, Save reached Supabase and failed only on the missing column; after Conor pushed it (verified in `supabase_migrations.schema_migrations`), a 4.23 km closed course saved as "Albert Park test loop" (kind drawn, elevation profile, Export GPX and Edit course on its page), and Edit course → Reverse → Save changes updated it in place (4.72 km the other way round). Export GPX was not pressed (it is a browser download); `toGpx` is covered by tests.
 7. **Tests:** `npm test` 327, adding `courseBuilder.test.ts` and `gpx.test.ts`. Type check and lint clean.
 
 ### 36.4 Not built
