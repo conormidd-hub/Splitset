@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,7 +8,7 @@ import { invalidateWorkoutData, useExerciseNotes, useExercises, usePreviousSets,
 import { useLiftPbs } from '@/api/pbs';
 import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
-import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useThresholds } from '@/api/recovery';
+import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useRecoveryMap, useThresholds } from '@/api/recovery';
 import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
 import { IdlePrompt } from '@/components/lift/IdlePrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
@@ -35,6 +35,7 @@ import { setRowE1rm } from '@/lib/lifting/setRow';
 import { groupItems, groupLetter, turnIn } from '@/lib/lifting/superset';
 import { templateChanged, templateFromWorkout } from '@/lib/lifting/template';
 import { formatLiftPb, formatLoad, liftMetricShort, mergeSession, metricsFor, sessionBests } from '@/lib/pbs';
+import { MUSCLE_IDS, type MuscleId } from '@/lib/recovery/library';
 import { useUserId } from '@/lib/session';
 import { confirm } from '@/lib/confirm';
 import { adjustRest, formatClock, startRest, stopRest, useRestRemaining } from '@/lib/restTimer';
@@ -70,7 +71,10 @@ export default function ActiveWorkoutScreen() {
   const routines = useRoutines();
   const saveRoutine = useSaveRoutine();
   const live = useLiveSession();
+  // the body as it stands now, this session included: the header bubble and its quick view
+  const body = useRecoveryMap();
   const names = useMuscleNames();
+  const glow = useMemo(() => new Set<MuscleId>(live ? MUSCLE_IDS.filter((id) => live.session[id].level > 0) : []), [live]);
   const [figureBottom, setFigureBottom] = useState(0);
   const [scrolled, setScrolled] = useState(false);
   const [quick, setQuick] = useState(false);
@@ -179,8 +183,8 @@ export default function ActiveWorkoutScreen() {
               placeholder="Workout"
               placeholderTextColor={palette.mut}
             />
-            <FigureBubble map={live?.session ?? null} mode="session" shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
-              label="This session's muscles, quick view" />
+            <FigureBubble map={body.data ?? live?.session ?? null} mode={body.data ? 'recovery' : 'session'} shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
+              label="Body now, with this session's muscles, quick view" />
             <RestBubble />
             <Button title="Finish" small loading={finishing} onPress={onFinish} />
           </View>
@@ -280,12 +284,22 @@ export default function ActiveWorkoutScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <QuickView visible={quick} onClose={() => setQuick(false)} title="This session">
-        <T variant="h3">This session</T>
+      <QuickView visible={quick} onClose={() => setQuick(false)} title="Body now">
+        <T variant="h3">{body.data ? 'Body now' : 'This session'}</T>
         {live ? (
           <>
-            <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
-            <KeyStrip mode="session" inline />
+            {body.data ? (
+              <>
+                <FigurePair map={body.data} mode="recovery" figureWidth={110} nameOf={names} labels glow={glow} />
+                <T variant="small" tone="mut">Every muscle as it stands now; the glow is what this session has loaded.</T>
+                <KeyStrip mode="recovery" glow inline />
+              </>
+            ) : (
+              <>
+                <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
+                <KeyStrip mode="session" inline />
+              </>
+            )}
             <SessionMuscleRows session={live.session} nameOf={names} />
           </>
         ) : null}

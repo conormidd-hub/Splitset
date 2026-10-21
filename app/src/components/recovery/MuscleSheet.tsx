@@ -23,6 +23,8 @@ type Props = {
   state: RecoveryMuscle | SessionMapMuscle | null;
   /** IANA zone for workout dates (profiles.timezone). */
   timeZone?: string | null;
+  /** The muscle before this session (the live workout's Body view), for a before-and-after line. */
+  before?: { label: string } | null;
   onClose: () => void;
 };
 
@@ -50,7 +52,7 @@ function Stat({ label, value }: { label: string; value: string }) {
  * and the exercises behind it this week (role badge, date, role_weight × L_e), largest first, with
  * provisional references marked. A bottom sheet on a phone, a centred card when wide.
  */
-export function MuscleSheet({ muscle, name, theme, state, timeZone, onClose }: Props) {
+export function MuscleSheet({ muscle, name, theme, state, timeZone, before, onClose }: Props) {
   const { palette, name: themeName } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -98,6 +100,9 @@ export function MuscleSheet({ muscle, name, theme, state, timeZone, onClose }: P
                 <View style={{ flex: 1 }}>
                   <T variant="h2" accessibilityRole="header">{shown.name}</T>
                   <T variant="small" tone="ink2">{shown.state.label}{recovery ? ` · ${recovery.advice}` : ''}</T>
+                  {visible && before ? (
+                    <T variant="small" tone="accent" weight="600">This session: {before.label} → {shown.state.label}</T>
+                  ) : null}
                 </View>
                 <Pressable
                   onPress={onClose}
