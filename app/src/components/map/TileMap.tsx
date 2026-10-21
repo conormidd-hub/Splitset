@@ -22,6 +22,12 @@ type Props = {
   view?: MapView | null;
   /** Called with the new camera after a pan or zoom, or null when the fit button is pressed. */
   onViewChange?: (view: MapView | null) => void;
+  /**
+   * The camera the map is drawing with and its size, after every change, so a parent can turn
+   * taps and drags into coordinates without measuring the map itself. Pass a stable callback
+   * that keeps its state when nothing changed, or every render reports again.
+   */
+  onCamera?: (view: MapView, size: Size) => void;
   /** Fixed height; leave unset to fill the parent. */
   height?: number;
   /** Drag to pan and show the zoom buttons. Keep off inside a ScrollView. */
@@ -236,7 +242,7 @@ class CameraAnim {
  * you pan and zoom, not a full map view.
  */
 export function TileMap({
-  bounds, view, onViewChange, height, interactive = false, padding = 24, compact = false, style, onPress, onDragStart, onDragMove, onDragEnd, children,
+  bounds, view, onViewChange, onCamera, height, interactive = false, padding = 24, compact = false, style, onPress, onDragStart, onDragMove, onDragEnd, children,
 }: Props) {
   const { name, palette } = useTheme();
   const tileStyle: TileStyle = name === 'night' ? 'dark' : 'light';
@@ -282,8 +288,11 @@ export function TileMap({
   // the same frame as the new scene, never one frame late.
   useLayoutEffect(() => {
     pan.setValue({ x: 0, y: 0 });
-    if (cam && size.width && size.height) camAnim.onCamera(cam, size);
-  }, [cam, size, pan, camAnim]);
+    if (cam && size.width && size.height) {
+      camAnim.onCamera(cam, size);
+      onCamera?.(cam, size);
+    }
+  }, [cam, size, pan, camAnim, onCamera]);
 
   const transform = useMemo(
     () => [{ translateX: Animated.add(pan.x, camAnim.tx) }, { translateY: Animated.add(pan.y, camAnim.ty) }, { scale: camAnim.scale }],

@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
-import { memo, useMemo, useState } from 'react';
-import { View, type LayoutChangeEvent } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Circle, Path } from 'react-native-svg';
 
 import { useActivities, useRunRoutes } from '@/api/activities';
@@ -11,7 +11,7 @@ import { useSaveRoute } from '@/api/routes';
 import { ROUTING_PROVIDER, valhalla } from '@/api/routing';
 import { CafeLayer } from '@/components/map/CafeLayer';
 import { StartPicker } from '@/components/map/StartPicker';
-import { TileMap, type Projector } from '@/components/map/TileMap';
+import { TileMap, type Projector, type Size } from '@/components/map/TileMap';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, Chip, Segmented } from '@/components/ui/Chip';
@@ -21,13 +21,13 @@ import { Screen } from '@/components/ui/Screen';
 import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
-import { MAX_ZOOM, bboxOf, decodeRoute, fitBbox, pathD, unprojectPt, viewBbox, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
+import { MAX_ZOOM, bboxOf, decodeRoute, pathD, sameView, unprojectPt, viewBbox, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
 import { CAFE_ZOOM, cafeBox, nearestCafe } from '@/lib/places';
 import { generateLoops, generatePointToPoint, type Candidate } from '@/lib/routeBuilder';
 import { typicalPaceSecPerKm } from '@/lib/runAnalysis';
 import { KM_PER_MILE, formatDistance, formatDuration, formatElevation } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 
 type Mode = Candidate['kind'];
 
@@ -36,12 +36,9 @@ const MODES: { value: Mode; label: string }[] = [
   { value: 'point_to_point', label: 'Point to point' },
 ];
 
-const MAP_HEIGHT = 300;
-/** Must match the padding handed to TileMap so the camera derived here is the one it draws with. */
-const MAP_PADDING = 24;
 /** Below this zoom a fingertip covers hundreds of metres, so a tap zooms in on the spot instead of placing a point. */
 const PLACE_ZOOM = 12;
-/** Zoom to jump to when a point is chosen for the user (last run start). */
+/** Zoom to jump to when a point is chosen for the user (an address, home, the last run's start). */
 const PLACE_VIEW_ZOOM = 14;
 /** Framed when the user has no run with a GPS trace yet: tap your part of the world and keep tapping to zoom in. */
 const WORLD: Bbox = [-50, -160, 65, 160];
@@ -82,13 +79,25 @@ function marker(project: Projector, p: LatLng, fill: string, ring: string) {
   return <Circle cx={s.x} cy={s.y} r={6} fill={fill} stroke={ring} strokeWidth={2} />;
 }
 
+/** A text link in the navigation header. */
+function HeaderLink({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="link" style={({ pressed }) => ({ paddingHorizontal: space.sm, opacity: pressed ? 0.6 : 1 })}>
+      <T variant="small" tone="accent" weight="700">{title}</T>
+    </Pressable>
+  );
+}
+
 /**
- * Build a route along real roads and paths: choose loop or point to point, tap the map to place
- * the start (and end), give a target distance, generate, pick a candidate and save it.
+ * Build a route along real roads and paths: choose loop or point to point, put the start (and
+ * end) on the map, give a distance, generate, pick a candidate and save it. The map stays pinned
+ * at the top while the controls and the candidates scroll underneath, and frames each route as
+ * it is chosen.
  */
 export default function NewRoute() {
   const { palette } = useTheme();
   const units = useUnits();
+  const { height: windowH } = useWindowDimensions();
   const runs = useRunRoutes();
   const recent = useActivities('runs');
   const save = useSaveRoute();
@@ -99,8 +108,8 @@ export default function NewRoute() {
   /** Target distance in the display unit (km or mi). */
   const [target, setTarget] = useState<number | null>(null);
   const [view, setView] = useState<MapView | null>(null);
-  const [mapWidth, setMapWidth] = useState(0);
-  const [mapTouch, setMapTouch] = useState(false);
+  /** The camera the map is drawing with and its size, reported by the map itself. */
+  const [mapCam, setMapCam] = useState<{ cam: MapView; size: Size } | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [name, setName] = useState('');
   /** Where the start (and the end) came from when picked by name: an address, home, a café. */
@@ -108,26 +117,13 @@ export default function NewRoute() {
   const [endLabel, setEndLabel] = useState<string | null>(null);
   const [showCafes, setShowCafes] = useState(true);
 
-  // useRunRoutes is oldest first, so the last entry is the most recent run with a trace.
-  const lastRun = runs.data?.length ? runs.data[runs.data.length - 1] : null;
-  const lastPts = useMemo(() => (lastRun ? decodeRoute(lastRun.polyline) : []), [lastRun]);
-  const bounds = useMemo<Bbox>(() => lastRun?.bbox ?? bboxOf(lastPts) ?? WORLD, [lastRun, lastPts]);
-  // The camera TileMap is drawing with: the explicit view, else the same fit it computes itself.
-  const cam = useMemo<MapView | null>(
-    () => view ?? (mapWidth ? fitBbox(bounds, mapWidth, MAP_HEIGHT, MAP_PADDING) : null),
-    [view, bounds, mapWidth],
-  );
-  const size = useMemo(() => ({ width: mapWidth, height: MAP_HEIGHT }), [mapWidth]);
-
-  // the cafés in view once zoomed in enough, asked for when the map has settled
-  const cafeKey = showCafes && cam && mapWidth && cam.zoom >= CAFE_ZOOM ? cafeBox(viewBbox(cam, size)).join(',') : null;
-  const settledCafeKey = useDebounced(cafeKey, 600);
-  const cafesQ = useCafes(settledCafeKey ? (settledCafeKey.split(',').map(Number) as Bbox) : null);
-  const cafes = showCafes && cafesQ.data ? cafesQ.data : [];
-
-  const pace = useMemo(() => typicalPaceSecPerKm(recent.data?.pages[0]), [recent.data]);
-  const unitLabel = units === 'imperial' ? 'mi' : 'km';
-  const distM = target != null && target > 0 ? target * (units === 'imperial' ? KM_PER_MILE : 1) * 1000 : null;
+  /** Pinned at the top: about two fifths of the window, so the controls still show under it. */
+  const mapHeight = Math.round(Math.min(360, Math.max(220, windowH * 0.38)));
+  const cam = mapCam?.cam ?? null;
+  const size = mapCam?.size ?? null;
+  const onCamera = useCallback((c: MapView, s: Size) => {
+    setMapCam((prev) => (prev && sameView(prev.cam, c) && prev.size.width === s.width && prev.size.height === s.height ? prev : { cam: c, size: s }));
+  }, []);
 
   const gen = useMutation({
     retry: false,
@@ -144,19 +140,35 @@ export default function NewRoute() {
   const selected = candidates.length ? Math.min(selectedIdx, candidates.length - 1) : -1;
   const chosen = selected >= 0 ? candidates[selected] : null;
 
+  // useRunRoutes is oldest first, so the last entry is the most recent run with a trace.
+  const lastRun = runs.data?.length ? runs.data[runs.data.length - 1] : null;
+  const lastPts = useMemo(() => (lastRun ? decodeRoute(lastRun.polyline) : []), [lastRun]);
+  /** What the map frames when no camera is set: the chosen route whole, else the last run's area. */
+  const bounds = useMemo<Bbox>(
+    () => (chosen ? bboxOf(chosen.pts) : null) ?? lastRun?.bbox ?? bboxOf(lastPts) ?? WORLD,
+    [chosen, lastRun, lastPts],
+  );
+
+  // the cafés in view once zoomed in enough, asked for when the map has settled
+  const cafeKey = showCafes && cam && size && cam.zoom >= CAFE_ZOOM ? cafeBox(viewBbox(cam, size)).join(',') : null;
+  const settledCafeKey = useDebounced(cafeKey, 600);
+  const cafesQ = useCafes(settledCafeKey ? (settledCafeKey.split(',').map(Number) as Bbox) : null);
+  const cafes = showCafes && cafesQ.data ? cafesQ.data : [];
+
+  const pace = useMemo(() => typicalPaceSecPerKm(recent.data?.pages[0]), [recent.data]);
+  const unitLabel = units === 'imperial' ? 'mi' : 'km';
+  const distM = target != null && target > 0 ? target * (units === 'imperial' ? KM_PER_MILE : 1) * 1000 : null;
+
   // Routes begin at the point the router snapped onto a path, so once there are candidates the
   // markers follow the chosen one rather than the tapped spot.
   const startPt = chosen ? toLatLng(chosen.pts[0]) : start;
   const endPt = mode === 'point_to_point' ? (chosen ? toLatLng(chosen.pts[chosen.pts.length - 1]) : end) : null;
 
+  /** Forget the candidates but keep the map where it is: with no route to frame, a null camera would jump back to the last run. */
   const resetCandidates = () => {
+    if (cam) setView(cam);
     gen.reset();
     setSelectedIdx(0);
-  };
-
-  const onMapLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
-    setMapWidth((prev) => (prev === w ? prev : w));
   };
 
   /** Put the start (or, point to point, the end) at `p`; `label` says where it came from when picked by name. */
@@ -172,7 +184,7 @@ export default function NewRoute() {
   };
 
   const onMapPress = (pt: Pt, project: Projector) => {
-    if (!cam || !mapWidth) return;
+    if (!cam || !size) return;
     const tapped = unprojectPt(pt, cam, size);
     if (cam.zoom < PLACE_ZOOM) {
       setView({ center: tapped, zoom: Math.min(MAX_ZOOM, cam.zoom + 3) });
@@ -200,8 +212,8 @@ export default function NewRoute() {
     const p = toLatLng(lastPts[0]);
     setStart(p);
     setStartLabel('Last run start');
-    setView({ center: p, zoom: Math.max(cam?.zoom ?? 0, PLACE_VIEW_ZOOM) });
     resetCandidates();
+    setView({ center: p, zoom: Math.max(cam?.zoom ?? 0, PLACE_VIEW_ZOOM) });
   };
 
   const clearPoints = () => {
@@ -215,7 +227,12 @@ export default function NewRoute() {
   const canGenerate = !!start && (mode === 'loop' ? distM != null : !!end) && !gen.isPending;
   const generate = () => {
     if (!start) return;
-    gen.mutate({ mode, start, end, distM }, { onSuccess: () => setSelectedIdx(0) });
+    // a null camera frames the chosen route whole once it arrives
+    gen.mutate({ mode, start, end, distM }, { onSuccess: () => { setSelectedIdx(0); setView(null); } });
+  };
+  const choose = (i: number) => {
+    setSelectedIdx(i);
+    setView(null);
   };
   const where = [startLabel ? `Start: ${startLabel}` : null, endLabel ? `End: ${endLabel}` : null].filter(Boolean).join(' · ');
 
@@ -239,45 +256,28 @@ export default function NewRoute() {
     : cam.zoom < PLACE_ZOOM
       ? 'Zoom in to place points: tap the map to zoom in on that spot.'
       : !start
-        ? 'Tap the map to place the start.'
+        ? 'Tap the map to place the start, or search for it below.'
         : mode === 'point_to_point' && !end
-          ? 'Tap the map to place the end.'
-          : mode === 'loop'
-            ? 'Tap elsewhere to move the start. Drag to pan.'
-            : 'Tap elsewhere to move the end, or clear the points to start over.';
+          ? 'Tap the map to place the end, or search for it below.'
+          : chosen
+            ? 'Pick a route from the list. Tap the map to move the start.'
+            : mode === 'loop'
+              ? 'Tap elsewhere to move the start. Drag to pan.'
+              : 'Tap elsewhere to move the end, or clear the points to start over.';
 
   return (
     <>
-      <Stack.Screen options={{ title: 'New route' }} />
-      <Screen scrollEnabled={!mapTouch}>
-        <Segmented<Mode> options={MODES} value={mode} onChange={onModeChange} />
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-          <Button title="Draw your own course instead" variant="ghost" small onPress={() => router.push('/run/routes/draw')} />
-        </View>
-
-        {runs.isLoading ? (
-          <Loading label="Finding your last run" />
-        ) : (
-          <View style={{ gap: space.sm }}>
-            <StartPicker
-              near={cam?.center ?? null}
-              prompt={mode === 'point_to_point' && start ? 'Search the end: an address or a place' : 'Search the start: an address or a place'}
-              onPick={onPick}
-              current={start ? { p: start, label: startLabel } : null}
-              extra={
-                <>
-                  {lastPts.length ? <Button title="Last run start" variant="secondary" small onPress={useLastRunStart} /> : null}
-                  {start ? <Button title="Clear points" variant="ghost" small onPress={clearPoints} /> : null}
-                </>
-              }
-            />
-            {/* While a finger is on the map the page must not scroll, or every vertical pan would scroll instead. */}
-            <View
-              onLayout={onMapLayout}
-              onTouchStart={() => setMapTouch(true)}
-              onTouchEnd={() => setMapTouch(false)}
-              onTouchCancel={() => setMapTouch(false)}>
-              <TileMap bounds={bounds} view={view} onViewChange={setView} height={MAP_HEIGHT} padding={MAP_PADDING} interactive onPress={onMapPress}>
+      <Stack.Screen options={{ title: 'New route', headerRight: () => <HeaderLink title="Draw a course" onPress={() => router.push('/run/routes/draw')} /> }} />
+      <Screen scroll={false} padded={false} style={{ flex: 1 }}>
+        {/* pinned: the map and the line under it; everything else scrolls beneath */}
+        <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, gap: space.sm }}>
+          {runs.isLoading ? (
+            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
+              <Loading label="Finding your last run" />
+            </View>
+          ) : (
+            <View>
+              <TileMap bounds={bounds} view={view} onViewChange={setView} onCamera={onCamera} height={mapHeight} interactive onPress={onMapPress}>
                 {(project, mapSize, c) => (
                   <>
                     {cafes.length && c.zoom >= CAFE_ZOOM ? <CafeLayer cafes={cafes} project={project} size={mapSize} zoom={c.zoom} palette={palette} /> : null}
@@ -290,67 +290,82 @@ export default function NewRoute() {
                 )}
               </TileMap>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.sm }}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <T variant="small" tone="mut">{hint}</T>
-                {where ? <T variant="small">{where}</T> : null}
-              </View>
-              <Chip label="Cafés" selected={showCafes} onPress={() => setShowCafes((v) => !v)} />
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T variant="small" tone="mut">{hint}</T>
+              {where ? <T variant="small">{where}</T> : null}
             </View>
+            {start ? <Button title="Clear" variant="ghost" small onPress={clearPoints} /> : null}
+            <Chip label="Cafés" selected={showCafes} onPress={() => setShowCafes((v) => !v)} />
           </View>
-        )}
-        {runs.error ? <ErrorBanner message={errorMessage(runs.error)} /> : null}
+        </View>
 
-        <Card>
-          <View style={{ gap: space.md }}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.md }}>
-              <View style={{ gap: space.xs }}>
-                <T variant="label" tone="mut">{mode === 'loop' ? `Target ${unitLabel}` : `Extra ${unitLabel} (optional)`}</T>
-                <NumberInput value={target} onChange={setTarget} width={96} placeholder={mode === 'loop' ? '–' : '+0'} muted />
-              </View>
-              <Button title="Generate" onPress={generate} loading={gen.isPending} disabled={!canGenerate} style={{ flex: 1 }} />
-            </View>
-            {mode === 'point_to_point' ? (
-              <T variant="tiny" tone="mut">Extra: how much further than the direct route, taken as a detour on the way. Leave it empty for the direct route.</T>
-            ) : null}
-            {gen.error ? <ErrorBanner message={errorMessage(gen.error)} /> : null}
-          </View>
-        </Card>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, gap: space.md, paddingBottom: space.xxl }}
+          keyboardShouldPersistTaps="handled">
+          {runs.error ? <ErrorBanner message={errorMessage(runs.error)} /> : null}
 
-        {candidates.length ? (
-          <Card
-            title="Routes found"
-            subtitle={
-              distM == null ? 'Direct route first'
-              : mode === 'loop' ? `Closest to ${formatDistance(distM, units)} first`
-              : `About ${formatDistance(distM, units)} more than the direct route first`
-            }>
-            {candidates.map((c, i) => (
-              <ListRow
-                key={`${c.label}-${i}`}
-                first={i === 0}
-                title={c.label}
-                subtitle={`${formatElevation(c.elev_gain_m, units)} climb · ${formatElevation(c.elev_loss_m, units)} descent`}
-                badge={i === selected ? <Badge label="Selected" tone="accent" /> : undefined}
-                value={formatDistance(c.distance_m, units)}
-                valueSub={estLabel(c)}
-                onPress={() => setSelectedIdx(i)}
-              />
-            ))}
-          </Card>
-        ) : null}
-
-        {chosen ? (
-          <Card title="Save route">
+          <Card>
             <View style={{ gap: space.md }}>
-              <TextField label="Name" value={name} onChangeText={setName} placeholder={defaultName} returnKeyType="done" />
-              {save.error ? <ErrorBanner message={errorMessage(save.error)} /> : null}
-              <Button title="Save route" onPress={onSave} loading={save.isPending} />
+              <Segmented<Mode> options={MODES} value={mode} onChange={onModeChange} label="Route type" />
+              <StartPicker
+                near={cam?.center ?? null}
+                prompt={mode === 'point_to_point' && start ? 'Search the end: an address or a place' : 'Search the start: an address or a place'}
+                onPick={onPick}
+                current={start ? { p: start, label: startLabel } : null}
+                extra={lastPts.length ? <Button title="Last run start" variant="secondary" small onPress={useLastRunStart} /> : null}
+              />
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.md }}>
+                <View style={{ gap: space.xs }}>
+                  <T variant="label" tone="mut">{mode === 'loop' ? `Target ${unitLabel}` : `Extra ${unitLabel} (optional)`}</T>
+                  <NumberInput value={target} onChange={setTarget} width={96} placeholder={mode === 'loop' ? '–' : '+0'} muted />
+                </View>
+                <Button title="Generate" onPress={generate} loading={gen.isPending} disabled={!canGenerate} style={{ flex: 1 }} />
+              </View>
+              {mode === 'point_to_point' ? (
+                <T variant="tiny" tone="mut">Extra: how much further than the direct route, taken as a detour on the way. Leave it empty for the direct route.</T>
+              ) : null}
+              {gen.error ? <ErrorBanner message={errorMessage(gen.error)} /> : null}
             </View>
           </Card>
-        ) : null}
 
-        <T variant="tiny" tone="mut" align="center">Routing by {ROUTING_PROVIDER}</T>
+          {candidates.length ? (
+            <Card
+              title="Routes found"
+              subtitle={
+                distM == null ? 'Direct route first'
+                : mode === 'loop' ? `Closest to ${formatDistance(distM, units)} first`
+                : `About ${formatDistance(distM, units)} more than the direct route first`
+              }>
+              {candidates.map((c, i) => (
+                <ListRow
+                  key={`${c.label}-${i}`}
+                  first={i === 0}
+                  title={c.label}
+                  subtitle={`${formatElevation(c.elev_gain_m, units)} climb · ${formatElevation(c.elev_loss_m, units)} descent`}
+                  badge={i === selected ? <Badge label="Selected" tone="accent" /> : undefined}
+                  value={formatDistance(c.distance_m, units)}
+                  valueSub={estLabel(c)}
+                  onPress={() => choose(i)}
+                />
+              ))}
+            </Card>
+          ) : null}
+
+          {chosen ? (
+            <Card title="Save route">
+              <View style={{ gap: space.md }}>
+                <TextField label="Name" value={name} onChangeText={setName} placeholder={defaultName} returnKeyType="done" />
+                {save.error ? <ErrorBanner message={errorMessage(save.error)} /> : null}
+                <Button title="Save route" onPress={onSave} loading={save.isPending} />
+              </View>
+            </Card>
+          ) : null}
+
+          <T variant="tiny" tone="mut" align="center">Routing by {ROUTING_PROVIDER}</T>
+        </ScrollView>
       </Screen>
     </>
   );

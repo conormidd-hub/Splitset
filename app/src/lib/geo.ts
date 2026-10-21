@@ -95,6 +95,11 @@ export function unprojectPt(pt: Pt, cam: MapView, size: { width: number; height:
   return { lat: unMercY((tly + pt.y) / world), lng: unMercX((tlx + pt.x) / world) };
 }
 
+/** The same camera: the centre within a hair and the same zoom. */
+export function sameView(a: MapView, b: MapView): boolean {
+  return Math.abs(a.zoom - b.zoom) < 1e-9 && Math.abs(a.center.lat - b.center.lat) < 1e-9 && Math.abs(a.center.lng - b.center.lng) < 1e-9;
+}
+
 /** The box the camera shows in a view of `size`: [minLat, minLng, maxLat, maxLng]. */
 export function viewBbox(cam: MapView, size: { width: number; height: number }): Bbox {
   const tl = unprojectPt({ x: 0, y: 0 }, cam, size);

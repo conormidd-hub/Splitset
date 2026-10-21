@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { currentLocation, useDebounced, useHome, usePlaceSearch } from '@/api/places';
 import { Button } from '@/components/ui/Button';
@@ -63,7 +63,9 @@ export function StartPicker({ near, prompt, onPick, current, extra }: Props) {
   const saveHome = () => {
     if (!current) return;
     setError(null);
-    save.mutate({ ...current.p, label: current.label?.trim() || 'Home' }, { onError: (e) => setError(errorMessage(e)) });
+    // a start from the device has no name worth keeping: "Home · My location" would read oddly
+    const label = current.label?.trim();
+    save.mutate({ ...current.p, label: label && label !== 'My location' ? label : 'Home' }, { onError: (e) => setError(errorMessage(e)) });
   };
   const canSaveHome = !!current && !samePlace(current.p, home);
 
@@ -97,9 +99,13 @@ export function StartPicker({ near, prompt, onPick, current, extra }: Props) {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
         <Button title="My location" variant="secondary" small onPress={useLocation} loading={locating} />
         {home ? <Button title={`Home · ${home.label}`} variant="secondary" small onPress={() => pick({ lat: home.lat, lng: home.lng }, home.label)} /> : null}
-        {canSaveHome ? <Button title={home ? 'Save as home instead' : 'Save as home'} variant="ghost" small onPress={saveHome} loading={save.isPending} /> : null}
         {extra}
       </View>
+      {canSaveHome ? (
+        <Pressable onPress={saveHome} disabled={save.isPending} hitSlop={6} accessibilityRole="button" style={({ pressed }) => ({ alignSelf: 'flex-start', opacity: pressed ? 0.6 : 1 })}>
+          <T variant="small" tone="accent" weight="700">{save.isPending ? 'Saving…' : home ? 'Make this start the home instead' : 'Save this start as home'}</T>
+        </Pressable>
+      ) : null}
       {error ? <ErrorBanner message={error} /> : null}
     </View>
   );

@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { memo, useMemo, useState } from 'react';
-import { View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
 import { Circle, G, Line, Path } from 'react-native-svg';
 
 import { useActivities, useRunRoutes } from '@/api/activities';
@@ -13,7 +13,7 @@ import { ROUTING_PROVIDER, valhalla } from '@/api/routing';
 import { CafeLayer } from '@/components/map/CafeLayer';
 import { HeatLayer } from '@/components/map/HeatLayer';
 import { StartPicker } from '@/components/map/StartPicker';
-import { TileMap, type Projector } from '@/components/map/TileMap';
+import { TileMap, type Projector, type Size } from '@/components/map/TileMap';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
@@ -26,17 +26,15 @@ import {
   LegCache, addWaypoint, closeLoop, insertWaypoint, isClosed, moveWaypoint, nearestLeg, nearestWaypoint, outAndBack,
   removeWaypoint, reverseCourse, routeCourse, type Course, type Waypoint,
 } from '@/lib/courseBuilder';
-import { MAX_ZOOM, clusterByLocation, fitBbox, pathD, unprojectPt, viewBbox, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
+import { MAX_ZOOM, clusterByLocation, pathD, sameView, unprojectPt, viewBbox, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
 import { decodeRuns, weightRoutesWithGroups } from '@/lib/heat';
 import { CAFE_ZOOM, cafeBox, nearestCafe } from '@/lib/places';
 import { typicalPaceSecPerKm } from '@/lib/runAnalysis';
 import { formatDistance, formatDuration, formatElevation } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { Palette } from '@/theme/tokens';
-import { space } from '@/theme/tokens';
+import { radius, space } from '@/theme/tokens';
 
-/** Must match the padding handed to TileMap so the camera derived here is the one it draws with. */
-const MAP_PADDING = 24;
 /** Below this zoom a fingertip covers a whole block, so a tap zooms in on the spot instead of placing a point. */
 const PLACE_ZOOM = 13;
 /** Framed when the user has no run with a GPS trace yet: tap your part of the world and keep tapping to zoom in. */
@@ -52,7 +50,8 @@ const legs = new LegCache(valhalla);
  * Draw a course point by point. Every tap adds a point and the course follows roads and paths
  * between the points; drag a point to move it, tap the line to add one in the middle, undo, close
  * the loop or retrace back to the start, then save it as a route. `?route=<id>` opens a saved
- * drawn course with its points to change it.
+ * drawn course with its points to change it. The map stays pinned at the top while the rest
+ * scrolls underneath.
  */
 export default function DrawCourse() {
   const { route: routeId } = useLocalSearchParams<{ route?: string }>();
@@ -106,11 +105,16 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
   const [lastAdded, setLastAdded] = useState<string | null>(null);
   const [name, setName] = useState(editing?.name ?? '');
   const [view, setView] = useState<MapView | null>(null);
-  const [mapWidth, setMapWidth] = useState(0);
-  const [mapTouch, setMapTouch] = useState(false);
+  /** The camera the map is drawing with and its size, reported by the map itself. */
+  const [mapCam, setMapCam] = useState<{ cam: MapView; size: Size } | null>(null);
 
-  const mapHeight = Math.round(Math.min(420, Math.max(280, windowH * 0.45)));
-  const size = useMemo(() => ({ width: mapWidth, height: mapHeight }), [mapWidth, mapHeight]);
+  /** Pinned at the top: two fifths of the window, so the toolbar and the stats still show under it. */
+  const mapHeight = Math.round(Math.min(400, Math.max(240, windowH * 0.4)));
+  const cam = mapCam?.cam ?? null;
+  const size = mapCam?.size ?? null;
+  const onCamera = useCallback((c: MapView, s: Size) => {
+    setMapCam((prev) => (prev && sameView(prev.cam, c) && prev.size.width === s.width && prev.size.height === s.height ? prev : { cam: c, size: s }));
+  }, []);
 
   // the user's runs underneath, weighted like the Run tab's map, so the course can follow the paths they know
   const decoded = useMemo(() => decodeRuns(runsQ.data), [runsQ.data]);
@@ -120,14 +124,9 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
     () => (editing?.bbox && editing.bbox.length === 4 ? (editing.bbox as Bbox) : home?.fit ?? WORLD),
     [editing, home],
   );
-  // The camera TileMap is drawing with: the explicit view, else the same fit it computes itself.
-  const cam = useMemo<MapView | null>(
-    () => view ?? (mapWidth ? fitBbox(bounds, mapWidth, mapHeight, MAP_PADDING) : null),
-    [view, bounds, mapWidth, mapHeight],
-  );
 
   // the cafés in view once zoomed in enough, asked for when the map has settled
-  const cafeKey = showCafes && cam && mapWidth && cam.zoom >= CAFE_ZOOM ? cafeBox(viewBbox(cam, size)).join(',') : null;
+  const cafeKey = showCafes && cam && size && cam.zoom >= CAFE_ZOOM ? cafeBox(viewBbox(cam, size)).join(',') : null;
   const settledCafeKey = useDebounced(cafeKey, 600);
   const cafesQ = useCafes(settledCafeKey ? (settledCafeKey.split(',').map(Number) as Bbox) : null);
   const cafes = showCafes && cafesQ.data ? cafesQ.data : [];
@@ -168,16 +167,14 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
     setSelected(null);
   };
 
-  const onMapLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
-    setMapWidth((prev) => (prev === w ? prev : w));
-  };
+  /** A map-local point as a waypoint, through the size the map reported. */
   const toWaypoint = (pt: Pt, c: MapView): Waypoint => {
-    const p = unprojectPt(pt, c, size);
+    const p = unprojectPt(pt, c, size ?? { width: 0, height: mapHeight });
     return [p.lat, p.lng];
   };
 
   const onMapPress = (pt: Pt, project: Projector, c: MapView) => {
+    if (!size) return;
     if (c.zoom < PLACE_ZOOM) {
       setView({ center: unprojectPt(pt, c, size), zoom: Math.min(MAX_ZOOM, c.zoom + 3) });
       return;
@@ -253,7 +250,7 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
     : cam.zoom < PLACE_ZOOM
       ? 'Zoom in to draw: tap the map to zoom in on that spot.'
       : !wps.length
-        ? 'Tap the map where your course starts.'
+        ? 'Tap the map where your course starts, or search for it below.'
         : wps.length === 1
           ? 'Tap where to go next. Each tap adds a point, and the course follows roads and paths between the points.'
           : current && course.unrouted.length
@@ -265,29 +262,21 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
   return (
     <>
       <Stack.Screen options={{ title }} />
-      <Screen scrollEnabled={!mapTouch}>
-        {runsQ.isLoading ? (
-          <Loading label="Finding your runs" />
-        ) : (
-          <View style={{ gap: space.sm }}>
-            <StartPicker
-              near={cam?.center ?? null}
-              prompt={wps.length ? 'Add an address or place as the next point' : 'Start from an address or place'}
-              onPick={onPick}
-              current={wps.length ? { p: { lat: wps[0][0], lng: wps[0][1] }, label: startLabel } : null}
-            />
-            {/* While a finger is on the map the page must not scroll, or every vertical pan would scroll instead. */}
-            <View
-              onLayout={onMapLayout}
-              onTouchStart={() => setMapTouch(true)}
-              onTouchEnd={() => setMapTouch(false)}
-              onTouchCancel={() => setMapTouch(false)}>
+      <Screen scroll={false} padded={false} style={{ flex: 1 }}>
+        {/* pinned: the map, its hint and the toolbar; everything else scrolls beneath */}
+        <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, gap: space.sm }}>
+          {runsQ.isLoading ? (
+            <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
+              <Loading label="Finding your runs" />
+            </View>
+          ) : (
+            <View>
               <TileMap
                 bounds={bounds}
                 view={view}
                 onViewChange={setView}
+                onCamera={onCamera}
                 height={mapHeight}
-                padding={MAP_PADDING}
                 interactive
                 onPress={onMapPress}
                 onDragStart={onDragStart}
@@ -306,72 +295,87 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
                 )}
               </TileMap>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.sm }}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <T variant="small" tone="mut">{hint}</T>
-                {lastAdded ? <T variant="small">Added {lastAdded}.</T> : null}
-              </View>
-              {heat.length ? <Chip label="My runs" selected={showRuns} onPress={() => setShowRuns((v) => !v)} /> : null}
-              <Chip label="Cafés" selected={showCafes} onPress={() => setShowCafes((v) => !v)} />
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T variant="small" tone="mut">{hint}</T>
+              {lastAdded ? <T variant="small">Added {lastAdded}.</T> : null}
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
-              <Button title="Undo" variant="secondary" small onPress={undo} disabled={!past.length} />
-              {selected != null ? <Button title="Remove point" variant="danger" small onPress={removeSelected} /> : null}
-              {wps.length >= 2 && !closed ? <Button title="Back to start" variant="secondary" small onPress={() => commit(closeLoop(wps))} /> : null}
-              {wps.length >= 2 && !closed ? <Button title="Out and back" variant="secondary" small onPress={() => commit(outAndBack(wps))} /> : null}
-              {wps.length >= 2 ? <Button title="Reverse" variant="secondary" small onPress={() => commit(reverseCourse(wps))} /> : null}
-              {wps.length ? <Button title="Clear" variant="ghost" small onPress={() => commit([])} /> : null}
-            </View>
+            {heat.length ? <Chip label="My runs" selected={showRuns} onPress={() => setShowRuns((v) => !v)} /> : null}
+            <Chip label="Cafés" selected={showCafes} onPress={() => setShowCafes((v) => !v)} />
           </View>
-        )}
-        {runsQ.error ? <ErrorBanner message={errorMessage(runsQ.error)} /> : null}
-        {courseQ.error ? <ErrorBanner message={errorMessage(courseQ.error)} /> : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+            <Button title="Undo" variant="secondary" small onPress={undo} disabled={!past.length} />
+            {selected != null ? <Button title="Remove point" variant="danger" small onPress={removeSelected} /> : null}
+            {wps.length >= 2 && !closed ? <Button title="Back to start" variant="secondary" small onPress={() => commit(closeLoop(wps))} /> : null}
+            {wps.length >= 2 && !closed ? <Button title="Out and back" variant="secondary" small onPress={() => commit(outAndBack(wps))} /> : null}
+            {wps.length >= 2 ? <Button title="Reverse" variant="secondary" small onPress={() => commit(reverseCourse(wps))} /> : null}
+            {wps.length ? <Button title="Clear" variant="ghost" small onPress={() => commit([])} /> : null}
+          </View>
+        </View>
 
-        {!wps.length && !runsQ.isLoading ? (
-          <Card title="How it works">
-            <View style={{ gap: space.xs }}>
-              <T variant="small" tone="mut">1. Put the start on the map: tap it, search an address, or use your location or home.</T>
-              <T variant="small" tone="mut">2. Keep tapping where you want to go. The course follows roads and paths between your points; the cups are cafés to run to.</T>
-              <T variant="small" tone="mut">3. Drag a point to move it, tap the line to add one, finish with Back to start or Out and back, and save.</T>
-            </View>
-          </Card>
-        ) : null}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: space.lg, paddingTop: space.sm, gap: space.md, paddingBottom: space.xxl }}
+          keyboardShouldPersistTaps="handled">
+          {runsQ.error ? <ErrorBanner message={errorMessage(runsQ.error)} /> : null}
+          {courseQ.error ? <ErrorBanner message={errorMessage(courseQ.error)} /> : null}
 
-        {course ? (
-          <Grid>
-            <StatTile label="Distance" value={formatDistance(course.distance_m, units, 2)} sub={routing ? 'routing…' : undefined} />
-            <StatTile label="Climb" value={formatElevation(course.elev_gain_m, units)} sub={course.heightsKnown ? undefined : 'some legs unknown'} />
-            <StatTile label="Descent" value={formatElevation(course.elev_loss_m, units)} sub={course.heightsKnown ? undefined : 'some legs unknown'} />
-            <StatTile label="Est. time" value={est != null ? formatDuration(est) : '–'} sub={pace != null ? 'at your usual pace' : 'walking'} />
-          </Grid>
-        ) : null}
+          {course ? (
+            <Grid>
+              <StatTile label="Distance" value={formatDistance(course.distance_m, units, 2)} sub={routing ? 'routing…' : undefined} />
+              <StatTile label="Climb" value={formatElevation(course.elev_gain_m, units)} sub={course.heightsKnown ? undefined : 'some legs unknown'} />
+              <StatTile label="Descent" value={formatElevation(course.elev_loss_m, units)} sub={course.heightsKnown ? undefined : 'some legs unknown'} />
+              <StatTile label="Est. time" value={est != null ? formatDuration(est) : '–'} sub={pace != null ? 'at your usual pace' : 'walking'} />
+            </Grid>
+          ) : null}
 
-        {current && course.unrouted.length ? (
-          <Card tone="neg">
-            <View style={{ gap: space.sm }}>
-              <T>
-                {course.unrouted.length === 1 ? 'One stretch' : `${course.unrouted.length} stretches`} of this course could not be routed and
-                {course.unrouted.length === 1 ? ' is' : ' are'} drawn as a straight dashed line. Move or remove the point, or try again if the
-                routing server was busy.
-              </T>
-              <View style={{ flexDirection: 'row' }}>
-                <Button title="Try again" variant="secondary" small onPress={tryAgain} />
+          {current && course.unrouted.length ? (
+            <Card tone="neg">
+              <View style={{ gap: space.sm }}>
+                <T>
+                  {course.unrouted.length === 1 ? 'One stretch' : `${course.unrouted.length} stretches`} of this course could not be routed and
+                  {course.unrouted.length === 1 ? ' is' : ' are'} drawn as a straight dashed line. Move or remove the point, or try again if the
+                  routing server was busy.
+                </T>
+                <View style={{ flexDirection: 'row' }}>
+                  <Button title="Try again" variant="secondary" small onPress={tryAgain} />
+                </View>
               </View>
-            </View>
-          </Card>
-        ) : null}
+            </Card>
+          ) : null}
 
-        {wps.length >= 2 ? (
-          <Card title={editing ? 'Save changes' : 'Save course'}>
-            <View style={{ gap: space.md }}>
-              <TextField label="Name" value={name} onChangeText={setName} placeholder={defaultName} returnKeyType="done" />
-              {saveError ? <ErrorBanner message={errorMessage(saveError)} /> : null}
-              <Button title={editing ? 'Save changes' : 'Save course'} onPress={onSave} loading={saving} disabled={!canSave} />
-            </View>
+          <Card>
+            <StartPicker
+              near={cam?.center ?? null}
+              prompt={wps.length ? 'Add an address or place as the next point' : 'Start from an address or place'}
+              onPick={onPick}
+              current={wps.length ? { p: { lat: wps[0][0], lng: wps[0][1] }, label: startLabel } : null}
+            />
           </Card>
-        ) : null}
 
-        <T variant="tiny" tone="mut" align="center">Routing by {ROUTING_PROVIDER}</T>
+          {!wps.length && !runsQ.isLoading ? (
+            <Card title="How it works">
+              <View style={{ gap: space.xs }}>
+                <T variant="small" tone="mut">1. Put the start on the map: tap it, search an address, or use your location or home.</T>
+                <T variant="small" tone="mut">2. Keep tapping where you want to go. The course follows roads and paths between your points; the cups are cafés to run to.</T>
+                <T variant="small" tone="mut">3. Drag a point to move it, tap the line to add one, finish with Back to start or Out and back, and save.</T>
+              </View>
+            </Card>
+          ) : null}
+
+          {wps.length >= 2 ? (
+            <Card title={editing ? 'Save changes' : 'Save course'}>
+              <View style={{ gap: space.md }}>
+                <TextField label="Name" value={name} onChangeText={setName} placeholder={defaultName} returnKeyType="done" />
+                {saveError ? <ErrorBanner message={errorMessage(saveError)} /> : null}
+                <Button title={editing ? 'Save changes' : 'Save course'} onPress={onSave} loading={saving} disabled={!canSave} />
+              </View>
+            </Card>
+          ) : null}
+
+          <T variant="tiny" tone="mut" align="center">Routing by {ROUTING_PROVIDER}</T>
+        </ScrollView>
       </Screen>
     </>
   );
