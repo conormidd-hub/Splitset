@@ -84,6 +84,17 @@ export function fitBbox(b: Bbox, width: number, height: number, pad = 24): MapVi
   return { center: bboxCenter(b), zoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM) };
 }
 
+/**
+ * Map-local pixels back to a coordinate: the inverse of TileMap's projector for camera `cam`
+ * drawn into a view of `size`. What a tap or a dragged marker on the map means in the world.
+ */
+export function unprojectPt(pt: Pt, cam: MapView, size: { width: number; height: number }): LatLng {
+  const world = 2 ** cam.zoom;
+  const tlx = mercX(cam.center.lng) * world - size.width / 2;
+  const tly = mercY(cam.center.lat) * world - size.height / 2;
+  return { lat: unMercY((tly + pt.y) / world), lng: unMercX((tlx + pt.x) / world) };
+}
+
 export function haversineKm(a: LatLng, b: LatLng): number {
   const r = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;

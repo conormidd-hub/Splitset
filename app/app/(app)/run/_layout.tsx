@@ -23,6 +23,7 @@ export default function RunStack() {
       <Stack.Screen name="segments/[id]" options={{ title: 'Segment' }} />
       <Stack.Screen name="routes/index" options={{ title: 'Routes' }} />
       <Stack.Screen name="routes/new" options={{ title: 'New route' }} />
+      <Stack.Screen name="routes/draw" options={{ title: 'Draw a course' }} />
       <Stack.Screen name="routes/[id]" options={{ title: 'Route' }} />
     </Stack>
   );

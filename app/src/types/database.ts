@@ -690,6 +690,7 @@ export type Database = {
           bbox: number[]
           kind: string
           provider: string | null
+          waypoints: Json | null
           created_at: string
           updated_at: string
         }
@@ -706,6 +707,7 @@ export type Database = {
           bbox: number[]
           kind: string
           provider?: string | null
+          waypoints?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -722,6 +724,7 @@ export type Database = {
           bbox?: number[]
           kind?: string
           provider?: string | null
+          waypoints?: Json | null
           created_at?: string
           updated_at?: string
         }

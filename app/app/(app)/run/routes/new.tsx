@@ -8,7 +8,7 @@ import { useActivities, useRunRoutes } from '@/api/activities';
 import { useUnits } from '@/api/profile';
 import { useSaveRoute } from '@/api/routes';
 import { ROUTING_PROVIDER, valhalla } from '@/api/routing';
-import { TileMap, type Projector, type Size } from '@/components/map/TileMap';
+import { TileMap, type Projector } from '@/components/map/TileMap';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, Segmented } from '@/components/ui/Chip';
@@ -18,11 +18,10 @@ import { Screen } from '@/components/ui/Screen';
 import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { TextField } from '@/components/ui/TextField';
-import {
-  MAX_ZOOM, bboxOf, decodeRoute, fitBbox, mercX, mercY, pathD, unMercX, unMercY, type Bbox, type LatLng, type MapView, type Pt,
-} from '@/lib/geo';
+import { MAX_ZOOM, bboxOf, decodeRoute, fitBbox, pathD, unprojectPt, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
 import { generateLoops, generatePointToPoint, type Candidate } from '@/lib/routeBuilder';
-import { KM_PER_MILE, formatDistance, formatDuration, formatElevation, secPerKm } from '@/lib/units';
+import { typicalPaceSecPerKm } from '@/lib/runAnalysis';
+import { KM_PER_MILE, formatDistance, formatDuration, formatElevation } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -45,31 +44,7 @@ const WORLD: Bbox = [-50, -160, 65, 160];
 
 type GenInput = { mode: Mode; start: LatLng; end: LatLng | null; targetM: number | null };
 
-/** Map-local pixels back to a coordinate, the inverse of TileMap's projector for camera `cam`. */
-function unproject(pt: Pt, cam: MapView, size: Size): LatLng {
-  const world = 2 ** cam.zoom;
-  const tlx = mercX(cam.center.lng) * world - size.width / 2;
-  const tly = mercY(cam.center.lat) * world - size.height / 2;
-  return { lat: unMercY((tly + pt.y) / world), lng: unMercX((tlx + pt.x) / world) };
-}
-
 const toLatLng = (p: [number, number]): LatLng => ({ lat: p[0], lng: p[1] });
-
-/**
- * Median pace (s/km) over the newest ten runs that have a distance and a moving time, so the
- * estimated time for a route is the user's own, not the router's walking speed.
- */
-function typicalPaceSecPerKm(rows: { distance_m: number | null; moving_time_s: number | null }[] | undefined): number | null {
-  if (!rows) return null;
-  const paces = rows
-    .map((r) => (r.distance_m != null && r.distance_m >= 1000 ? secPerKm(r.distance_m, r.moving_time_s) : null))
-    .filter((p): p is number => p != null)
-    .slice(0, 10)
-    .sort((a, b) => a - b);
-  if (!paces.length) return null;
-  const mid = paces.length >> 1;
-  return paces.length % 2 ? paces[mid] : (paces[mid - 1] + paces[mid]) / 2;
-}
 
 /** Every candidate as a faint line, the selected one bold over a halo. Re-projected only when the camera moves. */
 const CandidatePaths = memo(function CandidatePaths({
@@ -170,7 +145,7 @@ export default function NewRoute() {
 
   const onMapPress = (pt: Pt) => {
     if (!cam || !mapWidth) return;
-    const p = unproject(pt, cam, { width: mapWidth, height: MAP_HEIGHT });
+    const p = unprojectPt(pt, cam, { width: mapWidth, height: MAP_HEIGHT });
     if (cam.zoom < PLACE_ZOOM) {
       setView({ center: p, zoom: Math.min(MAX_ZOOM, cam.zoom + 3) });
       return;
@@ -210,7 +185,10 @@ export default function NewRoute() {
   const onSave = () => {
     if (!chosen) return;
     save.mutate(
-      { name: name.trim() || defaultName, candidate: chosen, start: toLatLng(chosen.pts[0]) },
+      {
+        name: name.trim() || defaultName, pts: chosen.pts, distance_m: chosen.distance_m, elev_gain_m: chosen.elev_gain_m,
+        elev_loss_m: chosen.elev_loss_m, kind: chosen.kind, waypoints: null,
+      },
       { onSuccess: (id) => router.replace(`/run/routes/${id}`) },
     );
   };
@@ -235,6 +213,9 @@ export default function NewRoute() {
       <Stack.Screen options={{ title: 'New route' }} />
       <Screen scrollEnabled={!mapTouch}>
         <Segmented<Mode> options={MODES} value={mode} onChange={onModeChange} />
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <Button title="Draw your own course instead" variant="ghost" small onPress={() => router.push('/run/routes/draw')} />
+        </View>
 
         {runs.isLoading ? (
           <Loading label="Finding your last run" />

@@ -2025,3 +2025,32 @@ Follow-up · 2026-10-19, from Conor's list of changes. His choices:
    One fixer brought back Run's mini map; I took it out again, per Conor's choice.
 
    Not checked: the light theme, and anything on a device. Sync wasn't pressed.
+
+## 36. Draw a course, your runs underneath, and GPX export for Garmin
+
+2026-10-21, on Conor's approval of the course-builder recommendation. Branch `course-builder`.
+
+### 36.1 What it does
+
+1. **Run → + → "Draw your own course instead"**, or Routes → Draw, opens `app/(app)/run/routes/draw.tsx`.
+   - **Tap to add a point;** the course is routed on foot between the points (Valhalla, one leg per pair). Tap the line to add a point in the middle, drag a point to move it, tap a point to select it and Remove it. Undo (50 steps), Back to start, Out and back, Reverse, Clear.
+   - **Your runs underneath** (`HeatLayer`, the "My runs" chip): the private-data version of Garmin's popularity routing.
+   - **Distance, climb, descent and the estimated time** at the user's usual pace (`typicalPaceSecPerKm`, now shared in `lib/runAnalysis.ts`).
+   - **A pair the router cannot join** is drawn as a straight dashed red leg; Save is off until the point is moved or removed; Try again forgets cached failures.
+   - **Save** writes a `routes` row with `kind = 'drawn'` and the waypoints. **Edit course** on the route's page opens the builder with `?route=<id>`, and Save changes updates the row.
+2. **Export GPX** on every route's page: a GPX 1.1 track with elevations (`lib/gpx.ts`), downloaded on the web (`lib/download.web.ts`) or offered through the share sheet on a phone (`lib/download.ts`: expo-file-system and expo-sharing). Garmin Connect on the web imports it under Training & Planning → Courses → Import, then sends it to the watch. There is no other way in: Garmin's Courses API is for approved partners, and intervals.icu forwards workouts, not routes.
+
+### 36.2 How
+
+3. **`lib/courseBuilder.ts`:** `LegCache` keys legs by their endpoints at six decimals, so moving one point re-routes two legs and Undo costs nothing; failures are cached too (the point is wrong, not the server) until Try again. `assembleCourse` drops the junction point each later leg repeats; heights come per leg and the climb is `elevationStats` over the joined path.
+4. **`TileMap` can drag a marker:** `onDragStart` (return true to take the gesture), `onDragMove`, `onDragEnd`. The origin is taken in `onStartShouldSetPanResponderCapture`, which sees every touch start before the Pressable claims it, because on the web the Pressable's press-in fires 50 ms after the pointer goes down (a quick drag beats it and the old value moved the wrong point) and PanResponder resets dx/dy when granted. The handlers are copied into a state-held `DragState` in a layout effect each render, so the responder stays one instance per gesture.
+5. **Migration `20261021000100_drawn_routes.sql`:** the kind check gains `'drawn'`, and `routes.waypoints jsonb` holds `[[lat, lng], ...]`. Until it is applied, saving ANY route fails with "Could not find the 'waypoints' column of 'routes' in the schema cache", because the insert names the column. It is applied by `migrate.yml` when the branch reaches main, or by Conor's db push recipe before that.
+
+### 36.3 Checked
+
+6. **Web preview, demo athlete, Albert Park:** three taps routed a 2.56 km course along Queens Rd and St Kilda Rd; dragging the middle point re-routed it (3.34 km); a tap on the line inserted a point and Undo took it back; Back to start closed the loop (5.01 km) and hid the finish marker; Save reached Supabase and failed only on the missing column. Export GPX was not pressed (it is a browser download); `toGpx` is covered by tests.
+7. **Tests:** `npm test` 327, adding `courseBuilder.test.ts` and `gpx.test.ts`. Type check and lint clean.
+
+### 36.4 Not built
+
+- Straight off-path legs (Garmin's Freehand), community popularity data, 3D maps, and a direct send-to-watch.
