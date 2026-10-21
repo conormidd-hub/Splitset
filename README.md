@@ -261,6 +261,11 @@ Under Run, the + button opens the route planner. There are two ways to make a ro
   the line to add one in the middle, then Undo, Back to start, Out and back or Reverse. A saved
   course can be opened and changed again.
 
+Both builders take a start by name: search an address or a place, use your location, or your
+saved home (Save as home keeps the current start). Cafés show as small cups from zoom 14, named
+when zoomed right in; tap one to put a point exactly there. Point to point can ask for "the
+direct way plus N km", which comes back as detours on the way.
+
 Every saved route has **Export GPX**. To get it onto a Garmin watch, open Garmin Connect on the
 web, go to Training & Planning, Courses, Import, choose the file, then send the course to your
 device. On a phone the export opens the share sheet instead. Garmin's Courses API is for approved

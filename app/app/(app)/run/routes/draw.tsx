@@ -6,10 +6,13 @@ import { Circle, G, Line, Path } from 'react-native-svg';
 
 import { useActivities, useRunRoutes } from '@/api/activities';
 import { keys } from '@/api/keys';
+import { useCafes, useDebounced } from '@/api/places';
 import { useUnits } from '@/api/profile';
 import { routeWaypoints, useRoute, useSaveRoute, useUpdateRoute, type SavedRoute } from '@/api/routes';
 import { ROUTING_PROVIDER, valhalla } from '@/api/routing';
+import { CafeLayer } from '@/components/map/CafeLayer';
 import { HeatLayer } from '@/components/map/HeatLayer';
+import { StartPicker } from '@/components/map/StartPicker';
 import { TileMap, type Projector } from '@/components/map/TileMap';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,8 +26,9 @@ import {
   LegCache, addWaypoint, closeLoop, insertWaypoint, isClosed, moveWaypoint, nearestLeg, nearestWaypoint, outAndBack,
   removeWaypoint, reverseCourse, routeCourse, type Course, type Waypoint,
 } from '@/lib/courseBuilder';
-import { MAX_ZOOM, clusterByLocation, fitBbox, pathD, unprojectPt, type Bbox, type MapView, type Pt } from '@/lib/geo';
+import { MAX_ZOOM, clusterByLocation, fitBbox, pathD, unprojectPt, viewBbox, type Bbox, type LatLng, type MapView, type Pt } from '@/lib/geo';
 import { decodeRuns, weightRoutesWithGroups } from '@/lib/heat';
+import { CAFE_ZOOM, cafeBox, nearestCafe } from '@/lib/places';
 import { typicalPaceSecPerKm } from '@/lib/runAnalysis';
 import { formatDistance, formatDuration, formatElevation } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -95,6 +99,11 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
   /** The point under the finger and where it is right now; the course re-routes on release. */
   const [drag, setDrag] = useState<{ index: number; at: Waypoint } | null>(null);
   const [showRuns, setShowRuns] = useState(true);
+  const [showCafes, setShowCafes] = useState(true);
+  /** Where the start came from when picked by name (an address, home, a café): the label "Save as home" keeps. */
+  const [startLabel, setStartLabel] = useState<string | null>(null);
+  /** The last point added by name, to confirm it under the map. */
+  const [lastAdded, setLastAdded] = useState<string | null>(null);
   const [name, setName] = useState(editing?.name ?? '');
   const [view, setView] = useState<MapView | null>(null);
   const [mapWidth, setMapWidth] = useState(0);
@@ -116,6 +125,12 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
     () => view ?? (mapWidth ? fitBbox(bounds, mapWidth, mapHeight, MAP_PADDING) : null),
     [view, bounds, mapWidth, mapHeight],
   );
+
+  // the cafés in view once zoomed in enough, asked for when the map has settled
+  const cafeKey = showCafes && cam && mapWidth && cam.zoom >= CAFE_ZOOM ? cafeBox(viewBbox(cam, size)).join(',') : null;
+  const settledCafeKey = useDebounced(cafeKey, 600);
+  const cafesQ = useCafes(settledCafeKey ? (settledCafeKey.split(',').map(Number) as Bbox) : null);
+  const cafes = showCafes && cafesQ.data ? cafesQ.data : [];
 
   const courseQ = useQuery({
     queryKey: keys.course(wps),
@@ -142,6 +157,8 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
     setPast((p) => [...p.slice(-(MAX_UNDO - 1)), wps]);
     setWps(next);
     setSelected(null);
+    setLastAdded(null);
+    if (next[0] !== wps[0]) setStartLabel(null);
   };
   const undo = () => {
     const prev = past[past.length - 1];
@@ -170,9 +187,24 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
       setSelected((s) => (s === hit ? null : hit));
       return;
     }
-    const p = toWaypoint(pt, c);
-    const leg = current ? nearestLeg(course, project, pt) : null;
+    // a tap on a café puts the point exactly there, at the end of the course
+    const cafe = nearestCafe(cafes, project, pt);
+    const p: Waypoint = cafe ? [cafe.lat, cafe.lng] : toWaypoint(pt, c);
+    const leg = current && !cafe ? nearestLeg(course, project, pt) : null;
     commit(leg != null ? insertWaypoint(wps, leg, p) : addWaypoint(wps, p));
+    if (cafe) {
+      const label = cafe.name ?? 'Café';
+      setLastAdded(label);
+      if (!wps.length) setStartLabel(label);
+    }
+  };
+
+  /** From the search, the device or home: the next point of the course, and the map looks at it. */
+  const onPick = (p: LatLng, label: string) => {
+    commit(addWaypoint(wps, [p.lat, p.lng]));
+    setLastAdded(label);
+    if (!wps.length) setStartLabel(label);
+    setView({ center: p, zoom: Math.max(cam?.zoom ?? 0, 15) });
   };
 
   const onDragStart = (pt: Pt, project: Projector, c: MapView) => {
@@ -238,6 +270,12 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
           <Loading label="Finding your runs" />
         ) : (
           <View style={{ gap: space.sm }}>
+            <StartPicker
+              near={cam?.center ?? null}
+              prompt={wps.length ? 'Add an address or place as the next point' : 'Start from an address or place'}
+              onPick={onPick}
+              current={wps.length ? { p: { lat: wps[0][0], lng: wps[0][1] }, label: startLabel } : null}
+            />
             {/* While a finger is on the map the page must not scroll, or every vertical pan would scroll instead. */}
             <View
               onLayout={onMapLayout}
@@ -260,6 +298,7 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
                     {showRuns && heat.length ? (
                       <HeatLayer routes={heat} project={project} size={mapSize} zoom={c.zoom} highlight={null} palette={palette} />
                     ) : null}
+                    {cafes.length && c.zoom >= CAFE_ZOOM ? <CafeLayer cafes={cafes} project={project} size={mapSize} zoom={c.zoom} palette={palette} /> : null}
                     {course ? <CourseLines course={course} project={project} palette={palette} faded={routing} /> : null}
                     {drag ? <RubberBand wps={shown} index={drag.index} project={project} colour={palette.ink2} /> : null}
                     <Markers wps={shown} selected={selected} closed={closed} project={project} palette={palette} />
@@ -268,8 +307,12 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
               </TileMap>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.sm }}>
-              <T variant="small" tone="mut" style={{ flex: 1 }}>{hint}</T>
+              <View style={{ flex: 1, gap: 2 }}>
+                <T variant="small" tone="mut">{hint}</T>
+                {lastAdded ? <T variant="small">Added {lastAdded}.</T> : null}
+              </View>
               {heat.length ? <Chip label="My runs" selected={showRuns} onPress={() => setShowRuns((v) => !v)} /> : null}
+              <Chip label="Cafés" selected={showCafes} onPress={() => setShowCafes((v) => !v)} />
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
               <Button title="Undo" variant="secondary" small onPress={undo} disabled={!past.length} />
@@ -283,6 +326,16 @@ function Editor({ title, editing, initial }: { title: string; editing: SavedRout
         )}
         {runsQ.error ? <ErrorBanner message={errorMessage(runsQ.error)} /> : null}
         {courseQ.error ? <ErrorBanner message={errorMessage(courseQ.error)} /> : null}
+
+        {!wps.length && !runsQ.isLoading ? (
+          <Card title="How it works">
+            <View style={{ gap: space.xs }}>
+              <T variant="small" tone="mut">1. Put the start on the map: tap it, search an address, or use your location or home.</T>
+              <T variant="small" tone="mut">2. Keep tapping where you want to go. The course follows roads and paths between your points; the cups are cafés to run to.</T>
+              <T variant="small" tone="mut">3. Drag a point to move it, tap the line to add one, finish with Back to start or Out and back, and save.</T>
+            </View>
+          </Card>
+        ) : null}
 
         {course ? (
           <Grid>

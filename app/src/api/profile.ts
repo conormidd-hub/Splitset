@@ -11,7 +11,7 @@ export type Profile = Tables<'profiles'>;
 export type ProfilePatch = Pick<
   TablesUpdate<'profiles'>,
   'display_name' | 'timezone' | 'units' | 'birth_year' | 'sex' | 'onboarded_at' | 'home_layout' | 'bodyweight_kg' | 'bodyweight_updated_at'
-  | 'rest_timer_on' | 'rest_seconds'
+  | 'rest_timer_on' | 'rest_seconds' | 'home_lat' | 'home_lng' | 'home_label'
 >;
 
 export function useProfile() {

@@ -95,6 +95,13 @@ export function unprojectPt(pt: Pt, cam: MapView, size: { width: number; height:
   return { lat: unMercY((tly + pt.y) / world), lng: unMercX((tlx + pt.x) / world) };
 }
 
+/** The box the camera shows in a view of `size`: [minLat, minLng, maxLat, maxLng]. */
+export function viewBbox(cam: MapView, size: { width: number; height: number }): Bbox {
+  const tl = unprojectPt({ x: 0, y: 0 }, cam, size);
+  const br = unprojectPt({ x: size.width, y: size.height }, cam, size);
+  return [Math.min(tl.lat, br.lat), Math.min(tl.lng, br.lng), Math.max(tl.lat, br.lat), Math.max(tl.lng, br.lng)];
+}
+
 export function haversineKm(a: LatLng, b: LatLng): number {
   const r = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;

@@ -37,7 +37,13 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Splitset uses your location to start a route from where you are."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

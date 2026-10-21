@@ -2054,3 +2054,24 @@ Follow-up · 2026-10-19, from Conor's list of changes. His choices:
 ### 36.4 Not built
 
 - Straight off-path legs (Garmin's Freehand), community popularity data, 3D maps, and a direct send-to-watch.
+
+## 37. Cafés on the map, an address or your location as the start, and "the direct way plus N km"
+
+2026-10-21, from Conor's follow-up on the course builder. Same branch and PR (`course-builder`, #15).
+
+### 37.1 What it does
+
+1. **Cafés** on both builders' maps from zoom 14, as small cup symbols on pale discs (`components/map/CafeLayer.tsx`), with their names at the closest zoom. A tap on a cup puts the point exactly there: the next point of a drawn course, or the start or end in the generator. The "Cafés" chip hides them.
+2. **A start by name** (`components/map/StartPicker.tsx`, above both maps): search an address or place (Photon, komoot's OpenStreetMap geocoder, biased to the map's centre), **My location** (expo-location; the web asks the browser), or **Home**. **Save as home** keeps the current start and its label (`profiles.home_lat/home_lng/home_label`, migration `20261021000200_home_place.sql`). In the course builder the search adds the next point once the course has started.
+3. **Point to point plus N km:** the generator's point-to-point field is now "Extra km": the direct route plus that much, taken as a detour on the way (`generatePointToPoint(start, end, { extraM })`). Detours are always tried for an extra target, and a detour that snaps back onto the direct way is dropped. "Routes found" says "About 1.0 km more than the direct route first".
+4. **Friendlier:** a "How it works" card on an empty course, hints that say where a named point came from ("Start: Lygon Street", "Added Axil Coffee Roasters."), and the generator's helper line under the extra field.
+
+### 37.2 How
+
+5. **`lib/places.ts`:** `parsePhoton` and `parseOverpass` are pure and tested; `cafeBox` snaps the view's centre to a 0.01° grid and asks for a box half again as big as the view, so a short pan reuses the cached answer (TanStack, never stale) and a long one asks for the next, overlapping box, 600 ms after the map settles. `fetchCafes` tries overpass-api.de, then two public mirrors, eight seconds each: the main server answered 502 and then stalled for over 45 s during the check. Override with `EXPO_PUBLIC_OVERPASS_URL` / `EXPO_PUBLIC_GEOCODER_URL`.
+6. **Public services, fair use:** Photon ("reasonable" request volumes) and Overpass (a few queries a minute). The search waits 350 ms after typing and needs three characters; cafés are only asked for from zoom 14.
+
+### 37.3 Checked
+
+7. **Web preview, demo athlete:** typing "Lygon Street Carlton" listed two Lygon Streets with their suburbs; picking one put the start there, zoomed to 15 and said "Added Lygon Street."; the cafés of Carlton appeared (after the Overpass fallback), named at zoom 16; a tap on Axil Coffee Roasters added it as the next point and the course routed there (1.55 km). In the generator, point to point with Extra km 1 gave Detour north 2.6 km, Direct 1.4 km (and a south detour equal to the direct route, now dropped). Not checked: My location (the pane has no location) and Save as home (its migration is not applied yet).
+8. **Tests:** `npm test` 335, adding `places.test.ts` and `routeBuilder.test.ts`. Type check and lint clean.

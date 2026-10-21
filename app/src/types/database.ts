@@ -633,6 +633,9 @@ export type Database = {
           created_at: string
           updated_at: string
           home_layout: Json | null
+          home_lat: number | null
+          home_lng: number | null
+          home_label: string | null
           onboarded_at: string | null
           birth_year: number | null
           sex: string | null
@@ -649,6 +652,9 @@ export type Database = {
           created_at?: string
           updated_at?: string
           home_layout?: Json | null
+          home_lat?: number | null
+          home_lng?: number | null
+          home_label?: string | null
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
@@ -665,6 +671,9 @@ export type Database = {
           created_at?: string
           updated_at?: string
           home_layout?: Json | null
+          home_lat?: number | null
+          home_lng?: number | null
+          home_label?: string | null
           onboarded_at?: string | null
           birth_year?: number | null
           sex?: string | null
