@@ -13,6 +13,10 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
 export { ErrorBoundary } from 'expo-router';
 
+// A screen above the tabs (Recovery, a workout, an exercise, PBs, History) opened from a link or
+// a reload keeps the tabs underneath it, so it always has a back.
+export const unstable_settings = { anchor: '(app)' };
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
