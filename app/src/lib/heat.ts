@@ -184,3 +184,15 @@ export function focusBounds(b: Bbox): Bbox {
   const dLng = b[3] - b[1];
   return [b[0] - dLat, b[1] - dLng, b[2] + dLat, b[3] + dLng];
 }
+
+/**
+ * The box grown `factor` times taller about its middle, the width kept. A map that only shows its
+ * middle band (the Run tab's map once it has shrunk to a window) fits this box, so the run inside
+ * lands in the band: a factor of full height over band height. Below 1 the box is unchanged.
+ */
+export function padBoundsVertically(b: Bbox, factor: number): Bbox {
+  if (!(factor > 1)) return b;
+  const mid = (b[0] + b[2]) / 2;
+  const half = ((b[2] - b[0]) / 2) * factor;
+  return [mid - half, b[1], mid + half, b[3]];
+}

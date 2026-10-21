@@ -21,10 +21,10 @@ import { Button } from '@/components/ui/Button';
 import { DateFinder, type DatedItem } from '@/components/ui/DateFinder';
 import { EmptyState, ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
-import { TabbedScreen, type TabDef } from '@/components/ui/TabbedScreen';
+import { TabbedScreen, type HeroProgress, type TabDef } from '@/components/ui/TabbedScreen';
 import { shortTime } from '@/lib/dates';
 import { clusterByLocation, unionBbox, type MapView, type Pt } from '@/lib/geo';
-import { decodeRuns, focusBounds, nearestRoute, newestFirst, weightRoutesWithGroups, type DecodedRun } from '@/lib/heat';
+import { decodeRuns, focusBounds, nearestRoute, newestFirst, padBoundsVertically, weightRoutesWithGroups, type DecodedRun } from '@/lib/heat';
 import { ICONS } from '@/lib/icons';
 import { mostTired } from '@/lib/recovery/screens';
 import { useUserId } from '@/lib/session';
@@ -69,14 +69,20 @@ const fromRoute = (r: DecodedRun): RunSummary => ({
 
 const runsWord = (n: number) => (n === 1 ? 'run' : 'runs');
 
+/** The line under the map (runs near home and the legend, or the picked route's summary). */
+const INFO_HEIGHT = 28;
+/** The map once the page has scrolled: this share of its full height stays in view. */
+const COMPACT_SHARE = 0.46;
+
 /**
  * The Run tab, laid out like Strava's You screen: a bar of round buttons (plan a route, all
  * activity, find a run by date, recovery), the map of where this user runs most as the hero, every
- * route coloured by how often it is run, then History, Trends and Maps tabs that stick under the
- * bar as the map scrolls away under the faded top. Tapping a route on the map narrows the history
- * to that route; tapping a run expands its headline stats, eases the map to it, and offers the full
- * stats screen. (The old mini map that followed the page is gone, by Conor's choice: the bar's
- * buttons took its place.)
+ * route coloured by how often it is run, then History, Trends and Maps tabs under it. The map is
+ * pinned: as the page scrolls it shrinks to a window less than half as tall and stays there, so a
+ * run picked far down the history still shows on the map without scrolling back up; the window
+ * shows the map's middle band, and a picked run is framed to land in it. Tapping a route on the
+ * map narrows the history to that route; tapping a run expands its headline stats, eases the map
+ * to it, and offers the full stats screen.
  */
 export default function RunHome() {
   const { palette } = useTheme();
@@ -121,13 +127,25 @@ export default function RunHome() {
     return byMonth((history.data?.pages.flat() ?? []).map(fromActivity));
   }, [routeKey, routeRuns, history.data]);
 
+  const mapHeight = Math.round(Math.min(260, Math.max(180, windowH * 0.3)));
+  const mapMin = Math.round(mapHeight * COMPACT_SHARE);
+  // the pinned hero's heights: its top padding, the map, the gap and the line under it; collapsed,
+  // the window alone with a little room above the tab row
+  const heroFrom = space.xs + mapHeight + space.sm + INFO_HEIGHT;
+  const heroTo = space.xs + mapMin + space.sm;
+  // past halfway through the collapse the map is a window on its middle band, so what it frames
+  // is padded to land there
+  const [compact, setCompact] = useState(false);
+  const compactRef = useRef(false);
   // stable identities: a new bounds or highlight array makes the map rebuild every route
-  const bounds = useMemo(() => (expanded ? focusBounds(expanded.box) : routeBox ?? home?.fit ?? null), [expanded, routeBox, home]);
+  const bounds = useMemo(() => {
+    const b = expanded ? focusBounds(expanded.box) : routeBox ?? home?.fit ?? null;
+    return b && compact ? padBoundsVertically(b, mapHeight / mapMin) : b;
+  }, [expanded, routeBox, home, compact, mapHeight, mapMin]);
   const highlight = useMemo(
     () => (expanded ? [expanded.pts] : routeRuns.length ? routeRuns.map((r) => r.pts) : null),
     [expanded, routeRuns],
   );
-  const mapHeight = Math.round(Math.min(260, Math.max(180, windowH * 0.3)));
 
   const calendar = useMemo<DatedItem[]>(() => (dates.data ?? []).map((r) => ({
     id: r.id,
@@ -190,53 +208,70 @@ export default function RunHome() {
     />
   );
 
-  const hero = (
-    <View style={{ gap: space.sm }}>
-      {routesQ.isLoading ? (
-        <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center' }}>
-          <Loading label="Loading your routes" />
-        </View>
-      ) : routesQ.error ? (
-        <ErrorBanner message={errorMessage(routesQ.error)} />
-      ) : bounds ? (
-        <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
-          {(project, size, cam) => (
-            <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
-          )}
-        </TileMap>
-      ) : (
-        <View style={{ height: mapHeight, borderRadius: radius.md, backgroundColor: palette.surface2, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
-          <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
-        </View>
-      )}
+  /** The pinned hero: the map at full size inside a window that shrinks with the page, sliding up
+   *  so the window shows the map's middle; the line under it folds away as the window shrinks. */
+  const hero = (progress: HeroProgress) => {
+    const windowH = progress.interpolate({ inputRange: [0, 1], outputRange: [mapHeight, mapMin] });
+    const shift = progress.interpolate({ inputRange: [0, 1], outputRange: [0, -(mapHeight - mapMin) / 2] });
+    const infoH = progress.interpolate({ inputRange: [0, 1], outputRange: [space.sm + INFO_HEIGHT, 0] });
+    const infoOpacity = progress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 0] });
+    return (
+      <View>
+        <Animated.View style={{ height: windowH, borderRadius: radius.md, overflow: 'hidden', backgroundColor: palette.surface2 }}>
+          <Animated.View style={{ transform: [{ translateY: shift }] }}>
+            {routesQ.isLoading ? (
+              <View style={{ height: mapHeight, alignItems: 'center', justifyContent: 'center' }}>
+                <Loading label="Loading your routes" />
+              </View>
+            ) : routesQ.error ? (
+              <View style={{ height: mapHeight, justifyContent: 'center', padding: space.lg }}>
+                <ErrorBanner message={errorMessage(routesQ.error)} />
+              </View>
+            ) : bounds ? (
+              <TileMap bounds={bounds} view={view} onViewChange={setView} interactive height={mapHeight} onPress={onMapPress}>
+                {(project, size, cam) => (
+                  <HeatLayer routes={heat} project={project} size={size} zoom={cam.zoom} highlight={highlight} palette={palette} />
+                )}
+              </TileMap>
+            ) : (
+              <View style={{ height: mapHeight, alignItems: 'center', justifyContent: 'center', padding: space.lg }}>
+                <T tone="mut" align="center">Your map appears once a run with GPS has synced.</T>
+              </View>
+            )}
+          </Animated.View>
+        </Animated.View>
 
-      {bounds ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 28 }}>
-          {route ? (
-            <>
-              <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-                {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
-                {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
-              </T>
-              <Button title="All runs" variant="ghost" small onPress={clearRoute} />
-            </>
-          ) : (
-            <>
-              <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
-                {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
-              </T>
-              <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
-            </>
-          )}
-        </View>
-      ) : null}
-    </View>
-  );
+        {bounds ? (
+          <Animated.View style={{ height: infoH, opacity: infoOpacity, overflow: 'hidden' }}>
+            <View style={{ paddingTop: space.sm, flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: INFO_HEIGHT }}>
+              {route ? (
+                <>
+                  <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+                    {route.count} {runsWord(route.count)} · {formatDistance(route.typicalDistanceM, units)}
+                    {route.best?.moving_time_s != null ? ` · best ${formatDuration(route.best.moving_time_s)}` : ''}
+                  </T>
+                  <Button title="All runs" variant="ghost" small onPress={clearRoute} />
+                </>
+              ) : (
+                <>
+                  <T variant="small" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {home ? `${home.items.length} ${runsWord(home.items.length)} near home` : ''}
+                  </T>
+                  <View style={{ flex: 1, minWidth: 150 }}><HeatLegend /></View>
+                </>
+              )}
+            </View>
+          </Animated.View>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <TabbedScreen
       topBar={topBar}
       hero={hero}
+      pinnedHero={{ from: heroFrom, to: heroTo }}
       tabs={TABS}
       tab={tab}
       onTab={setTab}
@@ -246,6 +281,11 @@ export default function RunHome() {
         const y = e.nativeEvent.contentOffset.y;
         scrollY.current = y;
         scrollFade.setValue(y);
+        const c = y > (heroFrom - heroTo) / 2;
+        if (c !== compactRef.current) {
+          compactRef.current = c;
+          setCompact(c);
+        }
       }}
       onEndReached={() => {
         if (tab === 'history' && !routeKey && history.hasNextPage && !history.isFetchingNextPage) history.fetchNextPage();
