@@ -19,6 +19,7 @@ import { GroupEditor, RoutineGrid } from '@/components/lift/RoutineGrid';
 import { RoutineQuickView } from '@/components/lift/RoutineQuickView';
 import { BodyMap } from '@/components/recovery/BodyMap';
 import { QuickView } from '@/components/recovery/FigureBubble';
+import { KeyButton, KeyStrip } from '@/components/recovery/FigureKey';
 import { FigurePair } from '@/components/recovery/FigurePair';
 import { Bubble, ScreenTopBar } from '@/components/ui/BarButtons';
 import { Button } from '@/components/ui/Button';
@@ -231,6 +232,10 @@ export default function LiftHome() {
         <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
         <T variant="small" tone="accent" weight="600">Recovery ›</T>
       </View>
+      {/* the colour key, one tap away wherever the figure is */}
+      <View style={{ position: 'absolute', top: space.sm, right: space.sm }}>
+        <KeyButton mode="recovery" size={26} />
+      </View>
     </Pressable>
   );
 
@@ -248,6 +253,7 @@ export default function LiftHome() {
         <T variant="h3">Recovery</T>
         {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels /> : <Loading />}
         <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
+        <KeyStrip mode="recovery" inline />
         <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} />
       </QuickView>
       <DateFinder

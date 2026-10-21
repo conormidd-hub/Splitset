@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
+import { KeyButton } from './FigureKey';
 import { FigurePair } from './FigurePair';
 import { recoveryKeys, useActivityCatchUp, useMuscleNames, useRecoveryMap, useThresholds } from '@/api/recovery';
 import { loadKeys } from '@/api/workoutLoads';
@@ -43,7 +44,12 @@ export function RecoveryHomeCard() {
 
   return (
     <Card title="Recovery" onPress={failed ? undefined : open} accessibilityLabel={summary} accessibilityHint="Opens the Recovery screen"
-      right={<Button title="Open" variant="ghost" small onPress={open} />}>
+      right={
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+          <KeyButton mode="recovery" size={26} />
+          <Button title="Open" variant="ghost" small onPress={open} />
+        </View>
+      }>
       {m ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.lg }}>
           <FigurePair map={m} mode="recovery" figureWidth={FIGURE_WIDTH} nameOf={names} />

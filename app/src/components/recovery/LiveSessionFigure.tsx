@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { KeyButton, KeyStrip } from './FigureKey';
 import { FigurePair } from './FigurePair';
 import { SessionMuscleRows } from './RecoveryExtras';
 import { useLiveSession, useMuscleNames } from '@/api/recovery';
@@ -51,12 +52,14 @@ export const LiveSessionFigure = memo(function LiveSessionFigure() {
           <T variant="label" tone="mut">This session</T>
           <T variant="small" tone={loaded.length ? 'ink2' : 'mut'}>{summary}</T>
         </View>
+        <KeyButton mode="session" size={26} />
         <T tone="mut" accessible={false} importantForAccessibility="no" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}>›</T>
       </Pressable>
       {/* outside the Pressable, so a tap on a muscle opens its sheet without closing the card */}
       {open ? (
         <View style={{ gap: space.md, paddingHorizontal: space.md, paddingBottom: space.md }}>
           <FigurePair map={s} mode="session" figureWidth={OPEN_WIDTH} nameOf={names} detail labels />
+          <KeyStrip mode="session" />
           <SessionMuscleRows session={s} nameOf={names} />
         </View>
       ) : null}
