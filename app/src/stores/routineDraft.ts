@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 
 import type { RoutineDraft, RoutineWithStructure, WorkoutWithStructure } from '@/api/lifting';
+import { linkSuperset, unlinkSuperset } from '../lib/lifting/superset.ts';
 import { pairedSets } from '../lib/lifting/template.ts';
 import type { ActiveWorkout } from './activeWorkout';
 
@@ -21,11 +22,16 @@ type State = {
   fromSavedWorkout: (w: WorkoutWithStructure) => void;
   setName: (name: string) => void;
   setNotes: (notes: string) => void;
-  addExercise: (ex: { id: string; name: string; measure: string }) => void;
+  /** Add an exercise at the end; with `supersetWith` (another draft exercise's key) linked into a superset with it. */
+  addExercise: (ex: { id: string; name: string; measure: string }, supersetWith?: string | null) => void;
   removeExercise: (key: string) => void;
   move: (key: string, dir: -1 | 1) => void;
   /** Move an exercise to another place (a drag). */
   moveTo: (key: string, toIndex: number) => void;
+  /** Put the exercises in this order (keys; any left out keep their order at the end). */
+  reorder: (keys: readonly string[]) => void;
+  /** Link an exercise into a superset with another (it moves next to it), or take it out (null). */
+  setSuperset: (key: string, partnerKey: string | null) => void;
   setRest: (key: string, seconds: number | null) => void;
   addSet: (key: string) => void;
   updateSet: (key: string, index: number, patch: Partial<DraftExercise['sets'][number]>) => void;
@@ -108,16 +114,30 @@ export const useRoutineDraft = create<State>()((set, get) => ({
   setName: (name) => set({ name }),
   setNotes: (notes) => set({ notes }),
 
-  addExercise: (ex) =>
-    set((s) => ({
-      exercises: [
-        ...s.exercises,
-        { key: key(), exerciseId: ex.id, name: ex.name, measure: ex.measure, restSeconds: 90, supersetGroup: null, notes: null,
-          sets: [{ setType: 'working', targetReps: null, targetWeightKg: null }, { setType: 'working', targetReps: null, targetWeightKg: null }, { setType: 'working', targetReps: null, targetWeightKg: null }] },
-      ],
-    })),
+  addExercise: (ex, supersetWith) =>
+    set((s) => {
+      const added: DraftExercise = {
+        key: key(), exerciseId: ex.id, name: ex.name, measure: ex.measure, restSeconds: 90, supersetGroup: null, notes: null,
+        sets: [{ setType: 'working', targetReps: null, targetWeightKg: null }, { setType: 'working', targetReps: null, targetWeightKg: null }, { setType: 'working', targetReps: null, targetWeightKg: null }],
+      };
+      const all = [...s.exercises, added];
+      return { exercises: supersetWith ? linkSuperset(all, added.key, supersetWith, (e) => e.key) : all };
+    }),
 
-  removeExercise: (k) => set((s) => ({ exercises: s.exercises.filter((e) => e.key !== k) })),
+  removeExercise: (k) => set((s) => ({ exercises: unlinkSuperset(s.exercises, k, (e) => e.key).filter((e) => e.key !== k) })),
+
+  reorder: (keys) =>
+    set((s) => {
+      const byKey = new Map(s.exercises.map((e) => [e.key, e]));
+      const ordered = keys.map((k) => byKey.get(k)).filter((e): e is DraftExercise => !!e);
+      for (const e of s.exercises) if (!ordered.includes(e)) ordered.push(e);
+      return { exercises: ordered };
+    }),
+
+  setSuperset: (k, partnerKey) =>
+    set((s) => ({
+      exercises: partnerKey ? linkSuperset(s.exercises, k, partnerKey, (e) => e.key) : unlinkSuperset(s.exercises, k, (e) => e.key),
+    })),
 
   move: (k, dir) =>
     set((s) => {

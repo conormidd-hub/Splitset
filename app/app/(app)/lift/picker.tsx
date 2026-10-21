@@ -19,7 +19,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 export default function ExercisePicker() {
-  const { target } = useLocalSearchParams<{ target?: 'workout' | 'routine' }>();
+  // `superset`: the workout exercise (or routine draft key) the chosen one is linked with
+  const { target, superset } = useLocalSearchParams<{ target?: 'workout' | 'routine'; superset?: string }>();
   const { palette } = useTheme();
   const exercises = useExercises();
   const [query, setQuery] = useState('');
@@ -37,8 +38,8 @@ export default function ExercisePicker() {
   );
 
   const choose = (e: Exercise) => {
-    if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
-    else useActiveWorkout.getState().addExercise(e);
+    if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure }, superset || null);
+    else useActiveWorkout.getState().addExercise(e, undefined, superset || null);
     router.back();
   };
 

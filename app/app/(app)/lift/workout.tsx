@@ -13,6 +13,7 @@ import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPromp
 import { IdlePrompt } from '@/components/lift/IdlePrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
 import { RestBubble } from '@/components/lift/RestBubble';
+import { SupersetPill, SupersetRail, SupersetSheet, type SupersetOption } from '@/components/lift/Superset';
 import { SwipeToDelete, type SwipeGroup } from '@/components/lift/SwipeToDelete';
 import { LivePbPanel } from '@/components/pbs/LivePbPanel';
 import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
@@ -31,6 +32,7 @@ import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
 import { awayMinutes, elapsedSeconds, formatElapsed } from '@/lib/lifting/elapsed';
 import { setRowE1rm } from '@/lib/lifting/setRow';
+import { groupItems, groupLetter, turnIn } from '@/lib/lifting/superset';
 import { templateChanged, templateFromWorkout } from '@/lib/lifting/template';
 import { formatLiftPb, formatLoad, liftMetricShort, mergeSession, metricsFor, sessionBests } from '@/lib/pbs';
 import { useUserId } from '@/lib/session';
@@ -153,6 +155,17 @@ export default function ActiveWorkoutScreen() {
     router.push('/lift/routines/new?from=workout');
   };
 
+  // the list as drawn: a superset's exercises are one item, dragged together
+  const items = groupItems(workout.exercises, (b) => b.id);
+  const moveItem = (key: string, to: number) => {
+    const order = items.map((i) => i.key);
+    const from = order.indexOf(key);
+    if (from < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, key);
+    useActiveWorkout.getState().reorderExercises(order.flatMap((k) => items.find((i) => i.key === k)?.blocks.map((b) => b.id) ?? []));
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -227,16 +240,36 @@ export default function ActiveWorkoutScreen() {
             </View>
           ) : null}
 
-          {/* hold an exercise's ≡ and drag it to move it */}
+          {/* hold an exercise's ≡ and drag it to move it; a superset moves as one */}
           <SortableList
-            keys={workout.exercises.map((b) => b.id)}
-            itemLabel={(id) => workout.exercises.find((b) => b.id === id)?.name ?? 'exercise'}
-            onMove={(id, to) => useActiveWorkout.getState().moveExercise(id, to)}
+            keys={items.map((i) => i.key)}
+            itemLabel={(key) => {
+              const item = items.find((i) => i.key === key);
+              if (!item) return 'exercise';
+              return item.blocks.length > 1 ? `superset ${groupLetter(workout.exercises, item.group!)}: ${item.blocks.map((b) => b.name).join(' and ')}` : item.blocks[0].name;
+            }}
+            onMove={moveItem}
             onDragChange={setDragging}
             scroll={{ ref: scrollRef, y: scrollY }}
-            renderItem={(id, { handle }) => {
-              const block = workout.exercises.find((b) => b.id === id);
-              return block ? <ExerciseCard block={block} units={units} routineId={workout.routineId} handle={handle} /> : null;
+            renderItem={(key, { handle }) => {
+              const item = items.find((i) => i.key === key);
+              if (!item) return null;
+              const letter = item.group != null ? groupLetter(workout.exercises, item.group) : null;
+              if (item.blocks.length === 1) {
+                return <ExerciseCard block={item.blocks[0]} units={units} routineId={workout.routineId} handle={handle} letter={letter} isTurn={false} restAfter />;
+              }
+              // whose set is next in the pair, and the rest timer waits for the pair's last exercise
+              const turn = turnIn(item.blocks);
+              return (
+                <SupersetRail letter={letter ?? ''}>
+                  {item.blocks.map((block, i) => (
+                    <ExerciseCard
+                      key={block.id} block={block} units={units} routineId={workout.routineId} handle={i === 0 ? handle : null}
+                      letter={letter} isTurn={turn === i} restAfter={i === item.blocks.length - 1}
+                    />
+                  ))}
+                </SupersetRail>
+              );
             }}
           />
 
@@ -270,13 +303,32 @@ export default function ActiveWorkoutScreen() {
   );
 }
 
-function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBlock; units: Units; routineId: string | null; handle: ReactNode }) {
+const NO_BLOCKS: ExerciseBlock[] = [];
+
+function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAfter }: {
+  block: ExerciseBlock; units: Units; routineId: string | null;
+  /** The drag grip; null for a superset's later exercises, which move with the first. */
+  handle: ReactNode;
+  /** The superset's letter, or null when the exercise stands alone. */
+  letter: string | null;
+  /** In a superset, this exercise's set is the next one to do. */
+  isTurn: boolean;
+  /** Ticking a set here starts the rest timer (the last exercise of a superset, or one on its own). */
+  restAfter: boolean;
+}) {
   const { palette } = useTheme();
-  const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote } = useActiveWorkout.getState();
+  const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote, setSuperset } = useActiveWorkout.getState();
   const routines = useRoutines();
   const exerciseNotes = useExerciseNotes();
   const saveNote = useSaveExerciseNote();
   const [noting, setNoting] = useState(false);
+  const [linking, setLinking] = useState(false);
+  // the other exercises, for the superset chooser: the next one is the natural partner
+  const all = useActiveWorkout((s) => s.workout?.exercises ?? NO_BLOCKS);
+  const at = all.findIndex((b) => b.id === block.id);
+  const supersetOptions: SupersetOption[] = all
+    .filter((b) => b.id !== block.id && (block.supersetGroup == null || b.supersetGroup !== block.supersetGroup))
+    .map((b) => ({ id: b.id, name: b.name, suggested: all[at + 1]?.id === b.id, letter: b.supersetGroup != null ? groupLetter(all, b.supersetGroup) : null }));
   const templateNote = routineId
     ? routines.data?.find((r) => r.id === routineId)?.routine_exercises.find((re) => re.exercise_id === block.exerciseId)?.notes ?? null
     : null;
@@ -341,9 +393,10 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
         {handle}
-        <Pressable style={{ flex: 1 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
-          <T variant="h3" tone="accent">{block.name}</T>
+        <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
+          <T variant="h3" tone="accent" numberOfLines={1}>{block.name}</T>
         </Pressable>
+        <SupersetPill letter={letter} name={block.name} onPress={() => setLinking(true)} />
         {metrics.length ? (
           <Pressable
             onPress={() => setShowPb((v) => !v)}
@@ -371,6 +424,16 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
         </Pressable>
       ))}
       <NoteEditor open={noting} exerciseName={block.name} hasTemplate={!!routineId} notes={notes} onSave={onSaveNote} onClose={() => setNoting(false)} />
+      <SupersetSheet
+        open={linking}
+        name={block.name}
+        letter={letter}
+        options={supersetOptions}
+        onPick={(id) => { setLinking(false); setSuperset(block.id, id); }}
+        onUnlink={() => { setLinking(false); setSuperset(block.id, null); }}
+        onAdd={() => { setLinking(false); router.push({ pathname: '/lift/picker', params: { target: 'workout', superset: block.id } }); }}
+        onClose={() => setLinking(false)}
+      />
 
       {metrics.length && !showPb ? (
         <Pressable onPress={() => setShowPb(true)} style={{ marginTop: -4, marginBottom: space.sm }}>
@@ -424,6 +487,8 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
           col={col}
           e1rm={e1rmOf(s)}
           swipeGroup={swipeGroup}
+          isNext={!!letter && isTurn && i === firstOpen}
+          restAfter={restAfter}
         />
       ))}
 
@@ -439,7 +504,7 @@ const COL = { weight: 72, count: 60, rpe: 44, gap: space.sm as number };
 const COL_TIGHT: typeof COL = { weight: 60, count: 48, rpe: 36, gap: space.xs };
 
 function SetLine({
-  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm, swipeGroup,
+  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm, swipeGroup, isNext, restAfter,
 }: {
   set: SetRow; index: number; block: ExerciseBlock; units: Units; weighted: boolean; repped: boolean; timed: boolean;
   previous?: { weight_kg: number | null; reps: number | null; seconds: number | null };
@@ -450,6 +515,10 @@ function SetLine({
   /** The e1RM this set stores, from the engine; shown once the set is ticked. */
   e1rm: number | null;
   swipeGroup: SwipeGroup;
+  /** In a superset, this is the set to do next: its number wears an accent ring. */
+  isNext: boolean;
+  /** Ticking this set starts the rest timer; off for a superset's earlier exercises. */
+  restAfter: boolean;
 }) {
   const { palette } = useTheme();
   const { updateSet, toggleSet, removeSet } = useActiveWorkout.getState();
@@ -476,8 +545,8 @@ function SetLine({
   const onToggle = async () => {
     if (!set.completed) fillFromPrevious();
     const row = toggleSet(set.id);
-    // only when the rest timer is on (⏱ at the top)
-    if (row?.completed && rest?.on) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
+    // only when the rest timer is on (⏱ at the top), and after a superset's last exercise, not between its pair
+    if (row?.completed && rest?.on && restAfter) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
   };
 
   // the long press stays as the way in without a swipe (screen readers, a mouse)
@@ -498,8 +567,9 @@ function SetLine({
         <Pressable
           onPress={() => updateSet(set.id, { setType: NEXT_TYPE[set.setType] })}
           onLongPress={onLongPressNumber}
-          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}. Tap to change the set type; hold to delete the set.`}
-          style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: set.setType === 'working' ? palette.surface2 : palette.accentSoft }}>
+          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}${isNext ? ', next in the superset' : ''}. Tap to change the set type; hold to delete the set.`}
+          style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: set.setType === 'working' ? palette.surface2 : palette.accentSoft,
+            borderWidth: isNext ? 2 : 0, borderColor: palette.accent }}>
           <T variant="small" weight="700" tone={set.setType === 'working' ? 'ink2' : 'accent'}>{TYPE_LABEL[set.setType] || index + 1}</T>
         </Pressable>
         {perSide ? (
