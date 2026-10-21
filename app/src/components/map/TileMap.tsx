@@ -22,6 +22,12 @@ type Props = {
   view?: MapView | null;
   /** Called with the new camera after a pan or zoom, or null when the fit button is pressed. */
   onViewChange?: (view: MapView | null) => void;
+  /**
+   * The camera the map is drawing with and its size, after every change, so a parent can turn
+   * taps and drags into coordinates without measuring the map itself. Pass a stable callback
+   * that keeps its state when nothing changed, or every render reports again.
+   */
+  onCamera?: (view: MapView, size: Size) => void;
   /** Fixed height; leave unset to fill the parent. */
   height?: number;
   /** Drag to pan and show the zoom buttons. Keep off inside a ScrollView. */
@@ -32,6 +38,15 @@ type Props = {
   style?: ViewStyle;
   /** A tap in map-local pixels, with the projector and camera it was measured against. A drag never fires it. */
   onPress?: (pt: Pt, project: Projector, view: MapView) => void;
+  /**
+   * A pan is beginning at this map-local point. Return true to take the gesture: the map then
+   * holds still and reports the finger through onDragMove and onDragEnd instead of panning. For
+   * moving a marker. The projector and camera are the ones the point was measured against.
+   */
+  onDragStart?: (pt: Pt, project: Projector, view: MapView) => boolean;
+  onDragMove?: (pt: Pt) => void;
+  /** The finger lifted (or the gesture was taken away) at this point. */
+  onDragEnd?: (pt: Pt) => void;
   /** SVG children drawn over the tiles. */
   children?: (project: Projector, size: Size, view: MapView) => ReactNode;
 };
@@ -100,6 +115,52 @@ class PressGate {
     this.lastTapAt = dbl ? 0 : now;
     this.lastTapPt = dbl ? null : p;
     return dbl;
+  }
+}
+
+type DragHandlers = Pick<Props, 'onDragStart' | 'onDragMove' | 'onDragEnd'>;
+
+/**
+ * A pan that moves a marker instead of the map. The parent's handlers and the scene it hit-tests
+ * against are copied in after every render (a layout effect), because the responder must stay
+ * the same instance for a whole gesture yet always call the latest handlers. Held in state like
+ * PressGate, for the same lint reason.
+ */
+class DragState {
+  private handlers: DragHandlers = {};
+  private project: Projector | null = null;
+  private cam: MapView | null = null;
+  /** Where the last touch went down, map-local. */
+  private downAt: Pt | null = null;
+  /** The finger when the pan was granted; the gesture's dx and dy count from there. Null when not dragging. */
+  private base: Pt | null = null;
+
+  /** The latest handlers and scene, from the layout effect after each render. */
+  sync(handlers: DragHandlers, project: Projector | null, cam: MapView | null) {
+    this.handlers = handlers;
+    this.project = project;
+    this.cam = cam;
+  }
+  down(p: Pt | null) {
+    this.downAt = p;
+  }
+  get active(): boolean {
+    return this.base !== null;
+  }
+  /** Offer the gesture to the parent as a drag from where the finger went down; `here` is where it is now. True when it took it. */
+  begin(here: Pt | null): boolean {
+    const origin = this.downAt ?? here;
+    if (!origin || !this.project || !this.cam || !this.handlers.onDragStart?.(origin, this.project, this.cam)) return false;
+    this.base = here ?? origin;
+    return true;
+  }
+  move(dx: number, dy: number) {
+    if (this.base) this.handlers.onDragMove?.({ x: this.base.x + dx, y: this.base.y + dy });
+  }
+  end(dx: number, dy: number) {
+    const b = this.base;
+    this.base = null;
+    if (b) this.handlers.onDragEnd?.({ x: b.x + dx, y: b.y + dy });
   }
 }
 
@@ -180,13 +241,16 @@ class CameraAnim {
  * runs the same on iOS, Android, web and in Expo Go; the trade-off is that it is a still picture
  * you pan and zoom, not a full map view.
  */
-export function TileMap({ bounds, view, onViewChange, height, interactive = false, padding = 24, compact = false, style, onPress, children }: Props) {
+export function TileMap({
+  bounds, view, onViewChange, onCamera, height, interactive = false, padding = 24, compact = false, style, onPress, onDragStart, onDragMove, onDragEnd, children,
+}: Props) {
   const { name, palette } = useTheme();
   const tileStyle: TileStyle = name === 'night' ? 'dark' : 'light';
   const [size, setSize] = useState<Size>({ width: 0, height: height ?? 0 });
   const [pan] = useState(() => new Animated.ValueXY());
   const [camAnim] = useState(() => new CameraAnim());
   const [gate] = useState(() => new PressGate());
+  const [drag] = useState(() => new DragState());
 
   const cam: MapView | null = useMemo(() => {
     if (view) return view;
@@ -224,21 +288,47 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
   // the same frame as the new scene, never one frame late.
   useLayoutEffect(() => {
     pan.setValue({ x: 0, y: 0 });
-    if (cam && size.width && size.height) camAnim.onCamera(cam, size);
-  }, [cam, size, pan, camAnim]);
+    if (cam && size.width && size.height) {
+      camAnim.onCamera(cam, size);
+      onCamera?.(cam, size);
+    }
+  }, [cam, size, pan, camAnim, onCamera]);
 
   const transform = useMemo(
     () => [{ translateX: Animated.add(pan.x, camAnim.tx) }, { translateY: Animated.add(pan.y, camAnim.ty) }, { scale: camAnim.scale }],
     [pan, camAnim],
   );
 
+  // the marker-drag handlers and the scene the parent hit-tests against, fresh after every render
+  useLayoutEffect(() => {
+    drag.sync({ onDragStart, onDragMove, onDragEnd }, scene?.project ?? null, cam);
+  });
+
   const responder = useMemo(() => {
     if (!interactive) return null;
     return PanResponder.create({
+      // Every touch start, in the capture phase so it is seen before the Pressable claims the
+      // touch: where a drag would begin. Not the Pressable's press-in, which on the web fires
+      // 50 ms after the pointer goes down and loses to a quick drag.
+      onStartShouldSetPanResponderCapture: (e) => {
+        drag.down(localPoint(e));
+        return false;
+      },
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 3 || Math.abs(g.dy) > 3,
-      onPanResponderGrant: () => gate.drag(),
-      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderGrant: (e, g) => {
+        gate.drag();
+        // a pan that began on a marker moves the marker, not the map; dx and dy restart from here
+        if (drag.begin(localPoint(e))) drag.move(g.dx, g.dy);
+      },
+      onPanResponderMove: (_, g) => {
+        if (drag.active) drag.move(g.dx, g.dy);
+        else pan.setValue({ x: g.dx, y: g.dy });
+      },
       onPanResponderRelease: (_, g) => {
+        if (drag.active) {
+          drag.end(g.dx, g.dy);
+          return;
+        }
         if (!cam || !onViewChange || (g.dx === 0 && g.dy === 0)) {
           pan.setValue({ x: 0, y: 0 });
           return;
@@ -249,9 +339,12 @@ export function TileMap({ bounds, view, onViewChange, height, interactive = fals
         camAnim.markManual();
         onViewChange({ center: { lat: unMercY(cy / world), lng: unMercX(cx / world) }, zoom: cam.zoom });
       },
-      onPanResponderTerminate: () => pan.setValue({ x: 0, y: 0 }),
+      onPanResponderTerminate: (_, g) => {
+        if (drag.active) drag.end(g.dx, g.dy);
+        pan.setValue({ x: 0, y: 0 });
+      },
     });
-  }, [interactive, cam, onViewChange, pan, gate, camAnim]);
+  }, [interactive, cam, onViewChange, pan, gate, camAnim, drag]);
 
   const zoomBy = (d: number) => {
     if (!cam || !onViewChange) return;

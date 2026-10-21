@@ -5,7 +5,7 @@ import { Circle, Path } from 'react-native-svg';
 
 import { useActivities } from '@/api/activities';
 import { useUnits } from '@/api/profile';
-import { useDeleteRoute, useRoute, useRouteHeights, type SavedRoute } from '@/api/routes';
+import { kindLabel, useDeleteRoute, useRoute, useRouteHeights } from '@/api/routes';
 import { ROUTING_PROVIDER } from '@/api/routing';
 import { ProfileChart, type ProfileSeries } from '@/components/charts/ProfileChart';
 import { TileMap, type Projector } from '@/components/map/TileMap';
@@ -17,17 +17,16 @@ import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { confirm } from '@/lib/confirm';
 import { relativeDay } from '@/lib/dates';
+import { saveTextFile } from '@/lib/download';
 import { bboxOf, decodeRoute, haversineKm, pathD, type Bbox } from '@/lib/geo';
-import { formatDistance, formatDuration, formatElevation, secPerKm } from '@/lib/units';
+import { gpxFilename, toGpx } from '@/lib/gpx';
+import { typicalPaceSecPerKm } from '@/lib/runAnalysis';
+import { formatDistance, formatDuration, formatElevation } from '@/lib/units';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
 const MAP_HEIGHT = 240;
 const CHART_HEIGHT = 130;
-
-function kindLabel(kind: SavedRoute['kind']): string {
-  return kind === 'loop' ? 'Loop' : 'Point to point';
-}
 
 /** Cumulative great-circle distance along the route in metres: the profile's x axis. */
 function cumulativeM(pts: [number, number][]): number[] {
@@ -38,19 +37,6 @@ function cumulativeM(pts: [number, number][]): number[] {
     out[i] = acc;
   }
   return out;
-}
-
-/** Median pace (s/km) over the newest ten runs with a distance and a moving time; null without runs. */
-function typicalPaceSecPerKm(rows: { distance_m: number | null; moving_time_s: number | null }[] | undefined): number | null {
-  if (!rows) return null;
-  const paces = rows
-    .map((r) => (r.distance_m != null && r.distance_m >= 1000 ? secPerKm(r.distance_m, r.moving_time_s) : null))
-    .filter((p): p is number => p != null)
-    .slice(0, 10)
-    .sort((a, b) => a - b);
-  if (!paces.length) return null;
-  const mid = paces.length >> 1;
-  return paces.length % 2 ? paces[mid] : (paces[mid - 1] + paces[mid]) / 2;
 }
 
 /** The route over a halo. Re-projected only when the camera changes, not on every cursor move. */
@@ -77,6 +63,8 @@ export default function RouteDetail() {
   const del = useDeleteRoute();
   const [cursor, setCursor] = useState<number | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const pts = useMemo(() => (route ? decodeRoute(route.polyline) : []), [route]);
   const x = useMemo(() => cumulativeM(pts), [pts]);
@@ -95,6 +83,24 @@ export default function RouteDetail() {
 
   const pace = useMemo(() => typicalPaceSecPerKm(recent.data?.pages[0]), [recent.data]);
   const est = route && pace != null ? (pace * route.distance_m) / 1000 : null;
+  // a finish marker only where the route ends away from its start; loops, generated or drawn back to the start, have none
+  const openEnded = pts.length >= 2
+    && haversineKm({ lat: pts[0][0], lng: pts[0][1] }, { lat: pts[pts.length - 1][0], lng: pts[pts.length - 1][1] }) > 0.05;
+
+  /** A GPX track, with the terrain heights once they have loaded, named after the route. */
+  const onExport = async () => {
+    if (!route || pts.length < 2) return;
+    setExportError(null);
+    setExporting(true);
+    try {
+      const desc = `${formatDistance(route.distance_m, units)} ${kindLabel(route.kind).toLowerCase()} from Splitset`;
+      await saveTextFile(gpxFilename(route.name), toGpx({ name: route.name, pts, heights: hs, type: 'running', desc }), 'application/gpx+xml');
+    } catch (e) {
+      setExportError(errorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const onDelete = async () => {
     if (!route) return;
@@ -136,7 +142,7 @@ export default function RouteDetail() {
                       return (
                         <>
                           <RoutePath pts={pts} project={project} accent={palette.accent} halo={palette.surface} />
-                          {route.kind === 'point_to_point' ? <Circle cx={e.x} cy={e.y} r={5.5} fill={palette.neg} stroke={palette.surface} strokeWidth={2} /> : null}
+                          {openEnded ? <Circle cx={e.x} cy={e.y} r={5.5} fill={palette.neg} stroke={palette.surface} strokeWidth={2} /> : null}
                           <Circle cx={s.x} cy={s.y} r={5.5} fill={palette.pos} stroke={palette.surface} strokeWidth={2} />
                           {c ? <Circle cx={c.x} cy={c.y} r={7} fill={palette.accent} stroke={palette.surface} strokeWidth={2.5} /> : null}
                         </>
@@ -172,6 +178,20 @@ export default function RouteDetail() {
               <StatTile label="Descent" value={formatElevation(route.elev_loss_m, units)} />
               <StatTile label="Est. time" value={est != null ? formatDuration(est) : '–'} sub={est != null ? 'at your usual pace' : 'needs a few runs'} />
             </Grid>
+
+            <Card
+              title="Take it with you"
+              subtitle="Export the route as a GPX file, then import it in Garmin Connect on the web (Training & Planning, Courses, Import) and send the course to your watch.">
+              <View style={{ gap: space.sm }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm }}>
+                  <Button title="Export GPX" variant="secondary" small onPress={onExport} loading={exporting} disabled={pts.length < 2} />
+                  {route.kind === 'drawn' ? (
+                    <Button title="Edit course" variant="secondary" small onPress={() => router.push({ pathname: '/run/routes/draw', params: { route: route.id } })} />
+                  ) : null}
+                </View>
+                {exportError ? <ErrorBanner message={exportError} /> : null}
+              </View>
+            </Card>
 
             <Button title="Delete route" variant="danger" onPress={onDelete} loading={del.isPending} />
             {del.error ? <ErrorBanner message={errorMessage(del.error)} /> : null}

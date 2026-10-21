@@ -2025,3 +2025,63 @@ Follow-up · 2026-10-19, from Conor's list of changes. His choices:
    One fixer brought back Run's mini map; I took it out again, per Conor's choice.
 
    Not checked: the light theme, and anything on a device. Sync wasn't pressed.
+
+## 36. Draw a course, your runs underneath, and GPX export for Garmin
+
+2026-10-21, on Conor's approval of the course-builder recommendation. Branch `course-builder`.
+
+### 36.1 What it does
+
+1. **Run → + → "Draw your own course instead"**, or Routes → Draw, opens `app/(app)/run/routes/draw.tsx`.
+   - **Tap to add a point;** the course is routed on foot between the points (Valhalla, one leg per pair). Tap the line to add a point in the middle, drag a point to move it, tap a point to select it and Remove it. Undo (50 steps), Back to start, Out and back, Reverse, Clear.
+   - **Your runs underneath** (`HeatLayer`, the "My runs" chip): the private-data version of Garmin's popularity routing.
+   - **Distance, climb, descent and the estimated time** at the user's usual pace (`typicalPaceSecPerKm`, now shared in `lib/runAnalysis.ts`).
+   - **A pair the router cannot join** is drawn as a straight dashed red leg; Save is off until the point is moved or removed; Try again forgets cached failures.
+   - **Save** writes a `routes` row with `kind = 'drawn'` and the waypoints. **Edit course** on the route's page opens the builder with `?route=<id>`, and Save changes updates the row.
+2. **Export GPX** on every route's page: a GPX 1.1 track with elevations (`lib/gpx.ts`), downloaded on the web (`lib/download.web.ts`) or offered through the share sheet on a phone (`lib/download.ts`: expo-file-system and expo-sharing). Garmin Connect on the web imports it under Training & Planning → Courses → Import, then sends it to the watch. There is no other way in: Garmin's Courses API is for approved partners, and intervals.icu forwards workouts, not routes.
+
+### 36.2 How
+
+3. **`lib/courseBuilder.ts`:** `LegCache` keys legs by their endpoints at six decimals, so moving one point re-routes two legs and Undo costs nothing; failures are cached too (the point is wrong, not the server) until Try again. `assembleCourse` drops the junction point each later leg repeats; heights come per leg and the climb is `elevationStats` over the joined path.
+4. **`TileMap` can drag a marker:** `onDragStart` (return true to take the gesture), `onDragMove`, `onDragEnd`. The origin is taken in `onStartShouldSetPanResponderCapture`, which sees every touch start before the Pressable claims it, because on the web the Pressable's press-in fires 50 ms after the pointer goes down (a quick drag beats it and the old value moved the wrong point) and PanResponder resets dx/dy when granted. The handlers are copied into a state-held `DragState` in a layout effect each render, so the responder stays one instance per gesture.
+5. **Migration `20261021000100_drawn_routes.sql`:** the kind check gains `'drawn'`, and `routes.waypoints jsonb` holds `[[lat, lng], ...]`. Until it is applied, saving ANY route fails with "Could not find the 'waypoints' column of 'routes' in the schema cache", because the insert names the column. It is applied by `migrate.yml` when the branch reaches main, or by Conor's db push recipe before that.
+
+### 36.3 Checked
+
+6. **Web preview, demo athlete, Albert Park:** three taps routed a 2.56 km course along Queens Rd and St Kilda Rd; dragging the middle point re-routed it (3.34 km); a tap on the line inserted a point and Undo took it back; Back to start closed the loop (5.01 km) and hid the finish marker. Before the migration, Save reached Supabase and failed only on the missing column; after Conor pushed it (verified in `supabase_migrations.schema_migrations`), a 4.23 km closed course saved as "Albert Park test loop" (kind drawn, elevation profile, Export GPX and Edit course on its page), and Edit course → Reverse → Save changes updated it in place (4.72 km the other way round). Export GPX was not pressed (it is a browser download); `toGpx` is covered by tests.
+7. **Tests:** `npm test` 327, adding `courseBuilder.test.ts` and `gpx.test.ts`. Type check and lint clean.
+
+### 36.4 Not built
+
+- Straight off-path legs (Garmin's Freehand), community popularity data, 3D maps, and a direct send-to-watch.
+
+## 37. Cafés on the map, an address or your location as the start, and "the direct way plus N km"
+
+2026-10-21, from Conor's follow-up on the course builder. Same branch and PR (`course-builder`, #15).
+
+### 37.1 What it does
+
+1. **Cafés** on both builders' maps from zoom 14, as small cup symbols on pale discs (`components/map/CafeLayer.tsx`), with their names at the closest zoom. A tap on a cup puts the point exactly there: the next point of a drawn course, or the start or end in the generator. The "Cafés" chip hides them.
+2. **A start by name** (`components/map/StartPicker.tsx`, above both maps): search an address or place (Photon, komoot's OpenStreetMap geocoder, biased to the map's centre), **My location** (expo-location; the web asks the browser), or **Home**. **Save as home** keeps the current start and its label (`profiles.home_lat/home_lng/home_label`, migration `20261021000200_home_place.sql`). In the course builder the search adds the next point once the course has started.
+3. **Point to point plus N km:** the generator's point-to-point field is now "Extra km": the direct route plus that much, taken as a detour on the way (`generatePointToPoint(start, end, { extraM })`). Detours are always tried for an extra target, and a detour that snaps back onto the direct way is dropped. "Routes found" says "About 1.0 km more than the direct route first".
+4. **Friendlier:** a "How it works" card on an empty course, hints that say where a named point came from ("Start: Lygon Street", "Added Axil Coffee Roasters."), and the generator's helper line under the extra field.
+
+### 37.2 How
+
+5. **`lib/places.ts`:** `parsePhoton` and `parseOverpass` are pure and tested; `cafeBox` snaps the view's centre to a 0.01° grid and asks for a box half again as big as the view, so a short pan reuses the cached answer (TanStack, never stale) and a long one asks for the next, overlapping box, 600 ms after the map settles. `fetchCafes` tries overpass-api.de, then two public mirrors, eight seconds each: the main server answered 502 and then stalled for over 45 s during the check. Override with `EXPO_PUBLIC_OVERPASS_URL` / `EXPO_PUBLIC_GEOCODER_URL`.
+6. **Public services, fair use:** Photon ("reasonable" request volumes) and Overpass (a few queries a minute). The search waits 350 ms after typing and needs three characters; cafés are only asked for from zoom 14.
+
+### 37.3 Checked
+
+7. **Web preview, demo athlete:** typing "Lygon Street Carlton" listed two Lygon Streets with their suburbs; picking one put the start there, zoomed to 15 and said "Added Lygon Street."; the cafés of Carlton appeared (after the Overpass fallback), named at zoom 16; a tap on Axil Coffee Roasters added it as the next point and the course routed there (1.55 km). In the generator, point to point with Extra km 1 gave Detour north 2.6 km, Direct 1.4 km (and a south detour equal to the direct route, now dropped). Not checked: My location (the pane has no location). **Save as home**, checked once Conor pushed `20261021000200`: the row was written, the Home button appeared and persisted across a new sign-in, but "Save as home instead" stayed visible for the very point just saved. The columns were `real`, and the API returns a real with six significant digits (144.975 for 144.97451, 43 m off), so the saved home never matched its start. Migration `20261021000300_home_double.sql` widens both to double precision. Checked again once Conor pushed it: a tapped start saved as home hid the button, and the row holds the full value (-37.8426659749169, 144.974512051391).
+8. **Tests:** `npm test` 335, adding `places.test.ts` and `routeBuilder.test.ts`. Type check and lint clean.
+
+## 38. The route screens: map pinned at the top, framed to the route, tidier buttons
+
+2026-10-21, from Conor's follow-up. Same branch and PR.
+
+1. **The map frames the route.** On Generate, and on picking another candidate, the generator sets its camera to null, and `bounds` is the chosen candidate's box, so TileMap fits the whole route with its 24 px padding. Forgetting the candidates (a tap, a mode change, Clear) first freezes the camera where it is, or the null camera would jump back to the last run's area.
+2. **The map stays put while the rest scrolls.** Both screens use `Screen scroll={false}` with the map, its hint line and (on the course builder) the toolbar in a plain View, and everything else in a ScrollView below: the mode switch, the start search, the distance and Generate, the candidates and Save on the generator; the stats, the start search, How it works and Save on the builder. The map is two fifths of the window (220–360 px on the generator, 240–400 px on the builder). The `mapTouch` scroll lock is gone with it: the map is no longer inside the scroll view.
+3. **The camera comes from the map.** `TileMap` gained `onCamera(view, size)`, reported from its layout effect, and both screens keep that in state instead of measuring the map themselves with `onLayout` and recomputing `fitBbox` (which also removes the padding coupling). The parents pass a stable `useCallback` that keeps its state when nothing changed, or every render would report again. Why: in the pinned layout the parent's `onLayout` never fired in the web preview, although the handler worked when called by hand (react-native-web observes a View with a ResizeObserver, and the wrapper was never notified), so the screens sat with no camera: no hint, taps ignored.
+4. **Buttons.** "Draw your own course instead" is a header link, "Draw a course", on the generator. "Clear" is a ghost button on the hint line beside the Cafés chip. "Save as home" is a text link under the start buttons ("Save this start as home", "Make this start the home instead") rather than a third button in the row, and a start taken from the device is saved with the label "Home", not "My location".
+5. **Checked (web preview, demo athlete):** a 10 km loop from Albert Park came back as four candidates; the map reframed to the chosen North loop (route box 304–565 × 24–242 px inside an 868 × 266 px map), stayed at the same place after the list was scrolled 400 px, and reframed again on choosing the East loop. Type check, lint and `npm test` (335) clean.

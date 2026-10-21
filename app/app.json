@@ -36,6 +36,13 @@
             "backgroundColor": "#0d0d0d"
           }
         }
+      ],
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Splitset uses your location to start a route from where you are."
+        }
       ]
     ],
     "experiments": {

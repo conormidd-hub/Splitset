@@ -250,6 +250,31 @@ year follow `profiles.timezone`).
   1RM or 3RM by the reps being lifted, and fills the next set from 50-90% of this month's 1RM
   (falling back to this year's, then all time), rounded to 2.5 kg or 5 lb.
 
+### Routes and courses
+
+Under Run, the + button opens the route planner. There are two ways to make a route:
+
+- **Generate:** pick a start, a distance and loop or point to point, and Splitset builds candidates
+  along real roads and paths (Valhalla routing over OpenStreetMap).
+- **Draw:** tap points on the map and the course follows roads and paths between them. Your own
+  runs are drawn underneath, so you can follow the paths you know. Drag a point to move it, tap
+  the line to add one in the middle, then Undo, Back to start, Out and back or Reverse. A saved
+  course can be opened and changed again.
+
+Both builders take a start by name: search an address or a place, use your location, or your
+saved home (Save as home keeps the current start). Cafés show as small cups from zoom 14, named
+when zoomed right in; tap one to put a point exactly there. Point to point can ask for "the
+direct way plus N km", which comes back as detours on the way.
+
+Every saved route has **Export GPX**. To get it onto a Garmin watch, open Garmin Connect on the
+web, go to Training & Planning, Courses, Import, choose the file, then send the course to your
+device. On a phone the export opens the share sheet instead. Garmin's Courses API is for approved
+partners only and intervals.icu forwards workouts, not routes, so this one manual step is the
+reliable path.
+
+Routing uses the public Valhalla server at valhalla1.openstreetmap.de under its fair-use terms;
+set `EXPO_PUBLIC_VALHALLA_URL` to point the app at another.
+
 ### Web app on Vercel (and your iPhone's home screen)
 
 The web build is a static site: `app/vercel.json` builds it with `npx expo export -p web` and

@@ -1,5 +1,5 @@
 import { haversineKm } from './geo.ts';
-import { formatElevation, formatPace } from './units.ts';
+import { formatElevation, formatPace, secPerKm } from './units.ts';
 
 /**
  * Per-point analysis of a recorded run.
@@ -507,4 +507,20 @@ export function formatMetric(m: Metric, v: number | null, units: 'metric' | 'imp
     case 'cad': return `${Math.round(v)} spm`;
     case 'alt': return formatElevation(v, units);
   }
+}
+
+/**
+ * Median pace (s/km) over the newest ten runs that have a distance and a moving time, so the
+ * estimated time for a route is the user's own, not the router's walking speed. Null without runs.
+ */
+export function typicalPaceSecPerKm(rows: { distance_m: number | null; moving_time_s: number | null }[] | undefined): number | null {
+  if (!rows) return null;
+  const paces = rows
+    .map((r) => (r.distance_m != null && r.distance_m >= 1000 ? secPerKm(r.distance_m, r.moving_time_s) : null))
+    .filter((p): p is number => p != null)
+    .slice(0, 10)
+    .sort((a, b) => a - b);
+  if (!paces.length) return null;
+  const mid = paces.length >> 1;
+  return paces.length % 2 ? paces[mid] : (paces[mid - 1] + paces[mid]) / 2;
 }

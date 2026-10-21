@@ -18,5 +18,11 @@ export const keys = {
   routes: (uid: string) => ['routes', uid] as const,
   route: (id: string) => ['route', id] as const,
   routeHeights: (id: string) => ['routeHeights', id] as const,
+  /** A drawn course by its waypoints: the routed legs between them. */
+  course: (waypoints: [number, number][]) => ['course', waypoints] as const,
+  /** Address search results for a query near a point (rounded, so a pan does not refetch). */
+  placeSearch: (q: string, near: string) => ['placeSearch', q, near] as const,
+  /** Cafés inside a box, keyed by the box snapped to a grid. */
+  cafes: (box: string) => ['cafes', box] as const,
   sessions: (uid: string) => ['sessions', uid] as const,
 };

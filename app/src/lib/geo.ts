@@ -84,6 +84,29 @@ export function fitBbox(b: Bbox, width: number, height: number, pad = 24): MapVi
   return { center: bboxCenter(b), zoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM) };
 }
 
+/**
+ * Map-local pixels back to a coordinate: the inverse of TileMap's projector for camera `cam`
+ * drawn into a view of `size`. What a tap or a dragged marker on the map means in the world.
+ */
+export function unprojectPt(pt: Pt, cam: MapView, size: { width: number; height: number }): LatLng {
+  const world = 2 ** cam.zoom;
+  const tlx = mercX(cam.center.lng) * world - size.width / 2;
+  const tly = mercY(cam.center.lat) * world - size.height / 2;
+  return { lat: unMercY((tly + pt.y) / world), lng: unMercX((tlx + pt.x) / world) };
+}
+
+/** The same camera: the centre within a hair and the same zoom. */
+export function sameView(a: MapView, b: MapView): boolean {
+  return Math.abs(a.zoom - b.zoom) < 1e-9 && Math.abs(a.center.lat - b.center.lat) < 1e-9 && Math.abs(a.center.lng - b.center.lng) < 1e-9;
+}
+
+/** The box the camera shows in a view of `size`: [minLat, minLng, maxLat, maxLng]. */
+export function viewBbox(cam: MapView, size: { width: number; height: number }): Bbox {
+  const tl = unprojectPt({ x: 0, y: 0 }, cam, size);
+  const br = unprojectPt({ x: size.width, y: size.height }, cam, size);
+  return [Math.min(tl.lat, br.lat), Math.min(tl.lng, br.lng), Math.max(tl.lat, br.lat), Math.max(tl.lng, br.lng)];
+}
+
 export function haversineKm(a: LatLng, b: LatLng): number {
   const r = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;

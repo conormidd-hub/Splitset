@@ -49,6 +49,8 @@ const LOOP_HALF_ANGLE_DEG = 45;
 const LOOP_BEARINGS = [17, 107, 197, 287];
 /** A direct route shorter than this fraction of the target earns detour candidates. */
 const DETOUR_THRESHOLD = 0.85;
+/** A detour within this fraction of the direct route's length is the direct route and is dropped. */
+const SAME_ROUTE_TOLERANCE = 0.02;
 
 /**
  * The point `metres` away from `from` along the initial bearing `bearingDeg` (degrees clockwise
@@ -164,24 +166,34 @@ export async function generateLoops(start: LatLng, targetM: number, router: Rout
   return settle(jobs, targetM);
 }
 
+export type PointToPointTarget =
+  /** A total length to aim for; detours only when the direct route is well short of it. */
+  | { totalM: number }
+  /** This much more than the direct route, whatever that turns out to be; detours always tried. */
+  | { extraM: number }
+  | null;
+
 /**
  * Routes from `start` to `end`.
  *
- * The direct route is always a candidate ("Direct"). When a target length is given and the direct
- * route is shorter than 85 % of it, two detours are tried in parallel: a waypoint at the midpoint
- * of start-end pushed perpendicular to that line by h = 0.5 * sqrt(target^2 - direct^2) (the
- * offset that makes the two straight legs sum to the target), one to each side, with h iterated
- * like the loop radius. Failed detours are dropped; the promise rejects only when even the direct
- * route cannot be found. Sorted nearest the target first (so "Direct" leads when there is no target).
+ * The direct route is always a candidate ("Direct"). When a target is given, two detours are
+ * tried in parallel: a waypoint at the midpoint of start-end pushed perpendicular to that line by
+ * h = 0.5 * sqrt(target^2 - direct^2) (the offset that makes the two straight legs sum to the
+ * target), one to each side, with h iterated like the loop radius. A total target only earns
+ * detours when the direct route is shorter than 85 % of it; an extra-distance target ("the direct
+ * way plus 3 km") always does, since the user asked for the detour. Failed detours are dropped;
+ * the promise rejects only when even the direct route cannot be found. Sorted nearest the target
+ * first (so "Direct" leads when there is no target).
  */
-export async function generatePointToPoint(start: LatLng, end: LatLng, targetM: number | null, router: Router): Promise<Candidate[]> {
+export async function generatePointToPoint(start: LatLng, end: LatLng, want: PointToPointTarget, router: Router): Promise<Candidate[]> {
   const direct = await router.route([start, end]);
   const directJob = toCandidate(router, direct, 'point_to_point', 'Direct');
-  const target = targetM != null && targetM > 0 ? targetM : direct.distance_m;
+  const D = direct.distance_m;
+  const targetM = want == null ? null : 'totalM' in want ? (want.totalM > 0 ? want.totalM : null) : want.extraM > 0 ? D + want.extraM : null;
   const jobs = [directJob];
 
-  if (targetM != null && targetM > 0 && direct.distance_m < DETOUR_THRESHOLD * targetM) {
-    const D = direct.distance_m;
+  const detour = targetM != null && (want != null && 'extraM' in want ? targetM > D : D < DETOUR_THRESHOLD * targetM);
+  if (targetM != null && detour) {
     const h0 = 0.5 * Math.sqrt(Math.max(0, targetM * targetM - D * D));
     const mid: LatLng = { lat: (start.lat + end.lat) / 2, lng: (start.lng + end.lng) / 2 };
     const along = bearingDeg(start, end);
@@ -194,5 +206,7 @@ export async function generatePointToPoint(start: LatLng, end: LatLng, targetM: 
       );
     }
   }
-  return settle(jobs, target);
+  const found = await settle(jobs, targetM ?? D);
+  // a detour whose waypoint snapped back onto the direct way is the direct route again: not worth a second row
+  return found.filter((c) => c.label === 'Direct' || Math.abs(c.distance_m - D) > SAME_ROUTE_TOLERANCE * D);
 }
