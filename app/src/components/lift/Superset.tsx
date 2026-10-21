@@ -1,15 +1,15 @@
+import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { QuickView } from '@/components/recovery/FigureBubble';
 import { Button } from '@/components/ui/Button';
 import { T } from '@/components/ui/T';
+import { ICONS } from '@/lib/icons';
 import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
-export const SUPERSET_GLYPH = '⟲';
-
-/** The pill on an exercise card: "⟲" to link it, "⟲ A" once it is in superset A. */
+/** The pill on an exercise card: a link to make a superset, "link A" once it is in superset A. */
 export function SupersetPill({ letter, name, onPress }: { letter: string | null; name: string; onPress: () => void }) {
   const { palette } = useTheme();
   const on = !!letter;
@@ -20,11 +20,12 @@ export function SupersetPill({ letter, name, onPress }: { letter: string | null;
       accessibilityLabel={on ? `${name} is in superset ${letter}. Tap to change or unlink.` : `Superset ${name} with another exercise`}
       hitSlop={6}
       style={({ pressed }) => ({
-        height: 28, minWidth: 34, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill,
+        height: 28, minWidth: 34, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: radius.pill,
         backgroundColor: on ? palette.accent : palette.surface2, borderWidth: 1, borderColor: on ? palette.accent : palette.hair,
         opacity: pressed ? 0.8 : 1,
       })}>
-      <T variant="small" weight="700" tone={on ? 'onAccent' : 'ink2'}>{on ? `${SUPERSET_GLYPH} ${letter}` : SUPERSET_GLYPH}</T>
+      <SymbolView name={ICONS.link} tintColor={on ? palette.onAccent : palette.ink2} size={15} />
+      {on ? <T variant="small" weight="700" tone="onAccent">{letter}</T> : null}
     </Pressable>
   );
 }
@@ -77,7 +78,12 @@ export function SupersetSheet({ open, name, letter, options, onPick, onUnlink, o
                 <View style={{ backgroundColor: palette.accentSoft, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
                   <T variant="tiny" tone="accent" weight="700">Suggested · next</T>
                 </View>
-              ) : o.letter ? <T variant="tiny" tone="mut">{SUPERSET_GLYPH} {o.letter}</T> : null}
+              ) : o.letter ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <SymbolView name={ICONS.link} tintColor={palette.mut} size={12} />
+                  <T variant="tiny" tone="mut">{o.letter}</T>
+                </View>
+              ) : null}
             </Pressable>
           ))}
         </ScrollView>
@@ -98,7 +104,10 @@ export function SupersetRail({ letter, children }: { letter: string; children: R
   const { palette } = useTheme();
   return (
     <View style={{ gap: space.xs }}>
-      <T variant="tiny" tone="accent" weight="800" style={{ letterSpacing: 1 }}>{SUPERSET_GLYPH} SUPERSET {letter}</T>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <SymbolView name={ICONS.link} tintColor={palette.accent} size={12} />
+        <T variant="tiny" tone="accent" weight="800" style={{ letterSpacing: 1 }}>SUPERSET {letter}</T>
+      </View>
       <View style={{ flexDirection: 'row' }}>
         {/* the rail lives in the page's left gutter, so the cards keep their full width */}
         <View style={{ width: space.lg - 4, marginLeft: -(space.lg - 4), alignItems: 'center' }}>

@@ -1,10 +1,11 @@
+import { SymbolView } from 'expo-symbols';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { useExerciseNotes, type RoutineWithStructure } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
 import { T } from '@/components/ui/T';
-import { SUPERSET_GLYPH } from '@/components/lift/Superset';
+import { ICONS } from '@/lib/icons';
 import { groupLetter } from '@/lib/lifting/superset';
 import { setsSummary } from '@/lib/lifting/template';
 import { formatLoad } from '@/lib/pbs';
@@ -53,8 +54,9 @@ export function RoutineQuickView({ routine, startDisabled, onStart, onEdit, onCl
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
                       <T weight="600" style={{ flex: 1 }}>{re.exercise?.name ?? 'Exercise'}</T>
                       {re.superset_group != null ? (
-                        <View style={{ backgroundColor: palette.accentSoft, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
-                          <T variant="tiny" tone="accent" weight="700">{SUPERSET_GLYPH} {groupLetter(grouped, re.superset_group)}</T>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: palette.accentSoft, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <SymbolView name={ICONS.link} tintColor={palette.accent} size={11} />
+                          <T variant="tiny" tone="accent" weight="700">{groupLetter(grouped, re.superset_group)}</T>
                         </View>
                       ) : null}
                     </View>

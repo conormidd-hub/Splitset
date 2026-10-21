@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,11 +26,13 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { PickSheet } from '@/components/ui/PickSheet';
 import { SortableList } from '@/components/ui/SortableList';
 import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
+import { ICONS } from '@/lib/icons';
 import { awayMinutes, elapsedSeconds, formatElapsed } from '@/lib/lifting/elapsed';
 import { setRowE1rm } from '@/lib/lifting/setRow';
 import { groupItems, groupLetter, turnIn } from '@/lib/lifting/superset';
@@ -79,6 +82,8 @@ export default function ActiveWorkoutScreen() {
   const [scrolled, setScrolled] = useState(false);
   const [quick, setQuick] = useState(false);
   const [prompt, setPrompt] = useState(false);
+  // the ⋯ sheet: save as routine, discard
+  const [menu, setMenu] = useState(false);
   const [dragging, setDragging] = useState(false);
   // a drag near the top or bottom of the screen scrolls the workout under the finger
   const scrollRef = useRef<ScrollView | null>(null);
@@ -173,8 +178,9 @@ export default function ActiveWorkoutScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        {/* header */}
-        <View style={{ paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: space.xs }}>
+        {/* header: the name with a ⋯ for the rarer choices (save as routine, discard), then one row
+            of the clock, the save state, the rest timer and Finish, the one action that matters */}
+        <View style={{ paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: space.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
             <TextInput
               value={workout.name}
@@ -185,25 +191,45 @@ export default function ActiveWorkoutScreen() {
             />
             <FigureBubble map={body.data ?? live?.session ?? null} mode={body.data ? 'recovery' : 'session'} shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
               label="Body now, with this session's muscles, quick view" />
-            <RestBubble />
-            <Button title="Finish" small loading={finishing} onPress={onFinish} />
+            <Pressable
+              onPress={() => setMenu(true)}
+              accessibilityRole="button"
+              accessibilityLabel="More: save as routine, or discard the workout"
+              hitSlop={6}
+              style={({ pressed }) => ({
+                width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: palette.surface2, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1,
+              })}>
+              <SymbolView name={ICONS.more} tintColor={palette.ink2} size={18} />
+            </Pressable>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
             {paused ? (
               <Pressable onPress={resume} accessibilityRole="button" accessibilityLabel={`Clock paused at ${elapsed}. Tap to continue.`} hitSlop={6}>
-                <T variant="small" tone="accent" weight="600" style={{ fontVariant: ['tabular-nums'] }}>{elapsed} · paused</T>
+                <T variant="small" tone="accent" weight="700" style={{ fontVariant: ['tabular-nums'] }}>{elapsed} · paused</T>
               </Pressable>
             ) : (
-              <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
+              <T variant="small" tone="ink2" weight="700" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
             )}
             <T variant="small" tone={lastError ? 'neg' : 'mut'}>
-              {lastError ? 'not saved' : outboxLength ? 'saving…' : 'saved'}
+              {lastError ? '· not saved' : outboxLength ? '· saving…' : '· saved'}
             </T>
             <View style={{ flex: 1 }} />
-            <Pressable onPress={saveAsRoutine}><T variant="small" tone="accent" weight="600">Save as routine</T></Pressable>
-            <Pressable onPress={onDiscard}><T variant="small" tone="neg" weight="600">Discard</T></Pressable>
+            <RestBubble />
+            <Button title="Finish" small loading={finishing} onPress={onFinish} style={{ height: 36, paddingVertical: 0 }} />
           </View>
         </View>
+        <PickSheet
+          visible={menu}
+          title={workout.name || 'Workout'}
+          closeOnPick
+          sections={[{ options: [
+            { id: 'routine', label: 'Save as routine', subtitle: 'Today’s exercises, sets and weights become a routine to start from next time', icon: 'routines' },
+            { id: 'discard', label: 'Discard workout', subtitle: 'Everything logged in this session is deleted', icon: 'close' },
+          ] }]}
+          onPick={(id) => { if (id === 'routine') saveAsRoutine(); else void onDiscard(); }}
+          onClose={() => setMenu(false)}
+        />
 
         {/* rest timer */}
         {rest ? (
@@ -347,6 +373,7 @@ function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAft
     ? routines.data?.find((r) => r.id === routineId)?.routine_exercises.find((re) => re.exercise_id === block.exerciseId)?.notes ?? null
     : null;
   const notes: ExerciseNotes = { template: templateNote, exercise: exerciseNotes.data?.get(block.exerciseId) ?? null, workout: block.notes };
+  const hasNotes = !!(notes.template || notes.exercise || notes.workout);
   const onSaveNote = (scope: NoteScope, text: string) => {
     if (scope === 'workout') setExerciseNote(block.id, text);
     else saveNote.mutate({ scope, exerciseId: block.exerciseId, routineId, note: text });
@@ -405,19 +432,34 @@ function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAft
 
   return (
     <Card>
+      {/* the name has the row to itself (with the grip and remove), so it is never cut short; the
+          card's pills sit on the row above the sets */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
         {handle}
         <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => router.push(`/exercise/${block.exerciseId}`)}>
           <T variant="h3" tone="accent" numberOfLines={1}>{block.name}</T>
         </Pressable>
+        <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${block.name}`}
+          style={({ pressed }) => ({ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
+          <SymbolView name={ICONS.close} tintColor={palette.mut} size={14} />
+        </Pressable>
+      </View>
+      {/* the card's pills, one size: superset, PBs, notes; the logger switches on the right */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
         <SupersetPill letter={letter} name={block.name} onPress={() => setLinking(true)} />
         {metrics.length ? (
           <Pressable
             onPress={() => setShowPb((v) => !v)}
             accessibilityRole="button"
             accessibilityLabel={`${block.name} personal bests`}
-            style={{ backgroundColor: showPb ? palette.amber : palette.surface, borderColor: palette.amber, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 }}>
-            <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>🏆 PB</T>
+            accessibilityState={{ expanded: showPb }}
+            hitSlop={6}
+            style={({ pressed }) => ({
+              height: 28, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, borderRadius: radius.pill,
+              backgroundColor: showPb ? palette.amber : palette.surface, borderColor: palette.amber, borderWidth: 1, opacity: pressed ? 0.8 : 1,
+            })}>
+            <SymbolView name={ICONS.trophy} tintColor={showPb ? palette.surface : palette.amber} size={14} />
+            <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>PB</T>
           </Pressable>
         ) : null}
         <Pressable
@@ -425,11 +467,15 @@ function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAft
           accessibilityRole="button"
           accessibilityLabel={`${block.name} notes`}
           hitSlop={6}
-          style={{ height: 28, minWidth: 34, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill,
-            backgroundColor: notes.template || notes.exercise || notes.workout ? palette.accentSoft : palette.surface2 }}>
-          <T variant="small">📝</T>
+          style={({ pressed }) => ({
+            height: 28, minWidth: 34, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderWidth: 1,
+            backgroundColor: hasNotes ? palette.accentSoft : palette.surface2, borderColor: hasNotes ? palette.accentLine : palette.hair, opacity: pressed ? 0.8 : 1,
+          })}>
+          <SymbolView name={ICONS.note} tintColor={hasNotes ? palette.accent : palette.ink2} size={15} />
         </Pressable>
-        <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${block.name}`}><T tone="mut">✕</T></Pressable>
+        <View style={{ flex: 1 }} />
+        <Chip label="RPE" selected={showRpe} onPress={() => setExerciseOptions(block.id, { showRpe: !showRpe })} />
+        {unilateral ? <Chip label="Each side" selected={perSide} onPress={() => setExerciseOptions(block.id, { perSide: !perSide })} /> : null}
       </View>
 
       {(['template', 'exercise', 'workout'] as const).filter((s) => notes[s]).map((s) => (
@@ -463,11 +509,6 @@ function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAft
           loadMode={loadMode} bwFactor={block.bwFactor ?? row?.bw_factor ?? null} bodyweightKg={e1rmBodyweight}
         />
       ) : null}
-
-      <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.sm }}>
-        <Chip label="RPE" selected={showRpe} onPress={() => setExerciseOptions(block.id, { showRpe: !showRpe })} />
-        {unilateral ? <Chip label="Each side" selected={perSide} onPress={() => setExerciseOptions(block.id, { perSide: !perSide })} /> : null}
-      </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: col.gap, paddingBottom: 4 }}>
         <T variant="label" tone="mut" style={{ width: 32, textAlign: 'center' }}>set</T>
