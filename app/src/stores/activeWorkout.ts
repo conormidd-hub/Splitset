@@ -15,7 +15,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { Exercise, RoutineWithStructure } from '@/api/lifting';
 import { finishWorkoutRemote } from '@/api/workoutLoads';
+import { pausedFor } from '@/lib/lifting/elapsed';
 import { setRowPayload, usesBodyweight, type ExerciseFacts, type SetRow, type SetType, type Side } from '@/lib/lifting/setRow';
+import { linkSuperset, unlinkSuperset } from '@/lib/lifting/superset';
 import { DEFAULT_THRESHOLDS } from '@/lib/recovery/constants';
 import type { Thresholds } from '@/lib/recovery/thresholds';
 import { storage } from '@/lib/storage';
@@ -65,6 +67,13 @@ export type ActiveWorkout = {
   templateExerciseIds?: string[] | null;
   /** The rest timer, for this workout: on or off, and how long. Left out by older builds (off). */
   rest?: { on: boolean; seconds: number };
+  /** The last edit (a tick, a number, a set added): the clock pauses IDLE_MS after it. The start
+   *  until something is logged; left out by older builds (read as the start). */
+  lastActiveAt?: string;
+  /** Set while the clock is paused for inactivity: when it paused. */
+  pausedAt?: string | null;
+  /** Seconds the clock spent in earlier pauses, left out of the elapsed time. */
+  pausedS?: number;
 };
 
 type Op =
@@ -90,6 +99,11 @@ type State = {
   /** A workout whose finish synced with no finish() call waiting on it (Retry now, or a queue
    *  left from before a restart): the Lift tab links it to the plan, refreshes and opens it. */
   finishedId: string | null;
+  /** The clock has paused for inactivity and the workout screen should ask what to do. Cleared by
+   *  Continue, Save for later, or any edit (which resumes the clock). */
+  idlePrompt: boolean;
+  /** The "still lifting?" notification scheduled for the idle moment: when, and its id. */
+  idleNotice: { at: number; id: string | null } | null;
 
   start: (userId: string, routine?: RoutineWithStructure | null, name?: string, bodyweightKg?: number | null,
     rest?: { on: boolean; seconds: number }) => ActiveWorkout;
@@ -97,11 +111,22 @@ type State = {
   setRest: (rest: { on?: boolean; seconds?: number }) => void;
   /** Move an exercise to another place in the workout. */
   moveExercise: (blockId: string, toIndex: number) => void;
+  /** Put the exercises in this order (ids; any left out keep their order at the end). */
+  reorderExercises: (blockIds: readonly string[]) => void;
+  /** Link an exercise into a superset with another (it moves next to it), or take it out (null). */
+  setSuperset: (blockId: string, partnerId: string | null) => void;
+  /** Pause the clock for inactivity, as of `at` (ISO): elapsed time holds there. */
+  pause: (at: string) => void;
+  /** Start the clock again; the pause is left out of the elapsed time. */
+  resume: () => void;
+  dismissIdlePrompt: () => void;
+  setIdleNotice: (notice: { at: number; id: string | null } | null) => void;
   /** The exercise's note for this workout only (workout_exercises.notes). */
   setExerciseNote: (blockId: string, notes: string) => void;
   rename: (name: string) => void;
   setNotes: (notes: string) => void;
-  addExercise: (exercise: ExerciseForWorkout, restSeconds?: number | null) => ExerciseBlock;
+  /** Add an exercise at the end, with `supersetWith` (a block id) linked into a superset with it. */
+  addExercise: (exercise: ExerciseForWorkout, restSeconds?: number | null, supersetWith?: string | null) => ExerciseBlock;
   setExerciseOptions: (blockId: string, options: { showRpe?: boolean; perSide?: boolean }) => void;
   /** Snapshot bodyweight on the workout (D5); sets whose e1RM depends on it are saved again. */
   setBodyweight: (kg: number) => void;
@@ -168,16 +193,28 @@ export const useActiveWorkout = create<State>()(
         set((s) => ({ outbox: [...s.outbox, ...ops] }));
         void get().flush();
       };
-      const mutate = (fn: (w: ActiveWorkout) => void): ActiveWorkout | null => {
+      /** Change the workout. An edit by the lifter (`activity`, the default) is what the idle clock
+       *  watches: it marks the time and, if the clock had paused, starts it again. Housekeeping
+       *  (a bodyweight that arrived, facts refreshed from the library) passes false. */
+      const mutate = (fn: (w: ActiveWorkout) => void, activity = true): ActiveWorkout | null => {
         const w = get().workout;
         // after Finish, an edit would reach a finished workout unscored (or un-finish it)
         if (!w || finishQueued(get().outbox, w.id)) return null;
         const next: ActiveWorkout = { ...w, exercises: w.exercises.map((b) => ({ ...b, sets: b.sets.map((s) => ({ ...s })) })) };
         fn(next);
         next.updatedAt = now();
-        set({ workout: next });
+        if (activity) {
+          const t = now();
+          if (next.pausedAt) {
+            next.pausedS = (next.pausedS ?? 0) + pausedFor(next.pausedAt, Date.parse(t));
+            next.pausedAt = null;
+          }
+          next.lastActiveAt = t;
+          set({ workout: next, idlePrompt: false });
+        } else set({ workout: next });
         return next;
       };
+      const allExercises = (w: ActiveWorkout): Op[] => w.exercises.map((b): Op => ({ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, b) }));
 
       return {
         workout: null,
@@ -188,6 +225,8 @@ export const useActiveWorkout = create<State>()(
         defaultRestSeconds: 90,
         thresholds: DEFAULT_THRESHOLDS,
         finishedId: null,
+        idlePrompt: false,
+        idleNotice: null,
 
         start: (userId, routine, name, bodyweightKg, rest) => {
           const startedAt = now();
@@ -197,6 +236,7 @@ export const useActiveWorkout = create<State>()(
             name: name ?? routine?.name ?? 'Workout', startedAt, notes: null, bodyweightKg: bodyweightKg ?? null, exercises: [], updatedAt: startedAt,
             templateExerciseIds: routine ? routine.routine_exercises.map((re) => re.exercise_id) : null,
             rest: rest ?? { on: false, seconds: get().defaultRestSeconds },
+            lastActiveAt: startedAt, pausedAt: null, pausedS: 0,
           };
           const ops: Op[] = [{ kind: 'upsert', table: 'workouts', row: rowOf.workout(w) }];
           for (const re of routine?.routine_exercises ?? []) {
@@ -217,10 +257,46 @@ export const useActiveWorkout = create<State>()(
             ops.push({ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) });
             for (const s of block.sets) ops.push({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(c, w, s) });
           }
-          set({ workout: w, timer: null, lastError: null });
+          set({ workout: w, timer: null, lastError: null, idlePrompt: false });
           queue(...ops);
           return w;
         },
+
+        reorderExercises: (blockIds) => {
+          const w = mutate((x) => {
+            const byId = new Map(x.exercises.map((b) => [b.id, b]));
+            const ordered = blockIds.map((id) => byId.get(id)).filter((b): b is ExerciseBlock => !!b);
+            for (const b of x.exercises) if (!ordered.includes(b)) ordered.push(b);
+            x.exercises = ordered.map((e, i) => (e.position === i ? e : { ...e, position: i, updatedAt: now() }));
+          });
+          if (w) queue(...allExercises(w));
+        },
+
+        setSuperset: (blockId, partnerId) => {
+          const w = mutate((x) => {
+            const keyOf = (b: ExerciseBlock) => b.id;
+            const next = partnerId ? linkSuperset(x.exercises, blockId, partnerId, keyOf) : unlinkSuperset(x.exercises, blockId, keyOf);
+            x.exercises = next.map((e, i) => ({ ...e, position: i, updatedAt: now() }));
+          });
+          if (w) queue(...allExercises(w));
+        },
+
+        pause: (at) => {
+          const w = get().workout;
+          if (!w || w.pausedAt || finishQueued(get().outbox, w.id)) return;
+          // a setting of the clock, not part of what's logged: nothing to save
+          set({ workout: { ...w, pausedAt: at }, idlePrompt: true });
+        },
+
+        resume: () => {
+          const w = get().workout;
+          if (!w || !w.pausedAt) return;
+          const t = now();
+          set({ workout: { ...w, pausedAt: null, pausedS: (w.pausedS ?? 0) + pausedFor(w.pausedAt, Date.parse(t)), lastActiveAt: t }, idlePrompt: false });
+        },
+
+        dismissIdlePrompt: () => set({ idlePrompt: false }),
+        setIdleNotice: (idleNotice) => set({ idleNotice }),
 
         rename: (name) => {
           const w = mutate((x) => { x.name = name; });
@@ -263,7 +339,7 @@ export const useActiveWorkout = create<State>()(
           if (w) queue({ kind: 'upsert', table: 'workouts', row: rowOf.workout(w) });
         },
 
-        addExercise: (exercise, restSeconds) => {
+        addExercise: (exercise, restSeconds, supersetWith) => {
           const block: ExerciseBlock = {
             id: uuid(), exerciseId: exercise.id, name: exercise.name, measure: exercise.measure, ...factsOf(exercise), position: 0,
             restSeconds: restSeconds ?? get().defaultRestSeconds, supersetGroup: null, notes: null, sets: [], updatedAt: now(),
@@ -275,14 +351,17 @@ export const useActiveWorkout = create<State>()(
               weightKg: null, reps: null, rpe: null, seconds: null, completed: false, completedAt: null, notes: null, updatedAt: now(),
             });
             x.exercises.push(block);
+            if (supersetWith) {
+              x.exercises = linkSuperset(x.exercises, block.id, supersetWith, (b) => b.id).map((e, i) => ({ ...e, position: i, updatedAt: now() }));
+            }
           });
           if (w) {
             queue(
-              { kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) },
+              ...(supersetWith ? allExercises(w) : [{ kind: 'upsert', table: 'workout_exercises', row: rowOf.exercise(w, block) } as Op]),
               ...block.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(get().thresholds, w, s) })),
             );
           }
-          return block;
+          return w?.exercises.find((b) => b.id === block.id) ?? block;
         },
 
         setExerciseOptions: (blockId, options) => {
@@ -309,7 +388,7 @@ export const useActiveWorkout = create<State>()(
         },
 
         setBodyweight: (kg) => {
-          const w = mutate((x) => { x.bodyweightKg = kg; });
+          const w = mutate((x) => { x.bodyweightKg = kg; }, false);
           if (!w) return;
           const c = get().thresholds;
           queue(
@@ -334,7 +413,7 @@ export const useActiveWorkout = create<State>()(
           if (!stale.size) return;
           const w = mutate((x) => {
             for (const b of x.exercises) if (stale.has(b.id)) Object.assign(b, factsOf(byId.get(b.exerciseId)!));
-          });
+          }, false);
           if (!w) return;
           const c = get().thresholds;
           queue(...w.exercises.filter((b) => stale.has(b.id)).flatMap((b) => b.sets.map((s): Op => ({ kind: 'upsert', table: 'workout_sets', row: rowOf.set(c, w, s) }))));
@@ -437,13 +516,15 @@ export const useActiveWorkout = create<State>()(
             // drop untouched empty sets so history stays honest
             const cleaned = mutate((x) => {
               for (const b of x.exercises) b.sets = b.sets.filter((s) => s.completed || s.weightKg != null || s.reps != null || s.seconds != null);
-            }) ?? w;
+            }, false) ?? w;
             const removed = w.exercises.flatMap((b) => b.sets).filter((s) => !cleaned.exercises.some((b) => b.sets.some((y) => y.id === s.id)));
             // every set again, with the e1RM this build gives it: sets saved by an older build have none
             const c = get().thresholds;
             const kept = cleaned.exercises.flatMap((b) => b.sets.map((s) => rowOf.set(c, cleaned, s)));
             const resave: Op[] = kept.length ? [{ kind: 'upsert', table: 'workout_sets', row: kept }] : [];
-            const finishedAt = now();
+            // a workout finished while its clock is paused ended at its last set, not whenever
+            // the lifter found the phone again
+            const finishedAt = w.pausedAt && w.lastActiveAt ? w.lastActiveAt : now();
             set((s) => ({
               outbox: [
                 ...s.outbox,
@@ -530,7 +611,10 @@ export const useActiveWorkout = create<State>()(
     {
       name: 'splitset-active-workout',
       storage: createJSONStorage(() => storage),
-      partialize: (s) => ({ workout: s.workout, outbox: s.outbox, timer: s.timer, defaultRestSeconds: s.defaultRestSeconds, finishedId: s.finishedId }),
+      partialize: (s) => ({
+        workout: s.workout, outbox: s.outbox, timer: s.timer, defaultRestSeconds: s.defaultRestSeconds, finishedId: s.finishedId,
+        idlePrompt: s.idlePrompt, idleNotice: s.idleNotice,
+      }),
     },
   ),
 );

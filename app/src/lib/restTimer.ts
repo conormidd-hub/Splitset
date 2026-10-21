@@ -6,7 +6,8 @@ import { useNowSeconds } from '@/lib/clock';
 import { useActiveWorkout, type RestTimer } from '@/stores/activeWorkout';
 
 let handlerSet = false;
-function ensureHandler() {
+/** Show the app's local notifications (rest over, still lifting?) as banners with sound, once. */
+export function ensureNotificationHandler() {
   if (handlerSet || Platform.OS === 'web') return;
   handlerSet = true;
   Notifications.setNotificationHandler({
@@ -22,7 +23,7 @@ function ensureHandler() {
 async function scheduleAt(endsAt: number, label: string): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   try {
-    ensureHandler();
+    ensureNotificationHandler();
     const perm = await Notifications.getPermissionsAsync();
     if (!perm.granted) {
       const req = await Notifications.requestPermissionsAsync();

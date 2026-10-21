@@ -10,6 +10,7 @@ import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
 import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useThresholds } from '@/api/recovery';
 import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
+import { IdlePrompt } from '@/components/lift/IdlePrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
 import { RestBubble } from '@/components/lift/RestBubble';
 import { SwipeToDelete, type SwipeGroup } from '@/components/lift/SwipeToDelete';
@@ -28,6 +29,7 @@ import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
+import { awayMinutes, elapsedSeconds, formatElapsed } from '@/lib/lifting/elapsed';
 import { setRowE1rm } from '@/lib/lifting/setRow';
 import { templateChanged, templateFromWorkout } from '@/lib/lifting/template';
 import { formatLiftPb, formatLoad, liftMetricShort, mergeSession, metricsFor, sessionBests } from '@/lib/pbs';
@@ -45,15 +47,6 @@ const NEXT_TYPE: Record<SetType, SetType> = { working: 'warmup', warmup: 'drop',
 /** The RPE picker: 6 to 10 in half points (workout_sets.rpe is checked to these). */
 const RPE_STEPS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 
-function useElapsed(startedAt: string | undefined): string {
-  const nowSeconds = useNowSeconds();
-  if (!startedAt) return '';
-  const s = Math.max(0, Math.round(nowSeconds - new Date(startedAt).getTime() / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h ? `${h}:${m.toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}` : `${m}:${(s % 60).toString().padStart(2, '0')}`;
-}
-
 export default function ActiveWorkoutScreen() {
   const { palette } = useTheme();
   const units = useUnits();
@@ -62,8 +55,12 @@ export default function ActiveWorkoutScreen() {
   const workout = useActiveWorkout((s) => s.workout);
   const lastError = useActiveWorkout((s) => s.lastError);
   const outboxLength = useActiveWorkout((s) => s.outbox.length);
-  const { rename, finish, discard, flush, setThresholds, setBodyweight } = useActiveWorkout.getState();
-  const elapsed = useElapsed(workout?.startedAt);
+  const idlePrompt = useActiveWorkout((s) => s.idlePrompt);
+  const { rename, finish, discard, flush, setThresholds, setBodyweight, resume, dismissIdlePrompt } = useActiveWorkout.getState();
+  const nowSeconds = useNowSeconds();
+  // the clock holds while the workout is paused for inactivity (ActiveWorkoutBar watches for that)
+  const elapsed = workout ? formatElapsed(elapsedSeconds(workout, nowSeconds * 1000)) : '';
+  const paused = !!workout?.pausedAt;
   const rest = useRestRemaining();
   const [finishing, setFinishing] = useState(false);
   const thresholds = useThresholds();
@@ -175,7 +172,13 @@ export default function ActiveWorkoutScreen() {
             <Button title="Finish" small loading={finishing} onPress={onFinish} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-            <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
+            {paused ? (
+              <Pressable onPress={resume} accessibilityRole="button" accessibilityLabel={`Clock paused at ${elapsed}. Tap to continue.`} hitSlop={6}>
+                <T variant="small" tone="accent" weight="600" style={{ fontVariant: ['tabular-nums'] }}>{elapsed} · paused</T>
+              </Pressable>
+            ) : (
+              <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
+            )}
             <T variant="small" tone={lastError ? 'neg' : 'mut'}>
               {lastError ? 'not saved' : outboxLength ? 'saving…' : 'saved'}
             </T>
@@ -255,6 +258,14 @@ export default function ActiveWorkoutScreen() {
         ) : null}
       </QuickView>
       <FinishPrompt open={prompt} templateName={template?.name ?? null} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
+      <IdlePrompt
+        open={paused && idlePrompt && !prompt}
+        awayMinutes={awayMinutes(workout, nowSeconds * 1000)}
+        onContinue={resume}
+        onFinish={() => { dismissIdlePrompt(); void onFinish(); }}
+        onLater={dismissIdlePrompt}
+        onDiscard={() => { dismissIdlePrompt(); void onDiscard(); }}
+      />
     </SafeAreaView>
   );
 }

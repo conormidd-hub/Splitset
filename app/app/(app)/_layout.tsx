@@ -1,7 +1,9 @@
 import { Tabs } from 'expo-router';
+import { BottomTabBar, type BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { View, type ColorValue } from 'react-native';
 
+import { ActiveWorkoutBar } from '@/components/lift/ActiveWorkoutBar';
 import { SplitsetMark } from '@/components/ui/SplitsetMark';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -29,10 +31,21 @@ function TodayIcon({ color }: { color: ColorValue }) {
   return <SplitsetMark size={24} color={color} />;
 }
 
+/** The tab bar with the workout-in-progress bar riding on top of it, so a live workout shows on every tab. */
+function tabBar(props: BottomTabBarProps) {
+  return (
+    <View>
+      <ActiveWorkoutBar />
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
+
 export default function AppTabs() {
   const { palette } = useTheme();
   return (
     <Tabs
+      tabBar={tabBar}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: palette.accent,
