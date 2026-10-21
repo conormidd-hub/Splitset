@@ -65,7 +65,7 @@ export function LiftHistoryList({ workouts, loading, error, hasMore, loadingMore
               subtitle={`${relativeDay(w.started_at)} · ${formatDurationShort(w.duration_s)} · ${w.sets_completed ?? 0} sets`}
               value={w.volume_kg ? formatWeight(w.volume_kg, units, 0) : undefined}
               valueSub={w.volume_kg ? 'volume' : undefined}
-              onPress={() => router.push(`/lift/history/${w.id}`)}
+              onPress={() => router.push(`/workout/${w.id}`)}
             />
           ))}
         </Card>

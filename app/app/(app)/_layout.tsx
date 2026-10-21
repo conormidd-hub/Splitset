@@ -1,7 +1,9 @@
 import { Tabs } from 'expo-router';
+import { BottomTabBar, type BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { View, type ColorValue } from 'react-native';
 
+import { ActiveWorkoutBar } from '@/components/lift/ActiveWorkoutBar';
 import { SplitsetMark } from '@/components/ui/SplitsetMark';
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -29,17 +31,42 @@ function TodayIcon({ color }: { color: ColorValue }) {
   return <SplitsetMark size={24} color={color} />;
 }
 
+/** The tab bar with the workout-in-progress bar riding on top of it, so a live workout shows on every tab. */
+function tabBar(props: BottomTabBarProps) {
+  return (
+    <View>
+      <ActiveWorkoutBar />
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
+
+/**
+ * A tab always opens on its home screen: leaving a tab pops its stack to the top
+ * (popToTopOnBlur), and pressing the tab that is already open does the same, so a detail screen
+ * left behind in a tab never traps the next visit.
+ */
 export default function AppTabs() {
   const { palette } = useTheme();
   return (
     <Tabs
+      tabBar={tabBar}
       screenOptions={{
         headerShown: false,
+        popToTopOnBlur: true,
         tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.mut,
         tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.hair },
         sceneStyle: { backgroundColor: palette.bg },
-      }}>
+      }}
+      screenListeners={({ navigation, route }) => ({
+        tabPress: () => {
+          if (!navigation.isFocused()) return;
+          // the open tab, pressed again: back to its home screen (the stack's POP_TO_TOP action)
+          const nested = navigation.getState().routes.find((r) => r.name === route.name)?.state;
+          if (nested?.key && (nested.routes?.length ?? 0) > 1) navigation.dispatch({ type: 'POP_TO_TOP', target: nested.key });
+        },
+      })}>
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: TodayIcon }} />
       <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: tabIcon(icons.plan) }} />
       <Tabs.Screen name="lift" options={{ title: 'Lift', tabBarIcon: tabIcon(icons.lift) }} />

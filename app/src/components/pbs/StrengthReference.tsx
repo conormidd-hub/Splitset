@@ -4,24 +4,21 @@ import { View } from 'react-native';
 
 import type { Exercise } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
-import {
-  useAddManualPb, useCurrentBodyweight, useDeleteManualPb, useStrengthReference, useThresholds,
-} from '@/api/recovery';
+import { useDeleteManualPb, useStrengthReference, useThresholds } from '@/api/recovery';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Chip';
 import { ListRow } from '@/components/ui/ListRow';
-import { NumberInput } from '@/components/ui/NumberInput';
 import { Grid, StatTile } from '@/components/ui/StatTile';
-import { ErrorBanner, Loading, errorMessage } from '@/components/ui/States';
+import { Loading } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
-import { TextField } from '@/components/ui/TextField';
 import { confirm } from '@/lib/confirm';
-import { relativeDay, todayIso } from '@/lib/dates';
+import { relativeDay } from '@/lib/dates';
 import { formatLoad } from '@/lib/pbs';
 import type { ReferenceTone } from '@/lib/recovery/pbHistory';
-import { displayToKg } from '@/lib/units';
 import { space } from '@/theme/tokens';
+
+import { KnownBestFields } from './KnownBestFields';
 
 const BADGE: Record<ReferenceTone, 'mut' | 'accent' | 'pos' | 'neg'> = {
   logged: 'pos', manual: 'accent', lapsed: 'mut', estimated: 'neg', calibrating: 'neg',
@@ -46,7 +43,7 @@ export function StrengthReference({ exercise }: { exercise: Exercise }) {
 
   const items = showAll ? d.items : d.items.slice(0, HISTORY_SHOWN);
   const onItem = async (item: (typeof d.items)[number]) => {
-    if (item.source === 'logged' && item.workoutId) router.push(`/lift/history/${item.workoutId}`);
+    if (item.source === 'logged' && item.workoutId) router.push(`/workout/${item.workoutId}`);
     else if (item.manualPbId && (await confirm('Delete known best', 'Remove this known best? Your logged sets are not affected.', 'Delete', true))) {
       del.mutate(item.manualPbId);
     }
@@ -74,7 +71,11 @@ export function StrengthReference({ exercise }: { exercise: Exercise }) {
         )}
       </Card>
 
-      {d.reference ? <KnownBestForm exercise={exercise} /> : null}
+      {d.reference ? (
+        <Card title="Add a known best" subtitle="A best from before Splitset, or a day you didn’t log">
+          <KnownBestFields exercise={exercise} />
+        </Card>
+      ) : null}
 
       {d.items.length ? (
         <Card title="PB history" subtitle="Each workout's best set and your known bests, newest first">
@@ -96,65 +97,5 @@ export function StrengthReference({ exercise }: { exercise: Exercise }) {
         </Card>
       ) : null}
     </>
-  );
-}
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** "Add a known best": weight × reps, dated today unless another date is typed. */
-function KnownBestForm({ exercise }: { exercise: Exercise }) {
-  const units = useUnits();
-  const c = useThresholds();
-  const bodyweight = useCurrentBodyweight();
-  const add = useAddManualPb();
-  const [weight, setWeight] = useState<number | null>(null);
-  const [reps, setReps] = useState<number | null>(null);
-  const [date, setDate] = useState('');
-  const today = todayIso();
-  const datedAt = date.trim() || today;
-  const dateBad = !DATE.test(datedAt) || Number.isNaN(Date.parse(datedAt)) || datedAt > today;
-  const bodyweightMode = exercise.load_mode === 'bodyweight' || exercise.load_mode === 'assisted';
-  // a bodyweight or assisted best is stored with the bodyweight counted in, so it waits for the
-  // real one rather than saving against the default (`ready` stays false while a read is loading
-  // or has failed)
-  const bodyweightPending = bodyweightMode && !bodyweight.ready;
-  const ready = weight != null && weight >= 0 && reps != null && reps >= 1 && !dateBad && !bodyweightPending;
-  const replacedBy = c.pb.manual_policy === 'replace_on_log' ? 'your next logged set replaces it' : 'a heavier logged set replaces it';
-
-  const submit = () => {
-    if (!ready) return;
-    add.mutate(
-      { exercise, weightKg: displayToKg(weight, units), reps, datedAt, bodyweightKg: bodyweight.kg },
-      { onSuccess: () => { setWeight(null); setReps(null); setDate(''); } },
-    );
-  };
-
-  return (
-    <Card title="Add a known best" subtitle={`Counts like a logged set for ${c.pb.window_days} days; ${replacedBy}`}>
-      <View style={{ gap: space.sm }}>
-        {bodyweightMode ? (
-          <T variant="small" tone="mut">
-            {exercise.load_mode === 'assisted' ? 'Weight is the assistance' : 'Weight is the added load'}; your bodyweight ({bodyweight.ready ? formatLoad(bodyweight.kg, units) : 'loading…'}) is counted in.
-          </T>
-        ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
-          <NumberInput value={weight} onChange={setWeight} placeholder={units === 'imperial' ? 'lb' : 'kg'} width={84} />
-          <T tone="mut">×</T>
-          <NumberInput value={reps} onChange={setReps} integer placeholder="reps" width={72} />
-        </View>
-        {/* its own line, so the placeholder fits a phone and an error never moves the numbers;
-            the error waits for a whole date, the hint gives the format until then */}
-        <TextField
-          value={date}
-          onChangeText={setDate}
-          placeholder={`today (${today})`}
-          autoCapitalize="none"
-          hint="Leave blank for today, or a past date as YYYY-MM-DD"
-          error={date.trim().length >= 10 && dateBad ? 'A past date as YYYY-MM-DD' : undefined}
-        />
-        {add.error ? <ErrorBanner message={errorMessage(add.error)} /> : null}
-        <Button title="Add known best" small disabled={!ready} loading={add.isPending} onPress={submit} style={{ alignSelf: 'flex-start' }} />
-      </View>
-    </Card>
   );
 }

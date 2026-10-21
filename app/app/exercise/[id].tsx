@@ -49,7 +49,7 @@ export default function ExerciseDetail() {
             <T tone="mut">{[exercise.muscle_group, exercise.equipment, exercise.is_unilateral ? 'one side at a time' : null].filter(Boolean).join(' · ')}</T>
             {exercise.owner_id ? (
               <View style={{ flexDirection: 'row', marginTop: 8 }}>
-                <Button title="Edit" small variant="secondary" onPress={() => router.push({ pathname: '/lift/exercises/new', params: { edit: exercise.id } })} />
+                <Button title="Edit" small variant="secondary" onPress={() => router.push({ pathname: '/lift/exercises/new', params: { edit: exercise.id } }, { withAnchor: true })} />
               </View>
             ) : null}
           </View>
@@ -108,7 +108,7 @@ export default function ExerciseDetail() {
               ].filter(Boolean).join('×')).join(', ')}
               value={h.bestWeight != null ? loggedWeight(h.bestWeight, units, loadMode) : `${h.sets.length} sets`}
               valueSub={h.volume ? `${formatWeight(h.volume, units, 0)} vol` : undefined}
-              onPress={() => router.push(`/lift/history/${h.workoutId}`)}
+              onPress={() => router.push(`/workout/${h.workoutId}`)}
             />
           ))}
         </Card>

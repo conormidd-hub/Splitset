@@ -185,6 +185,7 @@ export function useAddManualPb() {
     },
     onSuccess: (datedAt) => {
       qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      qc.invalidateQueries({ queryKey: ['pbs'] });   // the PB tables count known bests
       recomputeInBackground(uid, dayBefore(datedAt));   // spec §14: a manual PB moves later references
     },
   });
@@ -206,6 +207,7 @@ export function useDeleteManualPb() {
     },
     onSuccess: (datedAt) => {
       qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      qc.invalidateQueries({ queryKey: ['pbs'] });
       if (datedAt) recomputeInBackground(uid, dayBefore(datedAt));
     },
   });
@@ -324,11 +326,13 @@ export async function fetchRecoveryHistory(uid: string, from: string | number, t
  * window. "Now" reads from an hour-aligned start with no end (nowWindow), so the clock moving on
  * recomputes the map without refetching; finishing a workout refetches it (loadKeys.all). "Now"
  * also counts the signed-in user's open workout until its cache rows arrive: its ticked sets with
- * t_w = now while it is in progress (spec §14), and at its finishedAt once a Finish is queued. The
- * map is computed once per minute or data change, not on every render.
+ * t_w = now while it is in progress (spec §14), and at its finishedAt once a Finish is queued
+ * (`live: false` leaves it out: the body as it was before this session). The map is computed once
+ * per minute or data change, not on every render.
  */
-export function useRecoveryMap(at?: string | number) {
+export function useRecoveryMap(at?: string | number, opts?: { live?: boolean }) {
   const uid = useUserId();
+  const withLive = opts?.live !== false;
   const c = useThresholds();
   const nowMs = useNowMinute();
   const { library, built } = useEngineLibrary();
@@ -352,12 +356,12 @@ export function useRecoveryMap(at?: string | number) {
   const data = useMemo(() => {
     if (!built || !loads.data) return null;
     // the store outlives a sign-out, so a workout left open by another account is not this map's
-    const rows = isNow && live && workout && workout.userId === uid
+    const rows = isNow && withLive && live && workout && workout.userId === uid
       ? withLiveWorkout(loads.data, workout.id, live.scored, built.idOf, (id) => workout.exercises.find((b) => b.exerciseId === id)?.name ?? 'Exercise',
           queuedFinish ? Math.min(hoursOf(queuedFinish), atH) : atH)
       : loads.data;
     return recoveryMapAt({ c, lib: built.lib }, built.keyOf, rows, atH);
-  }, [c, built, loads.data, isNow, live, workout, uid, queuedFinish, atH]);
+  }, [c, built, loads.data, isNow, withLive, live, workout, uid, queuedFinish, atH]);
   const error = library.error ?? loads.error;
   if (!data) return { isLoading: library.isLoading || loads.isLoading, error, at: isoOfHours(atH), data: null };
   return { isLoading: false, error, at: isoOfHours(atH), data };

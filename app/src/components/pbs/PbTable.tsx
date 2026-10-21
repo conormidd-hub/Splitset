@@ -58,7 +58,7 @@ export function PbTable({ rows, compact }: { rows: PbRow[]; compact?: boolean })
           </View>
         );
         return r.href ? (
-          <Pressable key={r.key} onPress={() => router.push(r.href!)} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
+          <Pressable key={r.key} onPress={() => router.push(r.href!, { withAnchor: true })} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
             {body}
           </Pressable>
         ) : (

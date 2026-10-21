@@ -46,7 +46,7 @@ export function DayView({ cursor, today, units, pushOn, byDay, onCursor }: Props
   const linkedIds = new Set(sessions.map((s) => s.activity_id).filter(Boolean));
   const activities = (actuals.data ?? []).filter((a) => a.start_time_local.slice(0, 10) === cursor);
   const unplanned = activities.filter((a) => !linkedIds.has(a.id));
-  const gym = (byDay.get(cursor) ?? []).filter((s) => s.href.startsWith('/lift/'));
+  const gym = (byDay.get(cursor) ?? []).filter((s) => s.href.startsWith('/workout/'));
   const nothing = !sessions.length && !unplanned.length && !gym.length;
   const isToday = cursor === today;
 
@@ -111,7 +111,7 @@ export function DayView({ cursor, today, units, pushOn, byDay, onCursor }: Props
                 </T>
                 {s.notes ? <T tone="ink2">{s.notes}</T> : null}
                 {linked ? (
-                  <Pressable onPress={() => router.push(`/run/${linked.id}`)} accessibilityRole="button" accessibilityLabel={`Open ${linked.name ?? typeLabel(linked.type)}`}>
+                  <Pressable onPress={() => router.push(`/run/${linked.id}`, { withAnchor: true })} accessibilityRole="button" accessibilityLabel={`Open ${linked.name ?? typeLabel(linked.type)}`}>
                     <View style={{ backgroundColor: palette.surface2, borderRadius: radius.md, padding: space.md, gap: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
                         <SymbolView name={isRun(linked.type) ? KIND_ICON.run : KIND_ICON.other} tintColor={palette.pos} size={16} />
@@ -144,7 +144,7 @@ export function DayView({ cursor, today, units, pushOn, byDay, onCursor }: Props
               first={i === 0}
               title={a.name ?? typeLabel(a.type)}
               subtitle={`${typeLabel(a.type)} · ${shortTime(a.start_time_local)} · ${activityLine(a, units)}`}
-              onPress={() => router.push(`/run/${a.id}`)}
+              onPress={() => router.push(`/run/${a.id}`, { withAnchor: true })}
             />
           ))}
         </Card>
@@ -153,7 +153,7 @@ export function DayView({ cursor, today, units, pushOn, byDay, onCursor }: Props
       {gym.length ? (
         <Card title="Gym" subtitle="Logged in the Lift tab">
           {gym.map((g, i) => (
-            <ListRow key={g.id} first={i === 0} title={g.title} subtitle={`${shortTime(g.startedAt)}${g.detail ? ` · ${g.detail}` : ''}`} onPress={() => router.push(g.href as Href)} />
+            <ListRow key={g.id} first={i === 0} title={g.title} subtitle={`${shortTime(g.startedAt)}${g.detail ? ` · ${g.detail}` : ''}`} onPress={() => router.push(g.href as Href, { withAnchor: true })} />
           ))}
         </Card>
       ) : null}

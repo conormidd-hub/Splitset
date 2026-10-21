@@ -142,7 +142,10 @@ function ExerciseEditor({ initial, editing, scored, target }: {
     else if (target === 'routine') useRoutineDraft.getState().addExercise({ id: e.id, name: e.name, measure: e.measure });
     // opened from the picker: close this screen and the picker, back to the workout or routine
     if (target) router.dismiss(2);
-    else router.replace(`/lift/exercises/${e.id}`);
+    else {
+      router.back();
+      router.push(`/exercise/${e.id}`);
+    }
   };
   const pickSimilar = (e: Exercise) => {
     // editing: the similar exercise lends its muscles and fatigue, not how the sets are logged

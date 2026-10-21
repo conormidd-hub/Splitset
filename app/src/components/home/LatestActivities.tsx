@@ -52,7 +52,7 @@ function lineOf(item: HistoryItem, units: Units): Line {
       subtitle: w.sets_completed ? `${when} · ${w.sets_completed} set${w.sets_completed === 1 ? '' : 's'}` : when,
       value: volume ?? (w.duration_s != null ? formatDurationShort(w.duration_s) : undefined),
       valueSub: volume && w.duration_s != null ? formatDurationShort(w.duration_s) : undefined,
-      href: `/lift/history/${item.id}`,
+      href: `/workout/${item.id}`,
     };
   }
   const a = item.activity;
@@ -139,7 +139,7 @@ export function FeedRow({ item, units, first, showType, focusable }: {
       valueSub={line.valueSub}
       first={first}
       focusable={focusable}
-      onPress={() => router.push(line.href)}
+      onPress={() => router.push(line.href, { withAnchor: true })}
     />
   );
 }
@@ -234,7 +234,7 @@ export function LatestActivities({ items, active, units, loading, failed }: Prop
           title="Workout in progress"
           subtitle={`${active.name} · started ${shortTime(active.startedAt)} · ${active.exercises.length} exercise${active.exercises.length === 1 ? '' : 's'}`}
           badge={<Badge label="live" tone="accent" />}
-          onPress={() => router.push('/lift/workout')}
+          onPress={() => router.push('/lift/workout', { withAnchor: true })}
         />
       ) : null}
       {newest ? <FeedRow item={newest} units={units} first={!active} showType /> : null}

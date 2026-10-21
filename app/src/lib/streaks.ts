@@ -72,7 +72,7 @@ export function sessionsFrom(activities: readonly ActivityLite[], workouts: read
       kind: 'lift',
       title: w.name ?? 'Workout',
       detail: [formatDurationShort(w.duration_s), w.sets_completed ? `${w.sets_completed} sets` : null].filter(Boolean).join(' · '),
-      href: `/lift/history/${w.id}`,
+      href: `/workout/${w.id}`,
     });
   }
   return out.sort((a, b) => a.startedAt.localeCompare(b.startedAt));

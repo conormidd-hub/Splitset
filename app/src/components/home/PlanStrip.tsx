@@ -30,7 +30,7 @@ export function PlanStrip({ sessions, loaded, units }: { sessions: readonly Plan
 
   return (
     <Pressable
-      onPress={() => router.push(first ? `/plan/${first.id}` : '/plan')}
+      onPress={() => router.push(first ? `/plan/${first.id}` : '/plan', { withAnchor: true })}
       accessibilityRole="button"
       accessibilityLabel={`Today's plan: ${title}${detail ? `, ${detail}` : ''}${status && status !== 'planned' ? `, ${status}` : ''}${more > 0 ? `, and ${more} more` : ''}`}
       style={({ pressed }) => ({

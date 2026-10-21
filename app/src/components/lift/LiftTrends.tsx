@@ -142,7 +142,7 @@ export function LiftTrends({ scroll, onDragChange }: { scroll?: ScrollLink; onDr
         }}
         cardRight={(id) => {
           const p = parseLiftTrend(id);
-          return p ? <Button title="History" variant="ghost" small onPress={() => router.push(`/lift/exercises/${p.exerciseId}`)} /> : null;
+          return p ? <Button title="History" variant="ghost" small onPress={() => router.push(`/exercise/${p.exerciseId}`)} /> : null;
         }}
         onChange={setIds}
         onAdd={() => setAdding(true)}

@@ -1,3 +1,4 @@
+import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -5,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip, ChipRow, Segmented } from '@/components/ui/Chip';
 import { T } from '@/components/ui/T';
 import { QuickView } from '@/components/recovery/FigureBubble';
+import { ICONS } from '@/lib/icons';
 import { formatClock, stopRest } from '@/lib/restTimer';
 import { useActiveWorkout } from '@/stores/activeWorkout';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -39,12 +41,12 @@ export function RestBubble() {
         accessibilityHint="Turn the rest timer on or off, or change its length"
         hitSlop={4}
         style={({ pressed }) => ({
-          height: 40, paddingHorizontal: space.md, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 4,
-          backgroundColor: rest.on ? palette.accentSoft : palette.surface2, borderWidth: 1.5, borderColor: rest.on ? palette.accent : palette.hair,
+          height: 36, paddingHorizontal: space.md, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 5,
+          backgroundColor: rest.on ? palette.accentSoft : palette.surface2, borderWidth: 1, borderColor: rest.on ? palette.accentLine : palette.hair,
           opacity: pressed ? 0.8 : 1,
         })}>
-        <T variant="small">⏱</T>
-        <T variant="small" weight="700" tone={rest.on ? 'accent' : 'mut'} style={{ fontVariant: ['tabular-nums'] }}>
+        <SymbolView name={ICONS.timer} tintColor={rest.on ? palette.accent : palette.ink2} size={16} />
+        <T variant="small" weight="700" tone={rest.on ? 'accent' : 'ink2'} style={{ fontVariant: ['tabular-nums'] }}>
           {rest.on ? formatClock(rest.seconds) : 'Off'}
         </T>
       </Pressable>

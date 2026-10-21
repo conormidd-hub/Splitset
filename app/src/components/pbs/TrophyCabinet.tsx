@@ -69,7 +69,7 @@ export function TrophyCabinet({ units }: { units: Units }) {
                   return (
                     <Pressable
                       key={key}
-                      onPress={() => row?.activity_id && router.push(`/run/${row.activity_id}`)}
+                      onPress={() => row?.activity_id && router.push(`/run/${row.activity_id}`, { withAnchor: true })}
                       style={{
                         flexGrow: 1, flexBasis: '30%', minWidth: 92, padding: space.sm, borderRadius: radius.md,
                         backgroundColor: palette.surface2, borderWidth: 1, borderColor: isNew ? palette.amber : 'transparent',
@@ -93,18 +93,22 @@ export function TrophyCabinet({ units }: { units: Units }) {
                 return (
                   <Pressable
                     key={l.id}
-                    onPress={() => router.push(`/lift/exercises/${l.id}`)}
+                    onPress={() => router.push(`/exercise/${l.id}`)}
                     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: palette.hair }}>
                     <View style={{ flex: 1 }}>
                       <T weight="600" numberOfLines={1}>{l.name}</T>
                       {isNew ? <T variant="tiny" weight="700" style={{ color: palette.amber }}>NEW PB this month</T> : null}
                     </View>
-                    {metrics.map((k) => (
-                      <View key={k} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
-                        <T variant="tiny" tone="mut">{liftMetricShort(k, l.loadMode)}</T>
-                        <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(k, l.byMetric.get(k)?.[period]?.value, units)}</T>
-                      </View>
-                    ))}
+                    {metrics.map((k) => {
+                      const cell = l.byMetric.get(k)?.[period];
+                      return (
+                        <View key={k} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
+                          <T variant="tiny" tone="mut">{liftMetricShort(k, l.loadMode)}</T>
+                          <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(k, cell?.value, units)}</T>
+                          {cell?.source === 'manual' ? <T variant="tiny" tone="accent" weight="700">manual</T> : null}
+                        </View>
+                      );
+                    })}
                   </Pressable>
                 );
               })}

@@ -185,3 +185,38 @@ export function mergeSession(stored: PbPeriods<LiftPb> | undefined, session: Ses
   const all = bestOf(prevAll, s);
   return { month, year, all, beatsAllTime: s != null && prevAll != null && tenth(s) > tenth(prevAll) };
 }
+
+/** A manual_pbs row: a known best the user entered by hand. */
+export type ManualPbRow = { id: string; exercise_id: string; weight_kg: number; reps: number; e1rm: number; dated_at: string };
+
+/**
+ * Fold the user's known bests into the lift_pbs index, so they stand in every PB table. A known
+ * best counts in each period its date falls in (Month and Year are the calendar month and year of
+ * `today`, YYYY-MM-DD) and takes a cell only where it beats the logged best (the `max` policy of
+ * spec §3.6: a heavier logged set wins, and replaces it the moment it lands). It gives a 1RM (its
+ * e1RM) and, from three reps, a 3RM (its weight). Marked `source: 'manual'` so the tables say so.
+ */
+export function foldManualPbs(index: Map<string, Map<string, PbPeriods<LiftPb>>>, rows: readonly ManualPbRow[], today: string) {
+  for (const r of rows) {
+    const candidates: [LiftMetric, number][] = [['1rm', r.e1rm]];
+    if (r.reps >= 3 && r.weight_kg > 0) candidates.push(['3rm', r.weight_kg]);
+    const periods: Period[] = ['all'];
+    if (r.dated_at.slice(0, 4) === today.slice(0, 4)) periods.push('year');
+    if (r.dated_at.slice(0, 7) === today.slice(0, 7)) periods.push('month');
+    const byMetric = index.get(r.exercise_id) ?? new Map<string, PbPeriods<LiftPb>>();
+    for (const [metric, value] of candidates) {
+      const p: PbPeriods<LiftPb> = { ...byMetric.get(metric) };
+      for (const period of periods) {
+        const cur = p[period]?.value;
+        if (cur != null && cur >= value) continue;
+        p[period] = {
+          user_id: null, exercise_id: r.exercise_id, metric, period, value, weight_kg: r.weight_kg, reps: r.reps, seconds: null,
+          set_id: null, workout_id: null, achieved_at: `${r.dated_at}T12:00:00`, source: 'manual', manual_pb_id: r.id,
+        };
+      }
+      byMetric.set(metric, p);
+    }
+    index.set(r.exercise_id, byMetric);
+  }
+  return index;
+}

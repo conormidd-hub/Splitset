@@ -25,6 +25,10 @@ type Props = {
   /** The screen-reader summary's wording (BodyMap's context and emptyText). */
   context?: string;
   emptyText?: string;
+  /** Muscles this session has loaded, drawn with a glowing outline (the live workout's Body view). */
+  glow?: ReadonlySet<MuscleId>;
+  /** The map before this session (no live workout), so the tap sheet can say before and after. */
+  before?: FigureMap | null;
 };
 
 /**
@@ -32,8 +36,8 @@ type Props = {
  * the live workout, the workout summary and an exercise's muscles. The Recovery screen uses the
  * full RecoveryFigure instead.
  */
-export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, labels = false, timeZone, context, emptyText }: Props) {
-  const { name } = useTheme();
+export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, labels = false, timeZone, context, emptyText, glow, before }: Props) {
+  const { name, palette } = useTheme();
   const c = useThresholds();
   const theme: FigureTheme = name === 'night' ? 'dark' : 'light';
   const [selected, setSelected] = useState<MuscleId | null>(null);
@@ -44,7 +48,7 @@ export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, lab
       {(['front', 'back'] as const).map((view) => (
         <View key={view} style={{ alignItems: 'center', gap: 2 }}>
           <BodyMap map={map} view={view} mode={mode} theme={theme} thresholds={c} width={figureWidth} onSelect={onSelect} nameOf={nameOf}
-            context={context} emptyText={emptyText} />
+            context={context} emptyText={emptyText} glow={glow} glowColor={palette.accent} />
           {labels ? <T variant="tiny" tone="mut">{view === 'front' ? 'Front' : 'Back'}</T> : null}
         </View>
       ))}
@@ -54,6 +58,7 @@ export function FigurePair({ map, mode, figureWidth, nameOf, detail = false, lab
           name={selected ? nameOf(selected) : ''}
           theme={theme}
           state={selected && map ? (map[selected] as RecoveryMuscle | SessionMapMuscle) : null}
+          before={selected && before && glow?.has(selected) ? before[selected] : null}
           timeZone={timeZone}
           onClose={() => setSelected(null)}
         />

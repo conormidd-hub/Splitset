@@ -56,6 +56,10 @@ export const ICONS = {
   collapse:  { ios: 'chevron.up',                android: 'expand_less',           web: 'expand_less' },
   chevron:   { ios: 'chevron.right',             android: 'chevron_right',         web: 'chevron_right' },
   back:      { ios: 'chevron.left',              android: 'chevron_left',          web: 'chevron_left' },
+  more:      { ios: 'ellipsis',                  android: 'more_horiz',            web: 'more_horiz' },
+  timer:     { ios: 'timer',                     android: 'timer',                 web: 'timer' },
+  note:      { ios: 'note.text',                 android: 'sticky_note_2',         web: 'sticky_note_2' },
+  link:      { ios: 'link',                      android: 'link',                  web: 'link' },
 } as const satisfies Record<string, IconName>;
 
 export type IconKey = keyof typeof ICONS;

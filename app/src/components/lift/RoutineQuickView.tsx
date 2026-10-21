@@ -1,9 +1,12 @@
+import { SymbolView } from 'expo-symbols';
 import { Modal, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 
 import { useExerciseNotes, type RoutineWithStructure } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { Button } from '@/components/ui/Button';
 import { T } from '@/components/ui/T';
+import { ICONS } from '@/lib/icons';
+import { groupLetter } from '@/lib/lifting/superset';
 import { setsSummary } from '@/lib/lifting/template';
 import { formatLoad } from '@/lib/pbs';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -25,6 +28,8 @@ export function RoutineQuickView({ routine, startDisabled, onStart, onEdit, onCl
   const notes = useExerciseNotes();
   const { height } = useWindowDimensions();
   const r = routine;
+  // supersets are lettered in the order they appear
+  const grouped = (r?.routine_exercises ?? []).map((re) => ({ supersetGroup: re.superset_group }));
   return (
     <Modal visible={!!r} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable onPress={onClose} accessible={false} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: space.lg }}>
@@ -46,7 +51,15 @@ export function RoutineQuickView({ routine, startDisabled, onStart, onEdit, onCl
                 const everywhere = notes.data?.get(re.exercise_id);
                 return (
                   <View key={re.id} style={{ paddingVertical: space.sm, gap: 2, borderTopWidth: i ? 1 : 0, borderTopColor: palette.hair }}>
-                    <T weight="600">{re.exercise?.name ?? 'Exercise'}</T>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                      <T weight="600" style={{ flex: 1 }}>{re.exercise?.name ?? 'Exercise'}</T>
+                      {re.superset_group != null ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: palette.accentSoft, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <SymbolView name={ICONS.link} tintColor={palette.accent} size={11} />
+                          <T variant="tiny" tone="accent" weight="700">{groupLetter(grouped, re.superset_group)}</T>
+                        </View>
+                      ) : null}
+                    </View>
                     <T variant="small" tone="mut">{setsSummary(re.routine_sets, (kg) => formatLoad(kg, units))}</T>
                     {re.notes ? <T variant="small" tone="ink2">📌 {re.notes}</T> : null}
                     {everywhere ? <T variant="small" tone="ink2">🔗 {everywhere}</T> : null}

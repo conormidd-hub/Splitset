@@ -13,6 +13,10 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 
 export { ErrorBoundary } from 'expo-router';
 
+// A screen above the tabs (Recovery, a workout, an exercise, PBs, History) opened from a link or
+// a reload keeps the tabs underneath it, so it always has a back.
+export const unstable_settings = { anchor: '(app)' };
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -73,6 +77,11 @@ function RootNavigator() {
           <Stack.Screen name="history" options={{ headerShown: true, title: 'History', ...header }} />
           {/* one metric, opened from an In focus or At a glance tile; the page sets its own title */}
           <Stack.Screen name="metric/[id]" options={{ headerShown: true, title: '', ...header }} />
+          {/* the recovery map, a finished workout and an exercise are reached from every tab, so
+              they slide over whichever tab is open and go back to it, leaving the tabs as they were */}
+          <Stack.Screen name="recovery" options={{ headerShown: true, title: 'Recovery', ...header }} />
+          <Stack.Screen name="workout/[id]" options={{ headerShown: true, title: 'Workout', ...header }} />
+          <Stack.Screen name="exercise/[id]" options={{ headerShown: true, title: '', ...header }} />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="sign-in" />

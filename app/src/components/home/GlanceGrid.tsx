@@ -40,7 +40,7 @@ export function GlanceGrid({ ids, inputs, editing, onReorder, onRemove, onAdd, o
       initialWidth={windowW - 2 * space.lg}
       renderTile={(id, ctx) => <MetricTile snapshot={snap(id)} editing={ctx.editing} lifted={ctx.lifted} onRemove={() => onRemove(id)} />}
       tileLabel={(id) => { const s = snap(id); return [METRICS[id].label, s.text, s.unit].filter(Boolean).join(' '); }}
-      onPress={(id) => router.push((snap(id).href ?? `/metric/${id}`) as Href)}
+      onPress={(id) => router.push((snap(id).href ?? `/metric/${id}`) as Href, { withAnchor: true })}
       onReorder={onReorder}
       onDragChange={onDragChange}
       scroll={scroll}

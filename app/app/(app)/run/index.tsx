@@ -367,7 +367,7 @@ function RecoveryPeek({ onClose }: { onClose: () => void }) {
       {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels />
         : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <Loading label="Loading your recovery" />}
       {map.data ? <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T> : null}
-      <Button title="Open Recovery" small variant="secondary" onPress={() => { onClose(); router.push('/lift/recovery'); }} />
+      <Button title="Open Recovery" small variant="secondary" onPress={() => { onClose(); router.push('/recovery'); }} />
     </QuickView>
   );
 }

@@ -345,7 +345,7 @@ function WeekCard({ start, today, isThisWeek, byDay, activityById, units, km, st
                 </DraggableSession>
               ))}
               {info?.extras.map((x) => (
-                <Pressable key={x.id} onPress={() => router.push(`/run/${x.id}`)}>
+                <Pressable key={x.id} onPress={() => router.push(`/run/${x.id}`, { withAnchor: true })}>
                   <ActivityCard activity={x} units={units} />
                 </Pressable>
               ))}

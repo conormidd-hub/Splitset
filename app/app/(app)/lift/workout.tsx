@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,12 +9,16 @@ import { invalidateWorkoutData, useExerciseNotes, useExercises, usePreviousSets,
 import { useLiftPbs } from '@/api/pbs';
 import { linkWorkoutToPlan } from '@/api/plan';
 import { useUnits } from '@/api/profile';
-import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useThresholds } from '@/api/recovery';
+import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, useRecoveryMap, useThresholds } from '@/api/recovery';
 import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
+import { IdlePrompt } from '@/components/lift/IdlePrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
 import { RestBubble } from '@/components/lift/RestBubble';
+import { SupersetPill, SupersetRail, SupersetSheet, type SupersetOption } from '@/components/lift/Superset';
+import { SwipeToDelete, type SwipeGroup } from '@/components/lift/SwipeToDelete';
 import { LivePbPanel } from '@/components/pbs/LivePbPanel';
 import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
+import { KeyStrip } from '@/components/recovery/FigureKey';
 import { FigurePair } from '@/components/recovery/FigurePair';
 import { LiveSessionFigure } from '@/components/recovery/LiveSessionFigure';
 import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
@@ -21,14 +26,19 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Chip, ChipRow } from '@/components/ui/Chip';
 import { NumberInput } from '@/components/ui/NumberInput';
+import { PickSheet } from '@/components/ui/PickSheet';
 import { SortableList } from '@/components/ui/SortableList';
 import { ErrorBanner } from '@/components/ui/States';
 import { T } from '@/components/ui/T';
 import { useNowSeconds } from '@/lib/clock';
 import { todayIso } from '@/lib/dates';
+import { ICONS } from '@/lib/icons';
+import { awayMinutes, elapsedSeconds, formatElapsed } from '@/lib/lifting/elapsed';
 import { setRowE1rm } from '@/lib/lifting/setRow';
+import { groupItems, groupLetter, turnIn } from '@/lib/lifting/superset';
 import { templateChanged, templateFromWorkout } from '@/lib/lifting/template';
 import { formatLiftPb, formatLoad, liftMetricShort, mergeSession, metricsFor, sessionBests } from '@/lib/pbs';
+import { MUSCLE_IDS, type MuscleId } from '@/lib/recovery/library';
 import { useUserId } from '@/lib/session';
 import { confirm } from '@/lib/confirm';
 import { adjustRest, formatClock, startRest, stopRest, useRestRemaining } from '@/lib/restTimer';
@@ -43,15 +53,6 @@ const NEXT_TYPE: Record<SetType, SetType> = { working: 'warmup', warmup: 'drop',
 /** The RPE picker: 6 to 10 in half points (workout_sets.rpe is checked to these). */
 const RPE_STEPS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 
-function useElapsed(startedAt: string | undefined): string {
-  const nowSeconds = useNowSeconds();
-  if (!startedAt) return '';
-  const s = Math.max(0, Math.round(nowSeconds - new Date(startedAt).getTime() / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h ? `${h}:${m.toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}` : `${m}:${(s % 60).toString().padStart(2, '0')}`;
-}
-
 export default function ActiveWorkoutScreen() {
   const { palette } = useTheme();
   const units = useUnits();
@@ -60,8 +61,12 @@ export default function ActiveWorkoutScreen() {
   const workout = useActiveWorkout((s) => s.workout);
   const lastError = useActiveWorkout((s) => s.lastError);
   const outboxLength = useActiveWorkout((s) => s.outbox.length);
-  const { rename, finish, discard, flush, setThresholds, setBodyweight } = useActiveWorkout.getState();
-  const elapsed = useElapsed(workout?.startedAt);
+  const idlePrompt = useActiveWorkout((s) => s.idlePrompt);
+  const { rename, finish, discard, flush, setThresholds, setBodyweight, resume, dismissIdlePrompt } = useActiveWorkout.getState();
+  const nowSeconds = useNowSeconds();
+  // the clock holds while the workout is paused for inactivity (ActiveWorkoutBar watches for that)
+  const elapsed = workout ? formatElapsed(elapsedSeconds(workout, nowSeconds * 1000)) : '';
+  const paused = !!workout?.pausedAt;
   const rest = useRestRemaining();
   const [finishing, setFinishing] = useState(false);
   const thresholds = useThresholds();
@@ -69,11 +74,16 @@ export default function ActiveWorkoutScreen() {
   const routines = useRoutines();
   const saveRoutine = useSaveRoutine();
   const live = useLiveSession();
+  // the body as it stands now, this session included: the header bubble and its quick view
+  const body = useRecoveryMap();
   const names = useMuscleNames();
+  const glow = useMemo(() => new Set<MuscleId>(live ? MUSCLE_IDS.filter((id) => live.session[id].level > 0) : []), [live]);
   const [figureBottom, setFigureBottom] = useState(0);
   const [scrolled, setScrolled] = useState(false);
   const [quick, setQuick] = useState(false);
   const [prompt, setPrompt] = useState(false);
+  // the ⋯ sheet: save as routine, discard
+  const [menu, setMenu] = useState(false);
   const [dragging, setDragging] = useState(false);
   // a drag near the top or bottom of the screen scrolls the workout under the finger
   const scrollRef = useRef<ScrollView | null>(null);
@@ -123,7 +133,7 @@ export default function ActiveWorkoutScreen() {
     }
     await linkWorkoutToPlan(uid, id, todayIso()).catch(() => false);
     invalidateWorkoutData(qc, uid);
-    router.replace(`/lift/history/${id}`);
+    router.replace(`/workout/${id}`);
     if (choice === 'new') {
       useRoutineDraft.getState().fromWorkout(kept);
       router.push('/lift/routines/new?from=workout');
@@ -134,6 +144,8 @@ export default function ActiveWorkoutScreen() {
     const changed = templateChanged(workout.templateExerciseIds, workout.exercises.map((b) => b.exerciseId));
     // a changed template asks what to do with it; an unchanged one just finishes
     if (changed && template) return setPrompt(true);
+    // no template: finish, or finish and keep today as a routine
+    if (!template && workout.exercises.length) return setPrompt(true);
     if (changed === false && !unticked) return finishWith('keep');
     const ok = await confirm('Finish workout', unticked ? `${unticked} filled-in set${unticked === 1 ? ' is' : 's are'} not ticked and will be kept as unfinished. Finish anyway?` : 'Save this workout to your history?', 'Finish');
     if (ok) await finishWith('keep');
@@ -152,11 +164,23 @@ export default function ActiveWorkoutScreen() {
     router.push('/lift/routines/new?from=workout');
   };
 
+  // the list as drawn: a superset's exercises are one item, dragged together
+  const items = groupItems(workout.exercises, (b) => b.id);
+  const moveItem = (key: string, to: number) => {
+    const order = items.map((i) => i.key);
+    const from = order.indexOf(key);
+    if (from < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, key);
+    useActiveWorkout.getState().reorderExercises(order.flatMap((k) => items.find((i) => i.key === k)?.blocks.map((b) => b.id) ?? []));
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: palette.bg }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        {/* header */}
-        <View style={{ paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: space.xs }}>
+        {/* header: the name with a ⋯ for the rarer choices (save as routine, discard), then one row
+            of the clock, the save state, the rest timer and Finish, the one action that matters */}
+        <View style={{ paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, gap: space.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
             <TextInput
               value={workout.name}
@@ -165,21 +189,47 @@ export default function ActiveWorkoutScreen() {
               placeholder="Workout"
               placeholderTextColor={palette.mut}
             />
-            <FigureBubble map={live?.session ?? null} mode="session" shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
-              label="This session's muscles, quick view" />
-            <RestBubble />
-            <Button title="Finish" small loading={finishing} onPress={onFinish} />
+            <FigureBubble map={body.data ?? live?.session ?? null} mode={body.data ? 'recovery' : 'session'} shown={scrolled && !!live} onPress={() => setQuick(true)} nameOf={names}
+              label="Body now, with this session's muscles, quick view" />
+            <Pressable
+              onPress={() => setMenu(true)}
+              accessibilityRole="button"
+              accessibilityLabel="More: save as routine, or discard the workout"
+              hitSlop={6}
+              style={({ pressed }) => ({
+                width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: palette.surface2, borderWidth: 1, borderColor: palette.hair, opacity: pressed ? 0.7 : 1,
+              })}>
+              <SymbolView name={ICONS.more} tintColor={palette.ink2} size={18} />
+            </Pressable>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-            <T variant="small" tone="mut" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+            {paused ? (
+              <Pressable onPress={resume} accessibilityRole="button" accessibilityLabel={`Clock paused at ${elapsed}. Tap to continue.`} hitSlop={6}>
+                <T variant="small" tone="accent" weight="700" style={{ fontVariant: ['tabular-nums'] }}>{elapsed} · paused</T>
+              </Pressable>
+            ) : (
+              <T variant="small" tone="ink2" weight="700" style={{ fontVariant: ['tabular-nums'] }}>{elapsed}</T>
+            )}
             <T variant="small" tone={lastError ? 'neg' : 'mut'}>
-              {lastError ? 'not saved' : outboxLength ? 'saving…' : 'saved'}
+              {lastError ? '· not saved' : outboxLength ? '· saving…' : '· saved'}
             </T>
             <View style={{ flex: 1 }} />
-            <Pressable onPress={saveAsRoutine}><T variant="small" tone="accent" weight="600">Save as routine</T></Pressable>
-            <Pressable onPress={onDiscard}><T variant="small" tone="neg" weight="600">Discard</T></Pressable>
+            <RestBubble />
+            <Button title="Finish" small loading={finishing} onPress={onFinish} style={{ height: 36, paddingVertical: 0 }} />
           </View>
         </View>
+        <PickSheet
+          visible={menu}
+          title={workout.name || 'Workout'}
+          closeOnPick
+          sections={[{ options: [
+            { id: 'routine', label: 'Save as routine', subtitle: 'Today’s exercises, sets and weights become a routine to start from next time', icon: 'routines' },
+            { id: 'discard', label: 'Discard workout', subtitle: 'Everything logged in this session is deleted', icon: 'close' },
+          ] }]}
+          onPick={(id) => { if (id === 'routine') saveAsRoutine(); else void onDiscard(); }}
+          onClose={() => setMenu(false)}
+        />
 
         {/* rest timer */}
         {rest ? (
@@ -220,16 +270,36 @@ export default function ActiveWorkoutScreen() {
             </View>
           ) : null}
 
-          {/* hold an exercise's ≡ and drag it to move it */}
+          {/* hold an exercise's ≡ and drag it to move it; a superset moves as one */}
           <SortableList
-            keys={workout.exercises.map((b) => b.id)}
-            itemLabel={(id) => workout.exercises.find((b) => b.id === id)?.name ?? 'exercise'}
-            onMove={(id, to) => useActiveWorkout.getState().moveExercise(id, to)}
+            keys={items.map((i) => i.key)}
+            itemLabel={(key) => {
+              const item = items.find((i) => i.key === key);
+              if (!item) return 'exercise';
+              return item.blocks.length > 1 ? `superset ${groupLetter(workout.exercises, item.group!)}: ${item.blocks.map((b) => b.name).join(' and ')}` : item.blocks[0].name;
+            }}
+            onMove={moveItem}
             onDragChange={setDragging}
             scroll={{ ref: scrollRef, y: scrollY }}
-            renderItem={(id, { handle }) => {
-              const block = workout.exercises.find((b) => b.id === id);
-              return block ? <ExerciseCard block={block} units={units} routineId={workout.routineId} handle={handle} /> : null;
+            renderItem={(key, { handle }) => {
+              const item = items.find((i) => i.key === key);
+              if (!item) return null;
+              const letter = item.group != null ? groupLetter(workout.exercises, item.group) : null;
+              if (item.blocks.length === 1) {
+                return <ExerciseCard block={item.blocks[0]} units={units} routineId={workout.routineId} handle={handle} letter={letter} isTurn={false} restAfter />;
+              }
+              // whose set is next in the pair, and the rest timer waits for the pair's last exercise
+              const turn = turnIn(item.blocks);
+              return (
+                <SupersetRail letter={letter ?? ''}>
+                  {item.blocks.map((block, i) => (
+                    <ExerciseCard
+                      key={block.id} block={block} units={units} routineId={workout.routineId} handle={i === 0 ? handle : null}
+                      letter={letter} isTurn={turn === i} restAfter={i === item.blocks.length - 1}
+                    />
+                  ))}
+                </SupersetRail>
+              );
             }}
           />
 
@@ -240,31 +310,70 @@ export default function ActiveWorkoutScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <QuickView visible={quick} onClose={() => setQuick(false)} title="This session">
-        <T variant="h3">This session</T>
+      <QuickView visible={quick} onClose={() => setQuick(false)} title="Body now">
+        <T variant="h3">{body.data ? 'Body now' : 'This session'}</T>
         {live ? (
           <>
-            <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
+            {body.data ? (
+              <>
+                <FigurePair map={body.data} mode="recovery" figureWidth={110} nameOf={names} labels glow={glow} />
+                <T variant="small" tone="mut">Every muscle as it stands now; the glow is what this session has loaded.</T>
+                <KeyStrip mode="recovery" glow inline />
+              </>
+            ) : (
+              <>
+                <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
+                <KeyStrip mode="session" inline />
+              </>
+            )}
             <SessionMuscleRows session={live.session} nameOf={names} />
           </>
         ) : null}
       </QuickView>
-      <FinishPrompt open={prompt} templateName={template?.name ?? 'the template'} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
+      <FinishPrompt open={prompt} templateName={template?.name ?? null} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
+      <IdlePrompt
+        open={paused && idlePrompt && !prompt}
+        awayMinutes={awayMinutes(workout, nowSeconds * 1000)}
+        onContinue={resume}
+        onFinish={() => { dismissIdlePrompt(); void onFinish(); }}
+        onLater={dismissIdlePrompt}
+        onDiscard={() => { dismissIdlePrompt(); void onDiscard(); }}
+      />
     </SafeAreaView>
   );
 }
 
-function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBlock; units: Units; routineId: string | null; handle: ReactNode }) {
+const NO_BLOCKS: ExerciseBlock[] = [];
+
+function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAfter }: {
+  block: ExerciseBlock; units: Units; routineId: string | null;
+  /** The drag grip; null for a superset's later exercises, which move with the first. */
+  handle: ReactNode;
+  /** The superset's letter, or null when the exercise stands alone. */
+  letter: string | null;
+  /** In a superset, this exercise's set is the next one to do. */
+  isTurn: boolean;
+  /** Ticking a set here starts the rest timer (the last exercise of a superset, or one on its own). */
+  restAfter: boolean;
+}) {
   const { palette } = useTheme();
-  const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote } = useActiveWorkout.getState();
+  const { addSet, updateSet, removeExercise, setExerciseOptions, setExerciseNote, setSuperset } = useActiveWorkout.getState();
   const routines = useRoutines();
   const exerciseNotes = useExerciseNotes();
   const saveNote = useSaveExerciseNote();
   const [noting, setNoting] = useState(false);
+  const [linking, setLinking] = useState(false);
+  // the other exercises, for the superset chooser: the next one is the natural partner
+  const all = useActiveWorkout((s) => s.workout?.exercises ?? NO_BLOCKS);
+  const at = all.findIndex((b) => b.id === block.id);
+  const supersetOptions: SupersetOption[] = all
+    .filter((b) => b.id !== block.id && (block.supersetGroup == null || b.supersetGroup !== block.supersetGroup))
+    .map((b) => ({ id: b.id, name: b.name, suggested: all[at + 1]?.id === b.id, letter: b.supersetGroup != null ? groupLetter(all, b.supersetGroup) : null }));
   const templateNote = routineId
     ? routines.data?.find((r) => r.id === routineId)?.routine_exercises.find((re) => re.exercise_id === block.exerciseId)?.notes ?? null
     : null;
   const notes: ExerciseNotes = { template: templateNote, exercise: exerciseNotes.data?.get(block.exerciseId) ?? null, workout: block.notes };
+  const hasNotes = !!(notes.template || notes.exercise || notes.workout);
   const onSaveNote = (scope: NoteScope, text: string) => {
     if (scope === 'workout') setExerciseNote(block.id, text);
     else saveNote.mutate({ scope, exerciseId: block.exerciseId, routineId, note: text });
@@ -276,6 +385,8 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
   const lifts = useLiftPbs();
   const manual = useManualBests();
   const [showPb, setShowPb] = useState(false);
+  // the set row whose Delete pane is open, so swiping another closes it
+  const swipeGroup: SwipeGroup = useRef(null);
   const row = exercises.data?.find((e) => e.id === block.exerciseId);
   const bodyweight = block.isBodyweight ?? row?.is_bodyweight ?? false;
   const unilateral = block.unilateral ?? row?.is_unilateral ?? false;
@@ -321,18 +432,34 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
 
   return (
     <Card>
+      {/* the name has the row to itself (with the grip and remove), so it is never cut short; the
+          card's pills sit on the row above the sets */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
         {handle}
-        <Pressable style={{ flex: 1 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
-          <T variant="h3" tone="accent">{block.name}</T>
+        <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => router.push(`/exercise/${block.exerciseId}`)}>
+          <T variant="h3" tone="accent" numberOfLines={1}>{block.name}</T>
         </Pressable>
+        <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${block.name}`}
+          style={({ pressed }) => ({ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}>
+          <SymbolView name={ICONS.close} tintColor={palette.mut} size={14} />
+        </Pressable>
+      </View>
+      {/* the card's pills, one size: superset, PBs, notes; the logger switches on the right */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm, flexWrap: 'wrap' }}>
+        <SupersetPill letter={letter} name={block.name} onPress={() => setLinking(true)} />
         {metrics.length ? (
           <Pressable
             onPress={() => setShowPb((v) => !v)}
             accessibilityRole="button"
             accessibilityLabel={`${block.name} personal bests`}
-            style={{ backgroundColor: showPb ? palette.amber : palette.surface, borderColor: palette.amber, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 }}>
-            <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>🏆 PB</T>
+            accessibilityState={{ expanded: showPb }}
+            hitSlop={6}
+            style={({ pressed }) => ({
+              height: 28, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, borderRadius: radius.pill,
+              backgroundColor: showPb ? palette.amber : palette.surface, borderColor: palette.amber, borderWidth: 1, opacity: pressed ? 0.8 : 1,
+            })}>
+            <SymbolView name={ICONS.trophy} tintColor={showPb ? palette.surface : palette.amber} size={14} />
+            <T variant="small" weight="700" style={{ color: showPb ? palette.surface : palette.amber }}>PB</T>
           </Pressable>
         ) : null}
         <Pressable
@@ -340,11 +467,15 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
           accessibilityRole="button"
           accessibilityLabel={`${block.name} notes`}
           hitSlop={6}
-          style={{ height: 28, minWidth: 34, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill,
-            backgroundColor: notes.template || notes.exercise || notes.workout ? palette.accentSoft : palette.surface2 }}>
-          <T variant="small">📝</T>
+          style={({ pressed }) => ({
+            height: 28, minWidth: 34, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderWidth: 1,
+            backgroundColor: hasNotes ? palette.accentSoft : palette.surface2, borderColor: hasNotes ? palette.accentLine : palette.hair, opacity: pressed ? 0.8 : 1,
+          })}>
+          <SymbolView name={ICONS.note} tintColor={hasNotes ? palette.accent : palette.ink2} size={15} />
         </Pressable>
-        <Pressable onPress={onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove ${block.name}`}><T tone="mut">✕</T></Pressable>
+        <View style={{ flex: 1 }} />
+        <Chip label="RPE" selected={showRpe} onPress={() => setExerciseOptions(block.id, { showRpe: !showRpe })} />
+        {unilateral ? <Chip label="Each side" selected={perSide} onPress={() => setExerciseOptions(block.id, { perSide: !perSide })} /> : null}
       </View>
 
       {(['template', 'exercise', 'workout'] as const).filter((s) => notes[s]).map((s) => (
@@ -353,6 +484,16 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
         </Pressable>
       ))}
       <NoteEditor open={noting} exerciseName={block.name} hasTemplate={!!routineId} notes={notes} onSave={onSaveNote} onClose={() => setNoting(false)} />
+      <SupersetSheet
+        open={linking}
+        name={block.name}
+        letter={letter}
+        options={supersetOptions}
+        onPick={(id) => { setLinking(false); setSuperset(block.id, id); }}
+        onUnlink={() => { setLinking(false); setSuperset(block.id, null); }}
+        onAdd={() => { setLinking(false); router.push({ pathname: '/lift/picker', params: { target: 'workout', superset: block.id } }); }}
+        onClose={() => setLinking(false)}
+      />
 
       {metrics.length && !showPb ? (
         <Pressable onPress={() => setShowPb(true)} style={{ marginTop: -4, marginBottom: space.sm }}>
@@ -368,11 +509,6 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
           loadMode={loadMode} bwFactor={block.bwFactor ?? row?.bw_factor ?? null} bodyweightKg={e1rmBodyweight}
         />
       ) : null}
-
-      <View style={{ flexDirection: 'row', gap: space.sm, marginBottom: space.sm }}>
-        <Chip label="RPE" selected={showRpe} onPress={() => setExerciseOptions(block.id, { showRpe: !showRpe })} />
-        {unilateral ? <Chip label="Each side" selected={perSide} onPress={() => setExerciseOptions(block.id, { perSide: !perSide })} /> : null}
-      </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: col.gap, paddingBottom: 4 }}>
         <T variant="label" tone="mut" style={{ width: 32, textAlign: 'center' }}>set</T>
@@ -405,6 +541,9 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
           perSide={perSide}
           col={col}
           e1rm={e1rmOf(s)}
+          swipeGroup={swipeGroup}
+          isNext={!!letter && isTurn && i === firstOpen}
+          restAfter={restAfter}
         />
       ))}
 
@@ -420,7 +559,7 @@ const COL = { weight: 72, count: 60, rpe: 44, gap: space.sm as number };
 const COL_TIGHT: typeof COL = { weight: 60, count: 48, rpe: 36, gap: space.xs };
 
 function SetLine({
-  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm,
+  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm, swipeGroup, isNext, restAfter,
 }: {
   set: SetRow; index: number; block: ExerciseBlock; units: Units; weighted: boolean; repped: boolean; timed: boolean;
   previous?: { weight_kg: number | null; reps: number | null; seconds: number | null };
@@ -430,6 +569,11 @@ function SetLine({
   col: typeof COL;
   /** The e1RM this set stores, from the engine; shown once the set is ticked. */
   e1rm: number | null;
+  swipeGroup: SwipeGroup;
+  /** In a superset, this is the set to do next: its number wears an accent ring. */
+  isNext: boolean;
+  /** Ticking this set starts the rest timer; off for a superset's earlier exercises. */
+  restAfter: boolean;
 }) {
   const { palette } = useTheme();
   const { updateSet, toggleSet, removeSet } = useActiveWorkout.getState();
@@ -456,10 +600,11 @@ function SetLine({
   const onToggle = async () => {
     if (!set.completed) fillFromPrevious();
     const row = toggleSet(set.id);
-    // only when the rest timer is on (⏱ at the top)
-    if (row?.completed && rest?.on) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
+    // only when the rest timer is on (⏱ at the top), and after a superset's last exercise, not between its pair
+    if (row?.completed && rest?.on && restAfter) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
   };
 
+  // the long press stays as the way in without a swipe (screen readers, a mouse)
   const onLongPressNumber = async () => {
     const ok = await confirm('Delete set', `Delete set ${index + 1}?`, 'Delete', true);
     if (ok) removeSet(set.id);
@@ -471,13 +616,15 @@ function SetLine({
   };
 
   return (
+    <SwipeToDelete onDelete={() => removeSet(set.id)} label={`set ${index + 1}`} openRef={swipeGroup}>
     <View style={{ paddingVertical: 4, opacity: set.completed ? 0.75 : 1 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: col.gap }}>
         <Pressable
           onPress={() => updateSet(set.id, { setType: NEXT_TYPE[set.setType] })}
           onLongPress={onLongPressNumber}
-          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}. Tap to change the set type.`}
-          style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: set.setType === 'working' ? palette.surface2 : palette.accentSoft }}>
+          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}${isNext ? ', next in the superset' : ''}. Tap to change the set type; hold to delete the set.`}
+          style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: set.setType === 'working' ? palette.surface2 : palette.accentSoft,
+            borderWidth: isNext ? 2 : 0, borderColor: palette.accent }}>
           <T variant="small" weight="700" tone={set.setType === 'working' ? 'ink2' : 'accent'}>{TYPE_LABEL[set.setType] || index + 1}</T>
         </Pressable>
         {perSide ? (
@@ -531,5 +678,6 @@ function SetLine({
         <T variant="tiny" tone="mut" align="right" style={{ paddingTop: 2, paddingRight: 40 + col.gap }}>e1RM {formatLoad(e1rm, units)}</T>
       ) : null}
     </View>
+    </SwipeToDelete>
   );
 }
