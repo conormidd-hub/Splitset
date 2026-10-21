@@ -39,10 +39,10 @@ export function oneRmNote(r: LiftPb | undefined, units: Units, loadMode?: string
 
 /**
  * One row per metric an exercise has, Month / Year / All time. With `session`, sets ticked in the
- * workout on screen are folded in, so the numbers move as the lifter beats them. `manualAll` is
- * the best manual entry per metric, which counts as the all-time best (the workout passes the
- * 1RM's; the trophy cabinet leaves manual PBs out, notes 17.4). `loadMode` words the 1RM's set
- * and drops what an assisted lift has no best in.
+ * workout on screen are folded in, so the numbers move as the lifter beats them. Known bests the
+ * user entered by hand already sit in the index (source 'manual') and their cells say "manual";
+ * `manualAll` is the live panel's best manual entry per metric, counted as the all-time best to
+ * beat. `loadMode` words the 1RM's set and drops what an assisted lift has no best in.
  */
 export function liftRows(
   byMetric: Map<string, PbPeriods<LiftPb>> | undefined,
@@ -64,12 +64,14 @@ export function liftRows(
     const manualWins = manual != null && !(stored?.all?.value != null && stored.all.value >= manual);
     const fmt = (v: number | null): string => formatLiftPb(key, v, units);
     const note = key === '1rm' ? (r: LiftPb | undefined) => oneRmNote(r, units, opts.loadMode) : () => undefined;
+    // a known best's cell says so, whatever set it was
+    const sub = (r: LiftPb | undefined) => (r?.source === 'manual' ? 'manual' : note(r));
     return [{
       key, label,
       cells: [
-        { value: fmt(m.month), sub: note(stored?.month) },
-        { value: fmt(m.year), sub: note(stored?.year) },
-        { value: fmt(m.all), sub: m.beatsAllTime ? 'this session' : manualWins ? 'manual' : note(stored?.all) },
+        { value: fmt(m.month), sub: sub(stored?.month) },
+        { value: fmt(m.year), sub: sub(stored?.year) },
+        { value: fmt(m.all), sub: m.beatsAllTime ? 'this session' : manualWins ? 'manual' : sub(stored?.all) },
       ],
       isNew: m.beatsAllTime || (!manualWins && isNewThisMonth(stored?.all?.achieved_at)),
       highlight: opts.highlight === key,

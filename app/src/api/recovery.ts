@@ -185,6 +185,7 @@ export function useAddManualPb() {
     },
     onSuccess: (datedAt) => {
       qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      qc.invalidateQueries({ queryKey: ['pbs'] });   // the PB tables count known bests
       recomputeInBackground(uid, dayBefore(datedAt));   // spec §14: a manual PB moves later references
     },
   });
@@ -206,6 +207,7 @@ export function useDeleteManualPb() {
     },
     onSuccess: (datedAt) => {
       qc.invalidateQueries({ queryKey: ['pbHistory', uid] });
+      qc.invalidateQueries({ queryKey: ['pbs'] });
       if (datedAt) recomputeInBackground(uid, dayBefore(datedAt));
     },
   });

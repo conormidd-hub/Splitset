@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { todayIso } from '@/lib/dates';
+import { foldManualPbs } from '@/lib/pbs';
 import { useUserId } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 import type { Views } from '@/types/database';
 
 export type RunPb = Views<'run_pbs'>;
-export type LiftPb = Views<'lift_pbs'>;
+/** A lift_pbs row, or a known best the user entered by hand (`source: 'manual'`, no set behind it). */
+export type LiftPb = Views<'lift_pbs'> & { source?: 'logged' | 'manual'; manual_pb_id?: string | null };
 export type Period = 'month' | 'year' | 'all';
 /** Best per period; a period with nothing logged yet is missing. */
 export type PbPeriods<R> = Partial<Record<Period, R>>;
@@ -37,22 +40,30 @@ export function useRunPbs() {
 /** exercise id -> metric (1rm, 3rm, reps, time, weight) -> best per period. */
 export type LiftPbIndex = Map<string, Map<string, PbPeriods<LiftPb>>>;
 
+/**
+ * The lifting PBs from logged sets (lift_pbs), with the user's known bests folded in: a manual
+ * entry stands in every period its date falls in until a heavier logged set beats it there.
+ */
 export function useLiftPbs() {
   const uid = useUserId();
   return useQuery({
     queryKey: pbKeys.lift(uid),
     enabled: !!uid,
     queryFn: async (): Promise<LiftPbIndex> => {
-      const { data, error } = await supabase.from('lift_pbs').select('*').eq('user_id', uid);
-      if (error) throw error;
+      const [stored, manual] = await Promise.all([
+        supabase.from('lift_pbs').select('*').eq('user_id', uid),
+        supabase.from('manual_pbs').select('id, exercise_id, weight_kg, reps, e1rm, dated_at').eq('user_id', uid),
+      ]);
+      if (stored.error) throw stored.error;
+      if (manual.error) throw manual.error;
       const out: LiftPbIndex = new Map();
-      for (const r of data) {
+      for (const r of stored.data) {
         if (!r.exercise_id || !r.metric || !r.period) continue;
         const byMetric = out.get(r.exercise_id) ?? new Map<string, PbPeriods<LiftPb>>();
         byMetric.set(r.metric, { ...byMetric.get(r.metric), [r.period]: r });
         out.set(r.exercise_id, byMetric);
       }
-      return out;
+      return foldManualPbs(out, manual.data, todayIso());
     },
   });
 }

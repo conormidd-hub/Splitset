@@ -99,12 +99,16 @@ export function TrophyCabinet({ units }: { units: Units }) {
                       <T weight="600" numberOfLines={1}>{l.name}</T>
                       {isNew ? <T variant="tiny" weight="700" style={{ color: palette.amber }}>NEW PB this month</T> : null}
                     </View>
-                    {metrics.map((k) => (
-                      <View key={k} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
-                        <T variant="tiny" tone="mut">{liftMetricShort(k, l.loadMode)}</T>
-                        <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(k, l.byMetric.get(k)?.[period]?.value, units)}</T>
-                      </View>
-                    ))}
+                    {metrics.map((k) => {
+                      const cell = l.byMetric.get(k)?.[period];
+                      return (
+                        <View key={k} style={{ alignItems: 'flex-end', marginLeft: space.md, minWidth: 64 }}>
+                          <T variant="tiny" tone="mut">{liftMetricShort(k, l.loadMode)}</T>
+                          <T weight="700" style={{ fontVariant: ['tabular-nums'] }}>{formatLiftPb(k, cell?.value, units)}</T>
+                          {cell?.source === 'manual' ? <T variant="tiny" tone="accent" weight="700">manual</T> : null}
+                        </View>
+                      );
+                    })}
                   </Pressable>
                 );
               })}
