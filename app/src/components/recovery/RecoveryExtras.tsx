@@ -61,7 +61,7 @@ export function TrainNextCard({ map, nameOf }: { map: RecoveryMap; nameOf: (id: 
                 {t.exercises.map((e) => (
                   <Pressable
                     key={e.id}
-                    onPress={() => router.push(`/lift/exercises/${e.id}`)}
+                    onPress={() => router.push(`/exercise/${e.id}`)}
                     accessibilityRole="button"
                     hitSlop={4}
                     style={({ pressed }) => ({ backgroundColor: palette.surface2, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 10, opacity: pressed ? 0.7 : 1 })}>

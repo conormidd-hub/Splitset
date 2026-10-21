@@ -76,7 +76,7 @@ export function LiftPbsList({ onSearchFocus }: {
           right={
             <View style={{ flexDirection: 'row', gap: space.xs }}>
               {l.exercise?.measure === 'weight_reps' ? <Button title="Add" variant="ghost" small onPress={() => setAdding({ exerciseId: l.id })} /> : null}
-              <Button title="History" variant="ghost" small onPress={() => router.push(`/lift/exercises/${l.id}`)} />
+              <Button title="History" variant="ghost" small onPress={() => router.push(`/exercise/${l.id}`)} />
             </View>
           }>
           <PbTable rows={liftRows(l.byMetric, units, { loadMode: l.exercise?.load_mode })} />

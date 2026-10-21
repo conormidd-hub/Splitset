@@ -128,7 +128,7 @@ export default function LiftHome() {
     useActiveWorkout.getState().clearFinished();
     void stopRest();
     void linkWorkoutToPlan(uid, finishedId, todayIso()).catch(() => false).then(() => invalidateWorkoutData(qc, uid));
-    if (pathname === '/lift/workout') router.replace(`/lift/history/${finishedId}`);
+    if (pathname === '/lift/workout') router.replace(`/workout/${finishedId}`);
   }, [finishedId, pathname, uid, qc]);
 
   const startEmpty = () => {
@@ -222,7 +222,7 @@ export default function LiftHome() {
   const hero = (
     <View onLayout={(e) => { heroBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}>
       <Pressable
-        onPress={() => router.push('/lift/recovery')}
+        onPress={() => router.push('/recovery')}
         accessibilityRole="button"
         accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
         style={({ pressed }) => ({ backgroundColor: palette.surface, borderRadius: radius.lg, padding: space.sm, gap: space.xs, opacity: pressed ? 0.9 : 1 })}>
@@ -256,14 +256,14 @@ export default function LiftHome() {
         {map.data ? <FigurePair map={map.data} mode="recovery" figureWidth={110} nameOf={names} labels /> : <Loading />}
         <T variant="small" tone="mut">{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
         <KeyStrip mode="recovery" inline />
-        <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/lift/recovery'); }} />
+        <Button title="Open Recovery" small variant="secondary" onPress={() => { setQuick(false); router.push('/recovery'); }} />
       </QuickView>
       <DateFinder
         visible={finding}
         onClose={() => setFinding(false)}
         title="Workouts by date"
         items={dayItems}
-        onOpen={(id) => router.push(`/lift/history/${id}`)}
+        onOpen={(id) => router.push(`/workout/${id}`)}
         empty={days.isLoading ? 'Loading your workouts…' : days.error ? "Couldn't load your workouts" : 'No workouts yet'}
       />
       <RoutineQuickView

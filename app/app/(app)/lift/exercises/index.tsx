@@ -54,7 +54,7 @@ export default function ExerciseLibrary() {
               subtitle={[item.muscle_group ?? item.group, item.equipment, item.owner_id ? 'yours' : null].filter(Boolean).join(' · ')}
               value={bestWeight != null ? formatWeight(bestWeight, units, 0) : undefined}
               valueSub={r ? `${r.completed_sets ?? 0} sets` : undefined}
-              onPress={() => router.push(`/lift/exercises/${item.id}`)}
+              onPress={() => router.push(`/exercise/${item.id}`)}
             />
           );
         }}

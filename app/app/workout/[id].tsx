@@ -51,7 +51,7 @@ export default function WorkoutHistory() {
   // a routine from this workout, for one done without one (or a better day than its template had)
   const saveAsRoutine = () => {
     useRoutineDraft.getState().fromSavedWorkout(w);
-    router.push('/lift/routines/new?from=workout');
+    router.push('/lift/routines/new?from=workout', { withAnchor: true });
   };
 
   return (
@@ -128,7 +128,7 @@ export default function WorkoutHistory() {
             <SessionMuscleRows session={session.data} nameOf={names} />
           </ScrollView>
         ) : null}
-        <Button title="Open Recovery" small variant="secondary" onPress={() => { setDetails(false); router.push('/lift/recovery'); }} />
+        <Button title="Open Recovery" small variant="secondary" onPress={() => { setDetails(false); router.push('/recovery'); }} />
       </QuickView>
     </>
   );

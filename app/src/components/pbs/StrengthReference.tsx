@@ -43,7 +43,7 @@ export function StrengthReference({ exercise }: { exercise: Exercise }) {
 
   const items = showAll ? d.items : d.items.slice(0, HISTORY_SHOWN);
   const onItem = async (item: (typeof d.items)[number]) => {
-    if (item.source === 'logged' && item.workoutId) router.push(`/lift/history/${item.workoutId}`);
+    if (item.source === 'logged' && item.workoutId) router.push(`/workout/${item.workoutId}`);
     else if (item.manualPbId && (await confirm('Delete known best', 'Remove this known best? Your logged sets are not affected.', 'Delete', true))) {
       del.mutate(item.manualPbId);
     }

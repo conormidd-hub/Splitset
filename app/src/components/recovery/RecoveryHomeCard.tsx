@@ -27,7 +27,7 @@ export function RecoveryHomeCard() {
   const map = useRecoveryMap();
   const names = useMuscleNames();
   const c = useThresholds();
-  const open = () => router.push('/lift/recovery');
+  const open = () => router.push('/recovery');
   const retry = () => {
     void qc.invalidateQueries({ queryKey: loadKeys.all(uid) });
     void qc.invalidateQueries({ queryKey: recoveryKeys.libraryRows() });

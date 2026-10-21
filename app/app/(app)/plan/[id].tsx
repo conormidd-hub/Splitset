@@ -167,13 +167,13 @@ function Editor({ session, initialDate }: { session: NonNullable<ReturnType<type
           <Card title="Status" right={<Badge label={session.status} tone={session.status === 'done' ? 'pos' : session.status === 'skipped' ? 'neg' : 'mut'} />}>
             <View style={{ gap: space.sm }}>
               {linked ? (
-                <Pressable onPress={() => router.push(`/run/${linked.id}`)}>
+                <Pressable onPress={() => router.push(`/run/${linked.id}`, { withAnchor: true })}>
                   <T variant="small" tone="mut">Fulfilled by</T>
                   <T variant="h3" tone="accent">{linked.name ?? typeLabel(linked.type)} · {linked.distance_m ? formatDistance(linked.distance_m, units) : ''}</T>
                   <T variant="small" tone="mut">{relativeDay(linked.start_time_local)} {shortTime(linked.start_time_local)} · linked {session.linked_by === 'auto' ? 'automatically' : 'by you'}</T>
                 </Pressable>
               ) : session.workout_id ? (
-                <Pressable onPress={() => router.push(`/lift/history/${session.workout_id}`)}>
+                <Pressable onPress={() => router.push(`/workout/${session.workout_id}`)}>
                   <T variant="small" tone="mut">Fulfilled by</T>
                   <T variant="h3" tone="accent">Gym workout</T>
                 </Pressable>

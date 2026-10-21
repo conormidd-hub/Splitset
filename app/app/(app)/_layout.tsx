@@ -41,6 +41,11 @@ function tabBar(props: BottomTabBarProps) {
   );
 }
 
+/**
+ * A tab always opens on its home screen: leaving a tab pops its stack to the top
+ * (popToTopOnBlur), and pressing the tab that is already open does the same, so a detail screen
+ * left behind in a tab never traps the next visit.
+ */
 export default function AppTabs() {
   const { palette } = useTheme();
   return (
@@ -48,11 +53,20 @@ export default function AppTabs() {
       tabBar={tabBar}
       screenOptions={{
         headerShown: false,
+        popToTopOnBlur: true,
         tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.mut,
         tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.hair },
         sceneStyle: { backgroundColor: palette.bg },
-      }}>
+      }}
+      screenListeners={({ navigation, route }) => ({
+        tabPress: () => {
+          if (!navigation.isFocused()) return;
+          // the open tab, pressed again: back to its home screen (the stack's POP_TO_TOP action)
+          const nested = navigation.getState().routes.find((r) => r.name === route.name)?.state;
+          if (nested?.key && (nested.routes?.length ?? 0) > 1) navigation.dispatch({ type: 'POP_TO_TOP', target: nested.key });
+        },
+      })}>
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: TodayIcon }} />
       <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: tabIcon(icons.plan) }} />
       <Tabs.Screen name="lift" options={{ title: 'Lift', tabBarIcon: tabIcon(icons.lift) }} />

@@ -71,7 +71,7 @@ export function ActiveWorkoutBar() {
 
   return (
     <Pressable
-      onPress={() => router.push(WORKOUT_PATH)}
+      onPress={() => router.push(WORKOUT_PATH, { withAnchor: true })}
       accessibilityRole="button"
       accessibilityLabel={`Workout in progress: ${workout.name}, ${middle}. Opens it.`}
       style={({ pressed }) => ({

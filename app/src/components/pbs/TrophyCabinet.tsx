@@ -69,7 +69,7 @@ export function TrophyCabinet({ units }: { units: Units }) {
                   return (
                     <Pressable
                       key={key}
-                      onPress={() => row?.activity_id && router.push(`/run/${row.activity_id}`)}
+                      onPress={() => row?.activity_id && router.push(`/run/${row.activity_id}`, { withAnchor: true })}
                       style={{
                         flexGrow: 1, flexBasis: '30%', minWidth: 92, padding: space.sm, borderRadius: radius.md,
                         backgroundColor: palette.surface2, borderWidth: 1, borderColor: isNew ? palette.amber : 'transparent',
@@ -93,7 +93,7 @@ export function TrophyCabinet({ units }: { units: Units }) {
                 return (
                   <Pressable
                     key={l.id}
-                    onPress={() => router.push(`/lift/exercises/${l.id}`)}
+                    onPress={() => router.push(`/exercise/${l.id}`)}
                     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: palette.hair }}>
                     <View style={{ flex: 1 }}>
                       <T weight="600" numberOfLines={1}>{l.name}</T>

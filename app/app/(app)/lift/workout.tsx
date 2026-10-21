@@ -128,7 +128,7 @@ export default function ActiveWorkoutScreen() {
     }
     await linkWorkoutToPlan(uid, id, todayIso()).catch(() => false);
     invalidateWorkoutData(qc, uid);
-    router.replace(`/lift/history/${id}`);
+    router.replace(`/workout/${id}`);
     if (choice === 'new') {
       useRoutineDraft.getState().fromWorkout(kept);
       router.push('/lift/routines/new?from=workout');
@@ -407,7 +407,7 @@ function ExerciseCard({ block, units, routineId, handle, letter, isTurn, restAft
     <Card>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm }}>
         {handle}
-        <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => router.push(`/lift/exercises/${block.exerciseId}`)}>
+        <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => router.push(`/exercise/${block.exerciseId}`)}>
           <T variant="h3" tone="accent" numberOfLines={1}>{block.name}</T>
         </Pressable>
         <SupersetPill letter={letter} name={block.name} onPress={() => setLinking(true)} />

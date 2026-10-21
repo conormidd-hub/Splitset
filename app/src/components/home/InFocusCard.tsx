@@ -79,7 +79,7 @@ function MetricFocus({ s, onChange }: { s: Snapshot; onChange: () => void }) {
   const wordy = WORDY.has(s.id);
   const spark = s.spark.filter((p) => p.y != null);
   return (
-    <Tile icon={def.icon} label={def.short} onOpen={() => router.push((s.href ?? `/metric/${s.id}`) as Href)}
+    <Tile icon={def.icon} label={def.short} onOpen={() => router.push((s.href ?? `/metric/${s.id}`) as Href, { withAnchor: true })}
       openLabel={`${def.label}: ${s.text}${s.unit ? ` ${s.unit}` : ''}${s.sub ? `, ${s.sub}` : ''}`} onChange={onChange}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
         <T variant={wordy ? 'h2' : 'display'} numberOfLines={1} style={{ fontVariant: ['tabular-nums'], flexShrink: 1 }}>{s.text}</T>
@@ -100,7 +100,7 @@ function RecoveryFocus({ onChange }: { onChange: () => void }) {
   const tired = map.data ? mostTired(map.data, 2) : [];
   const line = tired.length ? tired.map((id) => `${names(id)} · ${map.data![id].label.toLowerCase()}`).join('\n') : 'Every muscle is ready';
   return (
-    <Tile icon={ICONS.lift} label="Recovery" onOpen={() => router.push('/lift/recovery')}
+    <Tile icon={ICONS.lift} label="Recovery" onOpen={() => router.push('/recovery')}
       openLabel={`Recovery. ${tired.length ? `Most tired: ${line.replace('\n', ', ')}` : line}. Opens the Recovery screen.`} onChange={onChange}>
       {map.data ? (
         <View style={{ alignItems: 'center', paddingVertical: 2 }}>
