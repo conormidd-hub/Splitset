@@ -6,6 +6,7 @@ import { useDeleteWorkout, useWorkout } from '@/api/lifting';
 import { useUnits } from '@/api/profile';
 import { useMuscleNames, useSessionMap } from '@/api/recovery';
 import { QuickView } from '@/components/recovery/FigureBubble';
+import { KeyButton, KeyStrip } from '@/components/recovery/FigureKey';
 import { FigurePair } from '@/components/recovery/FigurePair';
 import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
 import { Button } from '@/components/ui/Button';
@@ -19,6 +20,7 @@ import { longDate, shortTime } from '@/lib/dates';
 import { setCount, volumeKg } from '@/lib/lifting/sideCounts';
 import { formatLoad, loggedWeight } from '@/lib/pbs';
 import { formatDurationShort, formatWeight } from '@/lib/units';
+import { useRoutineDraft } from '@/stores/routineDraft';
 import { useTheme } from '@/theme/ThemeProvider';
 import { space } from '@/theme/tokens';
 
@@ -46,6 +48,12 @@ export default function WorkoutHistory() {
     if (ok) del.mutate(w.id, { onSuccess: () => router.back() });
   };
 
+  // a routine from this workout, for one done without one (or a better day than its template had)
+  const saveAsRoutine = () => {
+    useRoutineDraft.getState().fromSavedWorkout(w);
+    router.push('/lift/routines/new?from=workout');
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: w.name }} />
@@ -58,18 +66,14 @@ export default function WorkoutHistory() {
           <Card
             title="Muscles worked"
             right={
-              <Pressable
-                onPress={() => setDetails(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Each muscle's load, and when it is trainable and ready again"
-                hitSlop={10}
-                style={({ pressed }) => ({ width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: palette.surface2, opacity: pressed ? 0.7 : 1 })}>
-                <T variant="small" tone="ink2" weight="700">i</T>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                <KeyButton mode="session" size={26} />
+                <Button title="Details" variant="ghost" small onPress={() => setDetails(true)} />
+              </View>
             }>
-            {/* small here; the info button opens the full view, muscle by muscle */}
-            <Pressable onPress={() => setDetails(true)} accessible={false}>
+            {/* small here; Details (or a tap on the figure) opens the full view, muscle by muscle */}
+            <Pressable onPress={() => setDetails(true)} accessible accessibilityRole="button"
+              accessibilityLabel="Each muscle's load, and when it is trainable and ready again">
               <FigurePair map={session.data} mode="session" figureWidth={52} nameOf={names} />
             </Pressable>
           </Card>
@@ -109,6 +113,9 @@ export default function WorkoutHistory() {
 
         {w.notes ? <Card title="Notes"><T>{w.notes}</T></Card> : null}
 
+        {w.workout_exercises.length ? (
+          <Button title="Save as routine" variant="secondary" onPress={saveAsRoutine} />
+        ) : null}
         <Button title="Delete workout" variant="danger" small loading={del.isPending} onPress={onDelete} />
       </Screen>
       <QuickView visible={details && !!session.data} onClose={() => setDetails(false)} title="Muscles worked">
@@ -117,6 +124,7 @@ export default function WorkoutHistory() {
         {session.data ? (
           <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: space.md }}>
             <FigurePair map={session.data} mode="session" figureWidth={110} nameOf={names} labels />
+            <KeyStrip mode="session" inline />
             <SessionMuscleRows session={session.data} nameOf={names} />
           </ScrollView>
         ) : null}

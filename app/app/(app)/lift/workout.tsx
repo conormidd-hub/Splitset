@@ -12,8 +12,10 @@ import { useCurrentBodyweight, useLiveSession, useManualBests, useMuscleNames, u
 import { FinishPrompt, type TemplateChoice } from '@/components/lift/FinishPrompt';
 import { NOTE_ICON, NoteEditor, type ExerciseNotes, type NoteScope } from '@/components/lift/NoteEditor';
 import { RestBubble } from '@/components/lift/RestBubble';
+import { SwipeToDelete, type SwipeGroup } from '@/components/lift/SwipeToDelete';
 import { LivePbPanel } from '@/components/pbs/LivePbPanel';
 import { FigureBubble, QuickView } from '@/components/recovery/FigureBubble';
+import { KeyStrip } from '@/components/recovery/FigureKey';
 import { FigurePair } from '@/components/recovery/FigurePair';
 import { LiveSessionFigure } from '@/components/recovery/LiveSessionFigure';
 import { SessionMuscleRows } from '@/components/recovery/RecoveryExtras';
@@ -134,6 +136,8 @@ export default function ActiveWorkoutScreen() {
     const changed = templateChanged(workout.templateExerciseIds, workout.exercises.map((b) => b.exerciseId));
     // a changed template asks what to do with it; an unchanged one just finishes
     if (changed && template) return setPrompt(true);
+    // no template: finish, or finish and keep today as a routine
+    if (!template && workout.exercises.length) return setPrompt(true);
     if (changed === false && !unticked) return finishWith('keep');
     const ok = await confirm('Finish workout', unticked ? `${unticked} filled-in set${unticked === 1 ? ' is' : 's are'} not ticked and will be kept as unfinished. Finish anyway?` : 'Save this workout to your history?', 'Finish');
     if (ok) await finishWith('keep');
@@ -245,11 +249,12 @@ export default function ActiveWorkoutScreen() {
         {live ? (
           <>
             <FigurePair map={live.session} mode="session" figureWidth={110} nameOf={names} labels />
+            <KeyStrip mode="session" inline />
             <SessionMuscleRows session={live.session} nameOf={names} />
           </>
         ) : null}
       </QuickView>
-      <FinishPrompt open={prompt} templateName={template?.name ?? 'the template'} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
+      <FinishPrompt open={prompt} templateName={template?.name ?? null} unticked={unticked} onChoose={(c) => void finishWith(c)} onCancel={() => setPrompt(false)} />
     </SafeAreaView>
   );
 }
@@ -276,6 +281,8 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
   const lifts = useLiftPbs();
   const manual = useManualBests();
   const [showPb, setShowPb] = useState(false);
+  // the set row whose Delete pane is open, so swiping another closes it
+  const swipeGroup: SwipeGroup = useRef(null);
   const row = exercises.data?.find((e) => e.id === block.exerciseId);
   const bodyweight = block.isBodyweight ?? row?.is_bodyweight ?? false;
   const unilateral = block.unilateral ?? row?.is_unilateral ?? false;
@@ -405,6 +412,7 @@ function ExerciseCard({ block, units, routineId, handle }: { block: ExerciseBloc
           perSide={perSide}
           col={col}
           e1rm={e1rmOf(s)}
+          swipeGroup={swipeGroup}
         />
       ))}
 
@@ -420,7 +428,7 @@ const COL = { weight: 72, count: 60, rpe: 44, gap: space.sm as number };
 const COL_TIGHT: typeof COL = { weight: 60, count: 48, rpe: 36, gap: space.xs };
 
 function SetLine({
-  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm,
+  set, index, block, units, weighted, repped, timed, previous, isPr, showRpe, perSide, col, e1rm, swipeGroup,
 }: {
   set: SetRow; index: number; block: ExerciseBlock; units: Units; weighted: boolean; repped: boolean; timed: boolean;
   previous?: { weight_kg: number | null; reps: number | null; seconds: number | null };
@@ -430,6 +438,7 @@ function SetLine({
   col: typeof COL;
   /** The e1RM this set stores, from the engine; shown once the set is ticked. */
   e1rm: number | null;
+  swipeGroup: SwipeGroup;
 }) {
   const { palette } = useTheme();
   const { updateSet, toggleSet, removeSet } = useActiveWorkout.getState();
@@ -460,6 +469,7 @@ function SetLine({
     if (row?.completed && rest?.on) await startRest(rest.seconds, `${block.name}: set ${index + 1} done`);
   };
 
+  // the long press stays as the way in without a swipe (screen readers, a mouse)
   const onLongPressNumber = async () => {
     const ok = await confirm('Delete set', `Delete set ${index + 1}?`, 'Delete', true);
     if (ok) removeSet(set.id);
@@ -471,12 +481,13 @@ function SetLine({
   };
 
   return (
+    <SwipeToDelete onDelete={() => removeSet(set.id)} label={`set ${index + 1}`} openRef={swipeGroup}>
     <View style={{ paddingVertical: 4, opacity: set.completed ? 0.75 : 1 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: col.gap }}>
         <Pressable
           onPress={() => updateSet(set.id, { setType: NEXT_TYPE[set.setType] })}
           onLongPress={onLongPressNumber}
-          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}. Tap to change the set type.`}
+          accessibilityLabel={`Set ${index + 1}, ${set.setType === 'warmup' ? 'warm-up' : set.setType}. Tap to change the set type; hold to delete the set.`}
           style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: set.setType === 'working' ? palette.surface2 : palette.accentSoft }}>
           <T variant="small" weight="700" tone={set.setType === 'working' ? 'ink2' : 'accent'}>{TYPE_LABEL[set.setType] || index + 1}</T>
         </Pressable>
@@ -531,5 +542,6 @@ function SetLine({
         <T variant="tiny" tone="mut" align="right" style={{ paddingTop: 2, paddingRight: 40 + col.gap }}>e1RM {formatLoad(e1rm, units)}</T>
       ) : null}
     </View>
+    </SwipeToDelete>
   );
 }

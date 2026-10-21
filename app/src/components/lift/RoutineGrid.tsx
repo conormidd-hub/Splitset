@@ -11,17 +11,23 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { radius, space } from '@/theme/tokens';
 
 const GAP = space.sm;
+/** How long a finger rests on a card before it lifts; a shorter touch is a tap or a scroll. */
+const HOLD_MS = 300;
 type Move = { id: string; group_id: string | null; position: number };
 type Drag = { id: string; x: number; y: number; w: number; h: number };
+type Target = { section: Section<RoutineWithStructure>; index: number };
 const keyOf = (s: Section<RoutineWithStructure>) => s.group?.id ?? 'mine';
 /** The card being dragged, for the gesture's callbacks (the `drag` state only draws it). One drag
  *  happens at a time, so one slot is enough. */
-const live: { drag: Drag | null; x0: number; y0: number } = { drag: null, x0: 0, y0: 0 };
+const live: { drag: Drag | null; x0: number; y0: number; slot: string } = { drag: null, x0: 0, y0: 0, slot: '' };
 const setLive = (d: Drag | null, x0 = 0, y0 = 0) => { live.drag = d; live.x0 = x0; live.y0 = y0; };
+/** The slot the other cards have made room for ("section:index"), so a drag only re-animates on a change. */
+const setSlot = (slot: string) => { live.slot = slot; };
 
 /**
  * The routines as cards, two to a row, in the user's groups (then "My routines"). Each card has
- * Start and View; its handle drags it to another place or into another group. A group's name
+ * Start and View. Holding a card (anywhere on it) lifts it; dragging it moves it to another place
+ * or into another group, the other cards sliding aside to show where it will land. A group's name
  * collapses it, and its ⋯ renames or deletes it.
  */
 export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, onMove, onDragging, onRenameGroup, onDeleteGroup }: {
@@ -44,6 +50,15 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
   const [hover, setHover] = useState<string | null>(null);
   const [editing, setEditing] = useState<RoutineGroup | null>(null);
   const [offset] = useState(() => new Animated.ValueXY());
+  // 0 at rest, 1 once lifted: the card grows a little and takes a shadow
+  const [lift] = useState(() => new Animated.Value(0));
+  // where each card has slid to make room, while a drag is on
+  const [slide] = useState(() => new Map<string, Animated.ValueXY>());
+  const slideOf = (id: string) => {
+    let v = slide.get(id);
+    if (!v) { v = new Animated.ValueXY(); slide.set(id, v); }
+    return v;
+  };
   const begin = (d: Drag | null) => { setLive(d, live.x0, live.y0); setDrag(d); };
   // layouts within the grid: each section's box and where its cards start, and each card's box
   const [sectionBox] = useState(() => new Map<string, LayoutRectangle & { gridY: number }>());
@@ -52,8 +67,36 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
   const cardW = width ? Math.floor((width - GAP - 1) / 2) : 0;
 
   const at = (d: Drag, dx: number, dy: number) => ({ x: d.x + d.w / 2 + dx, y: d.y + d.h / 2 + dy });
+
+  /** Slide the other cards into the places they would take if the card dropped at `t` now. */
+  const makeRoom = (t: Target | null, dragId: string) => {
+    const slot = t ? `${keyOf(t.section)}:${t.index}` : '';
+    if (slot === live.slot) return;
+    setSlot(slot);
+    const rowH = (cardBox.get(dragId)?.height ?? 120) + GAP;
+    const pos = (i: number) => ({ x: (i % 2) * (cardW + GAP), y: Math.floor(i / 2) * rowH });
+    for (const s of sections) {
+      const rest = s.routines.filter((r) => r.id !== dragId);
+      // the section's cards as they would stand: the hole where the card would land, the gap it left closed
+      const order: (RoutineWithStructure | null)[] = t && keyOf(t.section) === keyOf(s)
+        ? [...rest.slice(0, t.index), null, ...rest.slice(t.index)]
+        : rest;
+      s.routines.forEach((r, from) => {
+        if (r.id === dragId) return;
+        const to = order.findIndex((x) => x?.id === r.id);
+        const a = pos(from);
+        const b = pos(to < 0 ? from : to);
+        Animated.spring(slideOf(r.id), { toValue: { x: b.x - a.x, y: b.y - a.y }, useNativeDriver: false, speed: 24, bounciness: 3 }).start();
+      });
+    }
+  };
+  const settle = () => {
+    setSlot('');
+    for (const v of slide.values()) v.setValue({ x: 0, y: 0 });
+  };
+
   /** The section under a point, and where in it a drop lands. */
-  const target = (p: { x: number; y: number }, id: string) => {
+  const target = (p: { x: number; y: number }, id: string): Target | null => {
     let best: Section<RoutineWithStructure> | null = null;
     let bestDist = Infinity;
     for (const s of sections) {
@@ -71,19 +114,28 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
     return { section: best, index };
   };
 
-  const handle = (r: RoutineWithStructure, sectionKey: string) => Gesture.Pan()
+  /** A hold on the card lifts it; a shorter touch is a tap (Start, View) or scrolls the page. */
+  const hold = (r: RoutineWithStructure, sectionKey: string) => Gesture.Pan()
     .runOnJS(true)
-    .minDistance(4)
+    .activateAfterLongPress(HOLD_MS)
     // the touch-down point, before onDragging re-renders the grid and rebuilds this gesture
-    .onBegin((e) => { setLive(null, e.absoluteX, e.absoluteY); onDragging(true); })
-    .onStart(() => {
+    .onBegin((e) => { setLive(null, e.absoluteX, e.absoluteY); })
+    .onStart((e) => {
       const s = sectionBox.get(sectionKey);
       const c = cardBox.get(r.id);
       if (!s || !c) return;
-      offset.setValue({ x: 0, y: 0 });
+      // the finger may have crept a little during the hold: the card starts under it
+      const dx = e.absoluteX - live.x0;
+      const dy = e.absoluteY - live.y0;
+      offset.setValue({ x: dx, y: dy });
+      lift.setValue(0);
+      Animated.spring(lift, { toValue: 1, useNativeDriver: false, speed: 30, bounciness: 6 }).start();
       // distances come from absolute positions: a re-render rebuilds the gesture mid-drag, and a
       // rebuilt gesture's own translation starts again from 0
-      begin({ id: r.id, x: c.x, y: s.y + s.gridY + c.y, w: c.width, h: c.height });
+      const d: Drag = { id: r.id, x: c.x, y: s.y + s.gridY + c.y, w: c.width, h: c.height };
+      begin(d);
+      onDragging(true);
+      makeRoom(target(at(d, dx, dy), d.id), d.id);
     })
     .onUpdate((e) => {
       const dx = e.absoluteX - live.x0;
@@ -94,6 +146,7 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
       const t = target(at(d, dx, dy), d.id);
       const k = t ? keyOf(t.section) : null;
       setHover((h) => (h === k ? h : k));
+      makeRoom(t, d.id);
     })
     .onEnd((e) => {
       const d = live.drag;
@@ -105,8 +158,10 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
       }
     })
     .onFinalize(() => {
+      if (!live.drag) return;   // a tap or a scroll: nothing was lifted
       begin(null);
       setHover(null);
+      settle();
       onDragging(false);
     });
 
@@ -117,39 +172,41 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
     return next;
   });
 
-  const card = (r: RoutineWithStructure, sectionKey: string, ghost = false) => (
+  const cardBody = (r: RoutineWithStructure, ghost: boolean) => (
     <View
-      key={ghost ? 'ghost' : r.id}
-      onLayout={ghost ? undefined : (e) => cardBox.set(r.id, e.nativeEvent.layout)}
+      accessibilityHint={ghost ? undefined : 'Hold and drag to move it, or into another group'}
       style={{
         width: cardW, minHeight: 112, padding: space.md, gap: space.sm, justifyContent: 'space-between',
         backgroundColor: palette.surface2, borderRadius: radius.md, borderWidth: 1, borderColor: ghost ? palette.accent : palette.hair,
-        opacity: !ghost && drag?.id === r.id ? 0.35 : 1,
-      }}>
+        // the lifted card is drawn by the ghost; its place in the grid stays as the hole it will drop back into
+        opacity: !ghost && drag?.id === r.id ? 0 : 1,
+        cursor: ghost ? undefined : 'grab',
+      } as never}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.xs }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="h3" numberOfLines={2}>{r.name}</T>
           <T variant="tiny" tone="mut">{r.routine_exercises.length} exercise{r.routine_exercises.length === 1 ? '' : 's'}</T>
         </View>
-        {ghost ? <T tone="mut">⠿</T> : (
-          <GestureDetector gesture={handle(r, sectionKey)}>
-            <View
-              accessible
-              accessibilityRole="adjustable"
-              accessibilityLabel={`Move ${r.name}`}
-              accessibilityHint="Drag to reorder, or into another group"
-              hitSlop={10}
-              style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm, cursor: 'grab' } as never}>
-              <T tone="mut" weight="700">⠿</T>
-            </View>
-          </GestureDetector>
-        )}
+        <T tone="mut" weight="700" accessible={false} importantForAccessibility="no">⠿</T>
       </View>
       <View style={{ flexDirection: 'row', gap: space.xs }}>
         <Button title="Start" small disabled={startDisabled} onPress={() => onStart(r)} style={{ flex: 1, paddingHorizontal: space.sm }} />
         <Button title="View" small variant="secondary" onPress={() => onView(r)} style={{ flex: 1, paddingHorizontal: space.sm }} />
       </View>
     </View>
+  );
+
+  /** A card in the grid: the whole card takes the hold, and slides aside while another is dragged. */
+  const card = (r: RoutineWithStructure, sectionKey: string) => (
+    <Animated.View
+      key={r.id}
+      // measured at rest: a card that has slid aside keeps the box of its own slot
+      onLayout={(e) => { if (!live.drag) cardBox.set(r.id, e.nativeEvent.layout); }}
+      style={{ transform: slideOf(r.id).getTranslateTransform() }}>
+      <GestureDetector gesture={hold(r, sectionKey)}>
+        {cardBody(r, false)}
+      </GestureDetector>
+    </Animated.View>
   );
 
   return (
@@ -194,9 +251,14 @@ export function RoutineGrid({ routines, groups, startDisabled, onStart, onView, 
       })}
 
       {drag && dragged ? (
-        <Animated.View pointerEvents="none" style={{ position: 'absolute', left: drag.x, top: drag.y, zIndex: 10, transform: offset.getTranslateTransform(),
-          shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, elevation: 10 }}>
-          {card(dragged, '', true)}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', left: drag.x, top: drag.y, zIndex: 10,
+            transform: [...offset.getTranslateTransform(), { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }],
+            shadowColor: '#000', shadowOpacity: lift.interpolate({ inputRange: [0, 1], outputRange: [0, 0.3] }), shadowRadius: 12, elevation: 10,
+          }}>
+          {cardBody(dragged, true)}
         </Animated.View>
       ) : null}
 

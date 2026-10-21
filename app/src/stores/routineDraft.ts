@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 
-import type { RoutineDraft, RoutineWithStructure } from '@/api/lifting';
+import type { RoutineDraft, RoutineWithStructure, WorkoutWithStructure } from '@/api/lifting';
 import { pairedSets } from '../lib/lifting/template.ts';
 import type { ActiveWorkout } from './activeWorkout';
 
@@ -17,6 +17,8 @@ type State = {
 
   reset: (routine?: RoutineWithStructure | null) => void;
   fromWorkout: (w: ActiveWorkout) => void;
+  /** A template from a finished workout in the history: its exercises, with what was lifted as the targets. */
+  fromSavedWorkout: (w: WorkoutWithStructure) => void;
   setName: (name: string) => void;
   setNotes: (notes: string) => void;
   addExercise: (ex: { id: string; name: string; measure: string }) => void;
@@ -78,6 +80,27 @@ export const useRoutineDraft = create<State>()((set, get) => ({
         notes: b.notes,
         sets: pairedSets(b.sets).map((s) => ({
           setType: s.setType, targetReps: s.reps, targetWeightKg: s.weightKg, targetSeconds: s.seconds, targetRpe: s.rpe,
+        })),
+      })),
+    }),
+
+  fromSavedWorkout: (w) =>
+    set({
+      id: null,
+      name: w.name,
+      notes: '',
+      loadedFrom: `workout:${w.id}`,
+      exercises: w.workout_exercises.map((e) => ({
+        key: key(),
+        exerciseId: e.exercise_id,
+        name: e.exercise?.name ?? 'Exercise',
+        measure: e.exercise?.measure ?? 'weight_reps',
+        restSeconds: e.rest_seconds,
+        supersetGroup: e.superset_group,
+        notes: e.notes,
+        // skipped sets were still planned, so they stay in the template
+        sets: pairedSets(e.workout_sets).map((s) => ({
+          setType: s.set_type, targetReps: s.reps, targetWeightKg: s.weight_kg, targetSeconds: s.seconds, targetRpe: s.rpe,
         })),
       })),
     }),
