@@ -217,26 +217,28 @@ export default function LiftHome() {
     />
   );
 
-  // the recovery figure: scrolls away under the bar's fade; tapping it opens Recovery
+  // the recovery figure: scrolls away under the bar's fade; tapping it opens Recovery. The colour
+  // key sits over its corner as a sibling, since a button inside a button is not HTML
   const hero = (
-    <Pressable
-      onPress={() => router.push('/lift/recovery')}
-      onLayout={(e) => { heroBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}
-      accessibilityRole="button"
-      accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
-      style={({ pressed }) => ({ backgroundColor: palette.surface, borderRadius: radius.lg, padding: space.sm, gap: space.xs, opacity: pressed ? 0.9 : 1 })}>
-      {map.data ? (
-        <FigurePair map={map.data} mode="recovery" figureWidth={figureWidth} nameOf={names} />
-      ) : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <View style={{ height: figureWidth * 2 }}><Loading label="Loading your recovery" /></View>}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.xs }}>
-        <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
-        <T variant="small" tone="accent" weight="600">Recovery ›</T>
-      </View>
+    <View onLayout={(e) => { heroBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; }}>
+      <Pressable
+        onPress={() => router.push('/lift/recovery')}
+        accessibilityRole="button"
+        accessibilityLabel={`Recovery. ${tiredText}. Opens the Recovery screen.`}
+        style={({ pressed }) => ({ backgroundColor: palette.surface, borderRadius: radius.lg, padding: space.sm, gap: space.xs, opacity: pressed ? 0.9 : 1 })}>
+        {map.data ? (
+          <FigurePair map={map.data} mode="recovery" figureWidth={figureWidth} nameOf={names} />
+        ) : map.error ? <ErrorBanner message={errorMessage(map.error)} /> : <View style={{ height: figureWidth * 2 }}><Loading label="Loading your recovery" /></View>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.xs }}>
+          <T variant="small" tone="mut" numberOfLines={1} style={{ flex: 1 }}>{tired.length ? `Most tired: ${tiredText}` : tiredText}</T>
+          <T variant="small" tone="accent" weight="600">Recovery ›</T>
+        </View>
+      </Pressable>
       {/* the colour key, one tap away wherever the figure is */}
       <View style={{ position: 'absolute', top: space.sm, right: space.sm }}>
         <KeyButton mode="recovery" size={26} />
       </View>
-    </Pressable>
+    </View>
   );
 
   const overlay = (

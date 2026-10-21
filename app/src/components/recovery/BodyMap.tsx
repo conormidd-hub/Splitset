@@ -67,12 +67,23 @@ export function BodyMap({ map, view, mode, theme, thresholds = DEFAULT_THRESHOLD
   const summary = `Body map, ${view} view, ${context ?? (mode === 'session' ? 'this workout' : 'fatigue now')}: ` +
     (coloured.length ? coloured.map((id) => `${name(id)} ${map![id].label}`).join(', ') : (emptyText ?? 'every muscle Ready')) +
     (glowing.length ? `. Loaded this session: ${glowing.map(name).join(', ')}` : '');
-  // the glow goes over every region, so a neighbour never hides it; nothing in it takes a tap
+  /** A region's tap, as react-native-svg takes it on each platform. */
+  const pressProps = (muscle: MuscleId): Record<string, unknown> => {
+    if (!onSelect) return {};
+    const select = () => onSelect(muscle);
+    // on web, react-native-svg turns onPress into responder props React warns about, and
+    // replaces onClick unless onPress is exactly null; a plain click is all a region needs
+    return Platform.OS === 'web' ? { onPress: null, onClick: select, style: { cursor: 'pointer' } } : { onPress: select };
+  };
+  // the glow goes over every region, so a neighbour never hides it; a tap on the glow is a tap on
+  // its muscle, since the strokes cover much of a small region
   const halos = glow && glowColor
     ? painted.filter((p) => p.muscle && glow.has(p.muscle)).flatMap((p) => GLOW.map((g, i) => {
-        const props: Record<string, unknown> = { key: `${p.key}-glow${i}`, fill: 'none', stroke: glowColor, strokeWidth: g.width, strokeOpacity: g.opacity, strokeLinejoin: 'round', strokeLinecap: 'round' };
+        const props: Record<string, unknown> = {
+          key: `${p.key}-glow${i}`, fill: 'none', stroke: glowColor, strokeWidth: g.width, strokeOpacity: g.opacity,
+          strokeLinejoin: 'round', strokeLinecap: 'round', ...pressProps(p.muscle!),
+        };
         for (const [k, v] of Object.entries(p.attrs)) if (GEOMETRY[k]) props[GEOMETRY[k]] = v;
-        if (Platform.OS === 'web') props.style = { pointerEvents: 'none' };
         return createElement(COMPONENTS[p.kind] as never, props);
       }))
     : null;
@@ -83,15 +94,7 @@ export function BodyMap({ map, view, mode, theme, thresholds = DEFAULT_THRESHOLD
         {painted.map((p) => {
           const props: Record<string, unknown> = { key: p.key };
           for (const [k, v] of Object.entries(p.attrs)) if (PROPS[k]) props[PROPS[k]] = v;
-          if (p.muscle && onSelect) {
-            const muscle = p.muscle;
-            const select = () => onSelect(muscle);
-            if (Platform.OS === 'web') {
-              // on web, react-native-svg turns onPress into responder props React warns about, and
-              // replaces onClick unless onPress is exactly null; a plain click is all a region needs
-              Object.assign(props, { onPress: null, onClick: select, style: { cursor: 'pointer' } });
-            } else props.onPress = select;
-          }
+          if (p.muscle) Object.assign(props, pressProps(p.muscle));
           return createElement(COMPONENTS[p.kind] as never, props);
         })}
         {halos}

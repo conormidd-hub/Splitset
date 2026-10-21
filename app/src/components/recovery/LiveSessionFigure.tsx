@@ -56,21 +56,24 @@ export const LiveSessionFigure = memo(function LiveSessionFigure() {
 
   return (
     <View style={{ backgroundColor: palette.surface, borderRadius: radius.md, borderWidth: 1, borderColor: palette.hair }}>
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${title}: ${summary}`}
-        accessibilityHint={open ? 'Hides the muscles' : "Shows each muscle's load, and when it is trainable and ready"}
-        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.sm, minHeight: 44, opacity: pressed ? 0.7 : 1 })}>
-        <FigurePair map={map} mode={mode} figureWidth={FIGURE_WIDTH} nameOf={names} glow={showBody ? glow : undefined} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <T variant="label" tone="mut">{title}</T>
-          <T variant="small" tone={loaded.length ? 'ink2' : 'mut'}>{summary}</T>
-        </View>
+      {/* the key is a sibling of the header button, not inside it (a button in a button is not HTML) */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: space.sm }}>
+        <Pressable
+          onPress={() => setOpen((o) => !o)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={`${title}: ${summary}`}
+          accessibilityHint={open ? 'Hides the muscles' : "Shows each muscle's load, and when it is trainable and ready"}
+          style={({ pressed }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.sm, minHeight: 44, opacity: pressed ? 0.7 : 1 })}>
+          <FigurePair map={map} mode={mode} figureWidth={FIGURE_WIDTH} nameOf={names} glow={showBody ? glow : undefined} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T variant="label" tone="mut">{title}</T>
+            <T variant="small" tone={loaded.length ? 'ink2' : 'mut'}>{summary}</T>
+          </View>
+          <T tone="mut" accessible={false} importantForAccessibility="no" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}>›</T>
+        </Pressable>
         <KeyButton mode={mode} glow={showBody} size={26} />
-        <T tone="mut" accessible={false} importantForAccessibility="no" style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}>›</T>
-      </Pressable>
+      </View>
       {/* outside the Pressable, so a tap on a muscle opens its sheet without closing the card */}
       {open ? (
         <View style={{ gap: space.md, paddingHorizontal: space.md, paddingBottom: space.md }}>

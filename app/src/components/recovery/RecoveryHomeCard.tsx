@@ -43,13 +43,10 @@ export function RecoveryHomeCard() {
       (next ? `. ${names(next.muscle)} trainable in ${fmtHours(next.in_h)}` : '');
 
   return (
+    <View>
+    {/* the key and Open sit over the card's corner as siblings: a button inside the card's button is not HTML */}
     <Card title="Recovery" onPress={failed ? undefined : open} accessibilityLabel={summary} accessibilityHint="Opens the Recovery screen"
-      right={
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-          <KeyButton mode="recovery" size={26} />
-          <Button title="Open" variant="ghost" small onPress={open} />
-        </View>
-      }>
+      right={<View style={{ width: 96 }} />}>
       {m ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.lg }}>
           <FigurePair map={m} mode="recovery" figureWidth={FIGURE_WIDTH} nameOf={names} />
@@ -74,5 +71,10 @@ export function RecoveryHomeCard() {
         </View>
       ) : <Loading />}
     </Card>
+    <View style={{ position: 'absolute', top: space.md, right: space.md, flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+      <KeyButton mode="recovery" size={26} />
+      <Button title="Open" variant="ghost" small onPress={open} />
+    </View>
+    </View>
   );
 }
